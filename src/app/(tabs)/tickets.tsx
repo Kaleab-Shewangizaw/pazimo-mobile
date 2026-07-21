@@ -3,10 +3,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { EmptyState } from '@/components/ui/state-views';
+import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const TAB_BAR_CLEARANCE = 56;
 
 /**
  * Placeholder until the checkout phase lands. The data path is already known:
@@ -21,11 +20,11 @@ export default function TicketsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <GlassHeader title="Tickets" subtitle="Your passes and QR codes" />
+      <GlassHeader title="Tickets" />
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + HEADER_CONTENT_HEIGHT + Spacing.xl,
-          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE,
+          paddingBottom: tabBarClearance(insets.bottom),
         }}>
         <EmptyState
           icon="ticket-outline"

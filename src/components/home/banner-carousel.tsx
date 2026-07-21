@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -12,15 +13,21 @@ import {
   View,
 } from 'react-native';
 
-import { Glass } from '@/components/ui/glass';
 import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
-import { AspectRatio, Radius, Spacing } from '@/constants/theme';
+import { AspectRatio, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateTime } from '@/lib/date';
+import { relativeDayLabel } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
+import { organizerDisplayName } from '@/lib/organizer';
 import type { PazimoEvent } from '@/types/api';
+
+/**
+ * A tall, editorial hero card — one event per screenful, swiped rather than
+ * scanned. The gradient and type treatment are doing the work here, not a
+ * glass panel, so text sits directly on the photo the way a poster would.
+ */
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SLIDE_WIDTH = SCREEN_WIDTH - Spacing.lg * 2;
@@ -35,6 +42,25 @@ const getItemLayout = (_: unknown, index: number) => ({
   index,
 });
 
+type ChipVariant = 'solid' | 'glass';
+
+function Chip({ label, variant }: { label: string; variant: ChipVariant }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.chip,
+        variant === 'solid'
+          ? { backgroundColor: theme.brand }
+          : { backgroundColor: 'rgba(10, 10, 12, 0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+      ]}>
+      <Text variant="label" style={{ color: variant === 'solid' ? theme.onBrand : '#FFFFFF' }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function BannerCarouselImpl({ events, loading }: { events?: PazimoEvent[]; loading?: boolean }) {
   const theme = useTheme();
   const router = useRouter();
@@ -47,6 +73,10 @@ function BannerCarouselImpl({ events, loading }: { events?: PazimoEvent[]; loadi
   const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
     ({ item }) => {
       const cover = eventCoverUrl(item.coverImages);
+      const whenLabel = relativeDayLabel(item.startDate, item.startTime);
+      const categoryLabel = typeof item.category === 'object' ? item.category?.name : null;
+      const organizer = organizerDisplayName(item);
+
       return (
         <Touchable
           accessibilityRole="button"
@@ -66,25 +96,56 @@ function BannerCarouselImpl({ events, loading }: { events?: PazimoEvent[]; loadi
             <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
           )}
 
+          {/* Weighted toward the bottom so the whole caption block stays legible. */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.78)']}
+            colors={['transparent', 'rgba(3,3,4,0.35)', 'rgba(2,2,3,0.94)']}
+            locations={[0, 0.45, 1]}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
 
-          {/* Glass is affordable here — one slide is on screen at a time. */}
-          <Glass variant="clear" intensity={28} radius={Radius.md} style={styles.caption}>
-            <Text variant="callout" numberOfLines={1} style={styles.captionText}>
+          <View style={styles.caption} pointerEvents="box-none">
+            {whenLabel || categoryLabel ? (
+              <View style={styles.chipRow}>
+                {whenLabel ? <Chip label={whenLabel} variant="solid" /> : null}
+                {categoryLabel ? <Chip label={categoryLabel.toUpperCase()} variant="glass" /> : null}
+              </View>
+            ) : null}
+
+            <Text numberOfLines={2} style={styles.title}>
               {item.title}
             </Text>
-            <Text variant="caption" numberOfLines={1} style={styles.captionMeta}>
-              {formatDateTime(item.startDate, item.startTime)}
-            </Text>
-          </Glass>
+
+            <View style={styles.footerRow}>
+              {organizer ? (
+                <View style={styles.organizerRow}>
+                  <View style={[styles.avatar, { borderColor: theme.brand }]}>
+                    <Text variant="caption" style={[styles.avatarInitial, { color: theme.brand }]}>
+                      {organizer.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text variant="small" numberOfLines={1} style={styles.organizerName}>
+                    {organizer}
+                  </Text>
+                </View>
+              ) : (
+                <View />
+              )}
+
+              <View style={styles.arrowButton}>
+                <Ionicons
+                  name="arrow-up"
+                  size={15}
+                  color="#0A0A0B"
+                  style={styles.arrowIcon}
+                />
+              </View>
+            </View>
+          </View>
         </Touchable>
       );
     },
-    [router, theme.surfaceMuted],
+    [router, theme.brand, theme.surfaceMuted],
   );
 
   if (loading) {
@@ -147,13 +208,51 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   caption: {
-    margin: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: 2,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
   },
-  captionText: { color: '#FFFFFF' },
-  captionMeta: { color: 'rgba(255,255,255,0.82)' },
+  chipRow: { flexDirection: 'row', gap: Spacing.xs },
+  chip: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+  },
+  title: {
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    fontWeight: '700',
+    fontSize: 28,
+    lineHeight: 32,
+    color: '#FFFFFF',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.xs,
+    gap: Spacing.md,
+  },
+  organizerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  avatar: {
+    width: 27,
+    height: 27,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  avatarInitial: { fontWeight: '700' },
+  organizerName: { color: 'rgba(255,255,255,0.88)', flexShrink: 1 },
+  arrowButton: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(245,245,247,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowIcon: { transform: [{ rotate: '45deg' }] },
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',

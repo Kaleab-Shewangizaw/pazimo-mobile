@@ -17,13 +17,12 @@ import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
+import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
 import { type SortOption, useDiscover } from '@/queries/discover';
 import type { PazimoEvent } from '@/types/api';
-
-const TAB_BAR_CLEARANCE = 56;
 
 const keyExtractor = (event: PazimoEvent) => event._id;
 
@@ -144,7 +143,7 @@ export default function DiscoverScreen() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
           paddingTop: insets.top + 116,
-          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + Spacing.xl,
+          paddingBottom: tabBarClearance(insets.bottom),
         }}
         ListEmptyComponent={
           isLoading ? (

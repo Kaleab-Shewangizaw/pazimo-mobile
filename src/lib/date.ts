@@ -5,6 +5,9 @@ const weekdayLong = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 const monthShort = new Intl.DateTimeFormat('en-US', { month: 'short' });
+const weekdayShort = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+
+const MS_PER_DAY = 86_400_000;
 
 function parse(value?: string | null): Date | null {
   if (!value) return null;
@@ -43,4 +46,38 @@ export function formatDateTime(startDate?: string | null, startTime?: string | n
 export function isPast(value?: string | null): boolean {
   const date = parse(value);
   return date ? date.getTime() < Date.now() : false;
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * `startTime` is free-form (e.g. "18:00" or "6:00 PM"), so this only reads the
+ * leading number and never throws on a value it can't make sense of.
+ */
+function parseHour(time?: string | null): number | null {
+  const match = time?.trim().match(/^(\d{1,2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  return Number.isFinite(hour) ? hour : null;
+}
+
+/**
+ * Compact "when" label for a badge/chip: "TONIGHT", "TODAY", "TOMORROW", or a
+ * short weekday + day ("FRI 14") beyond that. Returns null for past events —
+ * there's nothing useful to badge them with.
+ */
+export function relativeDayLabel(startDate?: string | null, startTime?: string | null): string | null {
+  const date = parse(startDate);
+  if (!date) return null;
+
+  const dayDiff = Math.round((startOfDay(date).getTime() - startOfDay(new Date()).getTime()) / MS_PER_DAY);
+  if (dayDiff < 0) return null;
+  if (dayDiff === 0) {
+    const hour = parseHour(startTime);
+    return hour !== null && hour >= 17 ? 'TONIGHT' : 'TODAY';
+  }
+  if (dayDiff === 1) return 'TOMORROW';
+  return `${weekdayShort.format(date).toUpperCase()} ${date.getDate()}`;
 }

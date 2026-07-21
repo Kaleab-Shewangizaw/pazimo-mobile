@@ -57,6 +57,9 @@ function GlassImpl({
     return (
       <GlassView
         glassEffectStyle={variant}
+        // Pinned rather than "auto": the app is dark-only, and this must not
+        // drift if a user has their system appearance set to light.
+        colorScheme="dark"
         style={[frame, style]}
         {...rest}
         // The native effect already draws its own edge treatment.

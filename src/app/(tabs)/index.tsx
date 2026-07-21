@@ -21,6 +21,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { SectionHeader } from '@/components/ui/section';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
+import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
@@ -31,8 +32,6 @@ import {
   useTrendingEvents,
 } from '@/queries/events';
 import type { PazimoEvent } from '@/types/api';
-
-const TAB_BAR_CLEARANCE = 56;
 
 const keyExtractor = (event: PazimoEvent) => event._id;
 
@@ -84,7 +83,6 @@ export default function HomeScreen() {
       <BannerCarousel events={banner.data} loading={banner.isLoading} />
 
       <View style={styles.section}>
-        <SectionHeader title="Browse" />
         <CategoryRail categories={categories.data} loading={categories.isLoading} />
       </View>
 
@@ -133,7 +131,7 @@ export default function HomeScreen() {
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <GlassHeader
         title="Pazimo"
-        subtitle="What's happening near you"
+        showLogo
         right={
           <Touchable
             accessibilityRole="button"
@@ -159,7 +157,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: insets.top + HEADER_CONTENT_HEIGHT + Spacing.lg,
-          paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + Spacing.xl,
+          paddingBottom: tabBarClearance(insets.bottom),
         }}
         refreshControl={
           <RefreshControl

@@ -1,80 +1,63 @@
 import { Platform } from 'react-native';
 
 /**
- * Glassmorphism depends on layered translucency, so surfaces are defined as
- * rgba over the page background rather than as opaque hex. The `glass*` tokens
- * are the ones that sit on top of blur; `surface*` are the cheap opaque
- * equivalents used inside scrolling lists, where real blur is too expensive.
+ * Pazimo mobile is dark-only by design, matching the gold-on-black identity the
+ * web app uses in its `.dark .brand-scope` (`--primary: #facc15`,
+ * `--primary-foreground: #000000`).
+ *
+ * Surfaces are layered the way iOS does it: a near-black base, then progressively
+ * lighter elevated fills, with translucent `glass*` tokens for the chrome that
+ * floats above content. Gold is reserved for interactive and selected states —
+ * it loses all meaning if it becomes a decorative colour.
  */
 
-const brand = {
-  400: '#4EA3F4',
-  500: '#208AEF',
-  600: '#1B74CC',
+const gold = {
+  400: '#FACC15',
+  500: '#EAB308',
+  deep: '#D4AF37',
 };
 
-export const Colors = {
-  light: {
-    brand: brand[500],
-    brandStrong: brand[600],
-    brandTint: 'rgba(32, 138, 239, 0.16)',
+const palette = {
+  brand: gold[400],
+  brandStrong: gold[500],
+  brandDeep: gold.deep,
+  brandTint: 'rgba(250, 204, 21, 0.14)',
+  /** Text/icons drawn on top of a gold fill. */
+  onBrand: '#0A0A0B',
 
-    background: '#F6F7F9',
-    backgroundElevated: '#FFFFFF',
+  background: '#08080A',
+  backgroundElevated: '#0F0F12',
 
-    surface: '#FFFFFF',
-    surfaceMuted: '#EFF1F4',
+  surface: '#16161A',
+  surfaceMuted: '#1E1E23',
 
-    glass: 'rgba(255, 255, 255, 0.62)',
-    glassStrong: 'rgba(255, 255, 255, 0.82)',
-    glassBorder: 'rgba(255, 255, 255, 0.75)',
-    hairline: 'rgba(15, 23, 42, 0.10)',
+  glass: 'rgba(22, 22, 26, 0.55)',
+  glassStrong: 'rgba(12, 12, 15, 0.80)',
+  glassBorder: 'rgba(255, 255, 255, 0.10)',
+  hairline: 'rgba(255, 255, 255, 0.08)',
 
-    text: '#0B1220',
-    textSecondary: '#5A6472',
-    textMuted: '#8B95A3',
-    onBrand: '#FFFFFF',
+  text: '#F5F5F7',
+  textSecondary: '#A1A1AA',
+  textMuted: '#6B6B76',
 
-    success: '#0F9D58',
-    danger: '#D93025',
-    warning: '#E37400',
+  success: '#34D399',
+  danger: '#FB7185',
+  warning: gold[400],
 
-    /** Scrim under text laid over cover art. */
-    scrim: 'rgba(6, 10, 18, 0.55)',
-    skeleton: 'rgba(15, 23, 42, 0.07)',
-  },
-  dark: {
-    brand: brand[400],
-    brandStrong: brand[500],
-    brandTint: 'rgba(78, 163, 244, 0.18)',
-
-    background: '#07090D',
-    backgroundElevated: '#0E1218',
-
-    surface: '#141922',
-    surfaceMuted: '#1B212C',
-
-    glass: 'rgba(24, 30, 40, 0.58)',
-    glassStrong: 'rgba(20, 25, 34, 0.80)',
-    glassBorder: 'rgba(255, 255, 255, 0.12)',
-    hairline: 'rgba(255, 255, 255, 0.10)',
-
-    text: '#F4F6F8',
-    textSecondary: '#A5AEBB',
-    textMuted: '#6F7987',
-    onBrand: '#FFFFFF',
-
-    success: '#3DDC84',
-    danger: '#FF6B5E',
-    warning: '#FFB020',
-
-    scrim: 'rgba(0, 0, 0, 0.60)',
-    skeleton: 'rgba(255, 255, 255, 0.07)',
-  },
+  /** Scrim under text laid over cover art. */
+  scrim: 'rgba(0, 0, 0, 0.62)',
+  skeleton: 'rgba(255, 255, 255, 0.06)',
 } as const;
 
+/**
+ * Both keys resolve to the same palette so any `Colors[scheme]` lookup stays
+ * correct while the app is locked to dark. `userInterfaceStyle` in app.json
+ * pins the system chrome to match.
+ */
+export const Colors = { dark: palette, light: palette } as const;
+
 export type ThemeName = keyof typeof Colors;
-export type Theme = (typeof Colors)[ThemeName];
+export type Theme = typeof palette;
 export type ThemeColor = keyof Theme;
 
 export const Spacing = {
@@ -87,11 +70,12 @@ export const Spacing = {
   xxxl: 48,
 } as const;
 
+/** Generous corners throughout — the iOS continuous-corner look. */
 export const Radius = {
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 24,
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 28,
   pill: 999,
 } as const;
 
@@ -106,14 +90,20 @@ export const FontSize = {
 } as const;
 
 export const Fonts = Platform.select({
-  ios: { sans: 'system-ui', rounded: 'ui-rounded', mono: 'ui-monospace' },
-  default: { sans: 'normal', rounded: 'normal', mono: 'monospace' },
-  web: { sans: 'var(--font-display)', rounded: 'var(--font-rounded)', mono: 'var(--font-mono)' },
+  ios: { sans: 'system-ui', rounded: 'ui-rounded', mono: 'ui-monospace', serif: 'Georgia' },
+  default: { sans: 'normal', rounded: 'normal', mono: 'monospace', serif: 'serif' },
+  web: {
+    sans: 'var(--font-display)',
+    rounded: 'var(--font-rounded)',
+    mono: 'var(--font-mono)',
+    serif: 'Georgia, "Times New Roman", serif',
+  },
 })!;
 
 /** Card art ratios, fixed so the feed never reflows when images load. */
 export const AspectRatio = {
-  banner: 16 / 9,
+  /** The hero carousel — tall, editorial, closer to a poster than a widescreen strip. */
+  banner: 4 / 5,
   card: 3 / 2,
   hero: 4 / 3,
 } as const;

@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { type ReactNode, memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,14 +13,17 @@ import { Spacing } from '@/constants/theme';
  */
 export const HEADER_CONTENT_HEIGHT = 52;
 
+const wordmark = require('@/assets/images/pazimo-logo.png');
+
 function GlassHeaderImpl({
   title,
-  subtitle,
   right,
+  showLogo = false,
 }: {
   title: string;
-  subtitle?: string;
   right?: ReactNode;
+  /** Home only — replaces the text title with the gold wordmark. */
+  showLogo?: boolean;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -32,14 +36,13 @@ function GlassHeaderImpl({
       style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.row}>
         <View style={styles.titles}>
-          <Text variant="heading" numberOfLines={1}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text variant="small" color="textSecondary" numberOfLines={1}>
-              {subtitle}
+          {showLogo ? (
+            <Image source={wordmark} style={styles.logo} contentFit="contain" />
+          ) : (
+            <Text variant="heading" numberOfLines={1}>
+              {title}
             </Text>
-          ) : null}
+          )}
         </View>
         {right}
       </View>
@@ -64,6 +67,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   titles: { flex: 1 },
+  logo: { width: 108, height: 26, alignSelf: 'flex-start' },
 });
 
 export const GlassHeader = memo(GlassHeaderImpl);

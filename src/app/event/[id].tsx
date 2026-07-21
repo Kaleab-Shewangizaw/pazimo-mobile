@@ -17,6 +17,7 @@ import { AspectRatio, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
+import { organizerDisplayName } from '@/lib/organizer';
 import {
   availableCurrencies,
   formatPrice,
@@ -48,12 +49,7 @@ export default function EventDetailScreen() {
   const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
 
   const cover = eventCoverUrl(event?.coverImages);
-  const organizer =
-    typeof event?.organizer === 'object' && event.organizer
-      ? (event.organizer.organizerProfile?.organization ??
-        event.organizer.fullName ??
-        [event.organizer.firstName, event.organizer.lastName].filter(Boolean).join(' '))
-      : null;
+  const organizer = event ? organizerDisplayName(event) : null;
 
   const venue = [event?.location?.address, event?.location?.city, event?.location?.country]
     .filter(Boolean)
