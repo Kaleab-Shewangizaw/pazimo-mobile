@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { Chip } from '@/components/ui/chip';
 import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
@@ -41,25 +42,6 @@ const getItemLayout = (_: unknown, index: number) => ({
   offset: STRIDE * index,
   index,
 });
-
-type ChipVariant = 'solid' | 'glass';
-
-function Chip({ label, variant }: { label: string; variant: ChipVariant }) {
-  const theme = useTheme();
-  return (
-    <View
-      style={[
-        styles.chip,
-        variant === 'solid'
-          ? { backgroundColor: theme.brand }
-          : { backgroundColor: 'rgba(10, 10, 12, 0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-      ]}>
-      <Text variant="label" style={{ color: variant === 'solid' ? theme.onBrand : '#FFFFFF' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
 
 function BannerCarouselImpl({ events, loading }: { events?: PazimoEvent[]; loading?: boolean }) {
   const theme = useTheme();
