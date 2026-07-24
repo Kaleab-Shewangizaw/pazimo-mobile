@@ -194,11 +194,6 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   chipRow: { flexDirection: 'row', gap: Spacing.xs },
-  chip: {
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-  },
   title: {
     fontFamily: Fonts.serif,
     fontStyle: 'italic',

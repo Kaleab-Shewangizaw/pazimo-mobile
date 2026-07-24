@@ -7,26 +7,22 @@ import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { TicketSheet } from '@/components/event/ticket-sheet';
 import { Button } from '@/components/ui/button';
-import { Glass, Surface } from '@/components/ui/glass';
+import { Chip } from '@/components/ui/chip';
+import { Glass } from '@/components/ui/glass';
 import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
-import { AspectRatio, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
-import { eventCoverUrl } from '@/lib/media';
+import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
-import {
-  availableCurrencies,
-  formatPrice,
-  isSoldOut,
-  isTierBuyable,
-  tierUnitPrice,
-} from '@/lib/pricing';
+import { availableCurrencies, formatPrice, isSoldOut, tierUnitPrice } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
-import type { Currency, TicketTier } from '@/types/api';
+import type { Currency } from '@/types/api';
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,6 +33,7 @@ export default function EventDetailScreen() {
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
   const [currency, setCurrency] = useState<Currency | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   const currencies = useMemo(
     () => (event ? availableCurrencies(event) : (['ETB'] as Currency[])),
@@ -46,10 +43,13 @@ export default function EventDetailScreen() {
 
   const tiers = event?.ticketTypes ?? [];
   const soldOut = event ? isSoldOut(event) : false;
-  const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
 
   const cover = eventCoverUrl(event?.coverImages);
   const organizer = event ? organizerDisplayName(event) : null;
+
+  const gallery = (event?.eventImages ?? [])
+    .map((img) => resolveImageUrl(img.url))
+    .filter((uri): uri is string => Boolean(uri));
 
   const venue = [event?.location?.address, event?.location?.city, event?.location?.country]
     .filter(Boolean)
@@ -67,7 +67,29 @@ export default function EventDetailScreen() {
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <View style={styles.screen}>
+      {/* Fixed backdrop — the photo stays put behind the whole scroll, like a
+          wallpaper, rather than scrolling away with the hero. */}
+      <View style={StyleSheet.absoluteFill}>
+        {cover ? (
+          <Image
+            source={{ uri: cover }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={220}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
+        )}
+        <LinearGradient
+          colors={['rgba(2,2,3,0.20)', 'rgba(2,2,3,0.55)', 'rgba(2,2,3,0.94)']}
+          locations={[0, 0.5, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      </View>
+
       {/* Floating chrome — glass is cheap here, these never recycle. */}
       <View style={[styles.chrome, { top: insets.top + Spacing.sm }]}>
         <Glass variant="clear" intensity={40} radius={Radius.pill} style={styles.chromeButton}>
@@ -101,116 +123,89 @@ export default function EventDetailScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
-        <View style={styles.heroWrap}>
-          {cover ? (
-            <Image
-              source={{ uri: cover }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={220}
-              cachePolicy="memory-disk"
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
-          )}
-          <LinearGradient
-            colors={['transparent', theme.background]}
-            style={styles.heroFade}
-            pointerEvents="none"
-          />
-        </View>
-
-        <View style={styles.body}>
-          {isLoading ? (
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.xxl + Spacing.xl, paddingBottom: insets.bottom + 140 },
+        ]}>
+        {isLoading ? (
+          <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
             <View style={styles.loadingBlock}>
               <Skeleton width="85%" height={26} />
               <Skeleton width="55%" height={14} />
               <Skeleton width="70%" height={14} />
-              <Skeleton height={90} radius={Radius.lg} />
             </View>
-          ) : event ? (
-            <>
+          </Glass>
+        ) : event ? (
+          <>
+            <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
               <Text variant="heading">{event.title}</Text>
-
               {organizer ? (
                 <Text variant="small" color="textSecondary">
-                  by {organizer}
+                  Hosted by {organizer}
                 </Text>
               ) : null}
 
-              <Surface tone="muted" style={styles.factSheet}>
+              <View style={styles.factsBlock}>
                 <Fact
                   icon="calendar-outline"
                   label={formatDateTime(event.startDate, event.startTime)}
                 />
                 {venue ? <Fact icon="location-outline" label={venue} /> : null}
                 {event.ageRestriction?.hasRestriction && event.ageRestriction.minAge ? (
-                  <Fact icon="alert-circle-outline" label={`${event.ageRestriction.minAge}+ only`} />
+                  <Fact
+                    icon="alert-circle-outline"
+                    label={`${event.ageRestriction.minAge}+ only`}
+                  />
                 ) : null}
-              </Surface>
+              </View>
+            </Glass>
 
-              {event.description ? (
-                <View style={styles.block}>
-                  <Text variant="title">About</Text>
+            {event.description || event.tags?.length ? (
+              <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
+                <Text variant="title">About</Text>
+                {event.description ? (
                   <Text variant="body" color="textSecondary" style={styles.description}>
                     {event.description}
                   </Text>
-                </View>
-              ) : null}
+                ) : null}
+                {event.tags?.length ? (
+                  <View style={styles.tagRow}>
+                    {event.tags.map((tag) => (
+                      <Chip key={tag} label={tag} variant="glass" />
+                    ))}
+                  </View>
+                ) : null}
+              </Glass>
+            ) : null}
 
-              <View style={styles.block}>
-                <View style={styles.ticketsHeader}>
-                  <Text variant="title">Tickets</Text>
-                  {currencies.length > 1 ? (
-                    <View style={[styles.currencyToggle, { backgroundColor: theme.surfaceMuted }]}>
-                      {currencies.map((code) => {
-                        const active = code === activeCurrency;
-                        return (
-                          <Touchable
-                            key={code}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: active }}
-                            onPress={() => setCurrency(code)}
-                            pressedScale={0.95}
-                            style={[
-                              styles.currencyOption,
-                              active && { backgroundColor: theme.brand },
-                            ]}>
-                            <Text
-                              variant="caption"
-                              style={{ color: active ? theme.onBrand : theme.textSecondary }}>
-                              {code}
-                            </Text>
-                          </Touchable>
-                        );
-                      })}
+            {gallery.length ? (
+              <View style={styles.gallerySection}>
+                <Text variant="title" style={styles.galleryTitle}>
+                  Gallery
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.galleryRow}>
+                  {gallery.map((uri, index) => (
+                    <View key={uri + index} style={styles.galleryThumbWrap}>
+                      <Image
+                        source={{ uri }}
+                        style={styles.galleryThumb}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                      />
                     </View>
-                  ) : null}
-                </View>
-
-                {tiers.length === 0 ? (
-                  <Text variant="small" color="textMuted">
-                    No tickets have been published for this event yet.
-                  </Text>
-                ) : (
-                  tiers.map((tier) => (
-                    <TierRow
-                      key={tier._id}
-                      tier={tier}
-                      currency={activeCurrency}
-                      selected={tier._id === selectedTierId}
-                      onSelect={() => setSelectedTierId(tier._id)}
-                    />
-                  ))
-                )}
+                  ))}
+                </ScrollView>
               </View>
-            </>
-          ) : null}
-        </View>
+            ) : null}
+          </>
+        ) : null}
       </ScrollView>
 
-      {/* Sticky purchase bar */}
+      {/* Buy bar — always opens the ticket sheet; tier selection lives there. */}
       {event && tiers.length > 0 ? (
         <Glass
           variant="regular"
@@ -220,32 +215,41 @@ export default function EventDetailScreen() {
           <View style={styles.buyInner}>
             <View style={styles.buyPrice}>
               <Text variant="caption" color="textMuted">
-                {selectedTier ? selectedTier.name : 'From'}
+                From
               </Text>
               <Text variant="title">
-                {selectedTier
-                  ? formatPrice(tierUnitPrice(selectedTier, activeCurrency), activeCurrency)
-                  : formatPrice(
-                      Math.min(...tiers.map((t) => tierUnitPrice(t, activeCurrency))),
-                      activeCurrency,
-                    )}
+                {formatPrice(
+                  Math.min(...tiers.map((t) => tierUnitPrice(t, activeCurrency))),
+                  activeCurrency,
+                )}
               </Text>
             </View>
             <Button
-              label={soldOut ? 'Sold out' : selectedTier ? 'Continue' : 'Select a ticket'}
-              disabled={soldOut || !selectedTier}
+              label={soldOut ? 'Sold out' : 'Buy Ticket'}
+              disabled={soldOut}
               size="lg"
               style={styles.buyButton}
-              onPress={() => {
-                // Checkout is the next phase; the tier and currency are the
-                // only state it needs carried across.
-                router.push(
-                  `/checkout/${event._id}?tier=${selectedTier?._id}&currency=${activeCurrency}`,
-                );
-              }}
+              onPress={() => setSheetVisible(true)}
             />
           </View>
         </Glass>
+      ) : null}
+
+      {event ? (
+        <TicketSheet
+          visible={sheetVisible}
+          onClose={() => setSheetVisible(false)}
+          tiers={tiers}
+          currency={activeCurrency}
+          currencies={currencies}
+          onChangeCurrency={setCurrency}
+          selectedTierId={selectedTierId}
+          onSelectTier={setSelectedTierId}
+          onContinue={() => {
+            setSheetVisible(false);
+            router.push(`/checkout/${event._id}?tier=${selectedTierId}&currency=${activeCurrency}`);
+          }}
+        />
       ) : null}
     </View>
   );
@@ -263,72 +267,6 @@ function Fact({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: st
   );
 }
 
-function TierRow({
-  tier,
-  currency,
-  selected,
-  onSelect,
-}: {
-  tier: TicketTier;
-  currency: Currency;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const theme = useTheme();
-  const buyable = isTierBuyable(tier);
-  // `quantity` is remaining stock — there is no separate sold/remaining field.
-  const scarce = buyable && tier.quantity <= 10;
-
-  return (
-    <Touchable
-      accessibilityRole="radio"
-      accessibilityState={{ selected, disabled: !buyable }}
-      disabled={!buyable}
-      onPress={onSelect}
-      haptic
-      style={[
-        styles.tier,
-        {
-          backgroundColor: theme.surface,
-          borderColor: selected ? theme.brand : theme.hairline,
-          borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
-          opacity: buyable ? 1 : 0.55,
-        },
-      ]}>
-      <View style={styles.tierMain}>
-        <Text variant="callout" numberOfLines={1}>
-          {tier.name}
-        </Text>
-        {tier.description ? (
-          <Text variant="caption" color="textMuted" numberOfLines={2}>
-            {tier.description}
-          </Text>
-        ) : null}
-        {!buyable ? (
-          <Text variant="caption" color="danger">
-            Unavailable
-          </Text>
-        ) : scarce ? (
-          <Text variant="caption" color="warning">
-            Only {tier.quantity} left
-          </Text>
-        ) : null}
-      </View>
-
-      <View style={styles.tierRight}>
-        <Text variant="callout" color="brand">
-          {formatPrice(tierUnitPrice(tier, currency), currency)}
-        </Text>
-        <Ionicons
-          name={selected ? 'radio-button-on' : 'radio-button-off'}
-          size={20}
-          color={selected ? theme.brand : theme.textMuted}
-        />
-      </View>
-    </Touchable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { justifyContent: 'center' },
@@ -342,35 +280,26 @@ const styles = StyleSheet.create({
   },
   chromeButton: { width: 40, height: 40 },
   chromeHit: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  heroWrap: { width: '100%', aspectRatio: AspectRatio.hero },
-  heroFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96 },
-  body: { paddingHorizontal: Spacing.lg, marginTop: -Spacing.xl, gap: Spacing.sm },
+  scrollContent: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
+  card: { padding: Spacing.lg, gap: Spacing.sm },
   loadingBlock: { gap: Spacing.md },
-  factSheet: { padding: Spacing.md, gap: Spacing.sm, marginTop: Spacing.md },
+  factsBlock: { gap: Spacing.sm, marginTop: Spacing.sm },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { flex: 1 },
-  block: { marginTop: Spacing.xl, gap: Spacing.md },
-  description: { lineHeight: 22 },
-  ticketsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  currencyToggle: { flexDirection: 'row', borderRadius: Radius.pill, padding: 3, gap: 2 },
-  currencyOption: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.pill,
-  },
-  tier: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
+  description: { lineHeight: 22, marginTop: 2 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
+  gallerySection: { gap: Spacing.sm },
+  galleryTitle: { paddingHorizontal: Spacing.xs },
+  galleryRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xs },
+  galleryThumbWrap: {
+    width: 140,
+    height: 100,
     borderRadius: Radius.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  tierMain: { flex: 1, gap: 2 },
-  tierRight: { alignItems: 'flex-end', gap: Spacing.xs },
+  galleryThumb: { width: '100%', height: '100%' },
   buyBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   buyInner: {
     flexDirection: 'row',
