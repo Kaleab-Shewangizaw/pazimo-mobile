@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Dimensions, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
@@ -16,18 +16,22 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
-import { availableCurrencies, formatPrice, isSoldOut, tierUnitPrice } from '@/lib/pricing';
+import { availableCurrencies, formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
 import type { Currency } from '@/types/api';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
 
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
@@ -82,28 +86,46 @@ export default function EventDetailScreen() {
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
         )}
+        {/*
+          Content is anchored to the bottom of the screen below (not wherever
+          it happens to end), so the darkest part of this gradient needs to
+          cover that whole region — otherwise short content (no gallery, a
+          one-line description) leaves a stretch of undimmed photo with
+          nothing on it, which reads as broken rather than spacious.
+        */}
         <LinearGradient
-          colors={['rgba(2,2,3,0.20)', 'rgba(2,2,3,0.55)', 'rgba(2,2,3,0.94)']}
-          locations={[0, 0.5, 1]}
+          colors={['rgba(2,2,3,0.30)', 'rgba(2,2,3,0.42)', 'rgba(2,2,3,0.80)', 'rgba(2,2,3,0.97)']}
+          locations={[0, 0.28, 0.5, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
       </View>
 
-      {/* Floating chrome — glass is cheap here, these never recycle. */}
+      {/* Floating chrome — text sits directly on the photo below, so these stay
+          understated (no border, light blur) rather than reading as UI chrome. */}
       <View style={[styles.chrome, { top: insets.top + Spacing.sm }]}>
-        <Glass variant="clear" intensity={40} radius={Radius.pill} style={styles.chromeButton}>
+        <Glass
+          variant="clear"
+          intensity={20}
+          bordered={false}
+          radius={Radius.pill}
+          style={styles.chromeButton}>
           <Touchable
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            onPress={() => router.back()}
+            onPress={goBack}
             pressedScale={0.9}
             style={styles.chromeHit}>
-            <Ionicons name="chevron-back" size={22} color={theme.text} />
+            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
           </Touchable>
         </Glass>
 
-        <Glass variant="clear" intensity={40} radius={Radius.pill} style={styles.chromeButton}>
+        <Glass
+          variant="clear"
+          intensity={20}
+          bordered={false}
+          radius={Radius.pill}
+          style={styles.chromeButton}>
           <Touchable
             accessibilityRole="button"
             accessibilityLabel="Share this event"
@@ -116,7 +138,7 @@ export default function EventDetailScreen() {
             }}
             pressedScale={0.9}
             style={styles.chromeHit}>
-            <Ionicons name="share-outline" size={20} color={theme.text} />
+            <Ionicons name="share-outline" size={20} color="#FFFFFF" />
           </Touchable>
         </Glass>
       </View>
@@ -125,27 +147,26 @@ export default function EventDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + Spacing.xxl + Spacing.xl, paddingBottom: insets.bottom + 140 },
+          {
+            paddingTop: insets.top + Spacing.xxl,
+            paddingBottom: insets.bottom + 120,
+            minHeight: SCREEN_HEIGHT,
+          },
         ]}>
         {isLoading ? (
-          <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
-            <View style={styles.loadingBlock}>
-              <Skeleton width="85%" height={26} />
-              <Skeleton width="55%" height={14} />
-              <Skeleton width="70%" height={14} />
-            </View>
-          </Glass>
+          <View style={styles.loadingBlock}>
+            <Skeleton width="85%" height={26} />
+            <Skeleton width="55%" height={14} />
+            <Skeleton width="70%" height={14} />
+          </View>
         ) : event ? (
           <>
-            <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
-              <Text variant="heading">{event.title}</Text>
-              {organizer ? (
-                <Text variant="small" color="textSecondary">
-                  Hosted by {organizer}
-                </Text>
-              ) : null}
-
-              <View style={styles.factsBlock}>
+            {/* Header — left-aligned, directly on the gradient, no card. */}
+            <View style={styles.headerBlock}>
+              <Text variant="heading" style={styles.title}>
+                {event.title}
+              </Text>
+              <View style={styles.factsRow}>
                 <Fact
                   icon="calendar-outline"
                   label={formatDateTime(event.startDate, event.startTime)}
@@ -158,25 +179,30 @@ export default function EventDetailScreen() {
                   />
                 ) : null}
               </View>
-            </Glass>
+            </View>
 
-            {event.description || event.tags?.length ? (
-              <Glass variant="regular" intensity={50} radius={Radius.xl} style={styles.card}>
-                <Text variant="title">About</Text>
-                {event.description ? (
-                  <Text variant="body" color="textSecondary" style={styles.description}>
-                    {event.description}
-                  </Text>
-                ) : null}
-                {event.tags?.length ? (
-                  <View style={styles.tagRow}>
-                    {event.tags.map((tag) => (
-                      <Chip key={tag} label={tag} variant="glass" />
-                    ))}
-                  </View>
-                ) : null}
-              </Glass>
-            ) : null}
+            {/* Body — centered, matching the invite-card rhythm below the header. */}
+            <View style={styles.centerBlock}>
+              {organizer ? (
+                <Text variant="callout" style={styles.hostedBy}>
+                  Hosted by {organizer}
+                </Text>
+              ) : null}
+
+              {event.description ? (
+                <Text variant="body" style={styles.description}>
+                  {event.description}
+                </Text>
+              ) : null}
+
+              {event.tags?.length ? (
+                <View style={styles.tagRow}>
+                  {event.tags.map((tag) => (
+                    <Chip key={tag} label={tag} variant="glass" />
+                  ))}
+                </View>
+              ) : null}
+            </View>
 
             {gallery.length ? (
               <View style={styles.gallerySection}>
@@ -205,34 +231,23 @@ export default function EventDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Buy bar — always opens the ticket sheet; tier selection lives there. */}
+      {/* A single floating pill, matching the reference exactly — no bar or
+          separate price readout behind it, since the gradient already carries
+          contrast down here. */}
       {event && tiers.length > 0 ? (
-        <Glass
-          variant="regular"
-          intensity={70}
-          radius={0}
-          style={[styles.buyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
-          <View style={styles.buyInner}>
-            <View style={styles.buyPrice}>
-              <Text variant="caption" color="textMuted">
-                From
-              </Text>
-              <Text variant="title">
-                {formatPrice(
-                  Math.min(...tiers.map((t) => tierUnitPrice(t, activeCurrency))),
-                  activeCurrency,
-                )}
-              </Text>
-            </View>
-            <Button
-              label={soldOut ? 'Sold out' : 'Buy Ticket'}
-              disabled={soldOut}
-              size="lg"
-              style={styles.buyButton}
-              onPress={() => setSheetVisible(true)}
-            />
-          </View>
-        </Glass>
+        <View style={[styles.buyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
+          <Button
+            label={
+              soldOut
+                ? 'Sold out'
+                : `Get Ticket — ${formatPrice(lowestPrice(event, activeCurrency) ?? 0, activeCurrency)}`
+            }
+            disabled={soldOut}
+            size="lg"
+            style={styles.buyButton}
+            onPress={() => setSheetVisible(true)}
+          />
+        </View>
       ) : null}
 
       {event ? (
@@ -256,11 +271,10 @@ export default function EventDetailScreen() {
 }
 
 function Fact({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
-  const theme = useTheme();
   return (
     <View style={styles.fact}>
-      <Ionicons name={icon} size={17} color={theme.brand} />
-      <Text variant="small" color="textSecondary" style={styles.factText}>
+      <Ionicons name={icon} size={15} color="#FFFFFF" />
+      <Text variant="small" style={styles.factText} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -278,18 +292,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  chromeButton: { width: 40, height: 40 },
+  chromeButton: { width: 36, height: 36 },
   chromeHit: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  scrollContent: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
-  card: { padding: Spacing.lg, gap: Spacing.sm },
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xl,
+    justifyContent: 'flex-end',
+  },
   loadingBlock: { gap: Spacing.md },
-  factsBlock: { gap: Spacing.sm, marginTop: Spacing.sm },
-  fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  factText: { flex: 1 },
-  description: { lineHeight: 22, marginTop: 2 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
-  gallerySection: { gap: Spacing.sm },
-  galleryTitle: { paddingHorizontal: Spacing.xs },
+  headerBlock: { gap: Spacing.sm },
+  title: { color: '#FFFFFF' },
+  factsRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.lg, rowGap: Spacing.xs },
+  fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexShrink: 1 },
+  factText: { color: 'rgba(255,255,255,0.88)', flexShrink: 1 },
+  centerBlock: { alignItems: 'center', gap: Spacing.sm },
+  hostedBy: { color: '#FFFFFF' },
+  description: { textAlign: 'center', lineHeight: 22, color: 'rgba(255,255,255,0.85)' },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  gallerySection: { gap: Spacing.md },
+  galleryTitle: { textAlign: 'center' },
   galleryRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xs },
   galleryThumbWrap: {
     width: 140,
@@ -300,14 +327,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
   },
   galleryThumb: { width: '100%', height: '100%' },
-  buyBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  buyInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
-  buyPrice: { flex: 1 },
-  buyButton: { flexGrow: 1, maxWidth: 200 },
+  buyBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.lg },
+  buyButton: { width: '100%' },
 });

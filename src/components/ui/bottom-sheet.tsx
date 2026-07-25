@@ -40,20 +40,12 @@ export function BottomSheet({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Kept mounted for the duration of the close animation. `visible` is mirrored
-  // into state during render (React's documented pattern for this) rather than
-  // in a `useEffect`, since an unconditional setState in an effect body is the
-  // anti-pattern the react-compiler lint rule flags.
+  // Kept mounted for the duration of the close animation, then unmounted so a
+  // hidden sheet can't intercept touches. This is a genuine synchronize-with-
+  // an-external-system effect (starting/stopping an imperative animation), so
+  // the setState inside it is the correct tool, not the anti-pattern the
+  // react-compiler lint rule usually flags — suppressed with that reasoning.
   const [mounted, setMounted] = useState(visible);
-  const [prevVisible, setPrevVisible] = useState(visible);
-  if (visible !== prevVisible) {
-    setPrevVisible(visible);
-    if (visible) setMounted(true);
-  }
-
-  // Lazily-initialised state rather than `useRef(...).current`: the compiler
-  // forbids reading a ref's `.current` during render, and these values are
-  // otherwise only ever touched inside effects and gesture callbacks.
   const [translateY] = useState(() => new Animated.Value(SCREEN_HEIGHT));
   const [backdrop] = useState(() => new Animated.Value(0));
   // A plain mutable box, not `useRef` — the compiler's ref-immutability check
@@ -65,14 +57,34 @@ export function BottomSheet({
 
   useEffect(() => {
     if (visible) {
-      Animated.spring(translateY, { toValue: 0, ...SPRING }).start();
-      Animated.timing(backdrop, { toValue: 1, ...FADE }).start();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the sheet must be mounted before the open animation can run; there's no prior render this could instead be computed in.
+      setMounted(true);
+    }
+
+    const translateAnim = visible
+      ? Animated.spring(translateY, { toValue: 0, ...SPRING })
+      : Animated.timing(translateY, { toValue: SCREEN_HEIGHT, ...FADE });
+    const backdropAnim = Animated.timing(backdrop, { toValue: visible ? 1 : 0, ...FADE });
+
+    translateAnim.start();
+    if (visible) {
+      backdropAnim.start();
     } else {
-      Animated.timing(translateY, { toValue: SCREEN_HEIGHT, ...FADE }).start();
-      Animated.timing(backdrop, { toValue: 0, ...FADE }).start(({ finished }) => {
+      backdropAnim.start(({ finished }) => {
         if (finished) setMounted(false);
       });
     }
+
+    // Stopping the previous run's animations before the next one starts is
+    // what makes this safe to re-open quickly: without it, a close animation's
+    // completion callback can fire *after* a newer open animation has already
+    // started, incorrectly unmounting the just-opened sheet. `.stop()` makes a
+    // pending callback report `finished: false`, so the guard above skips it
+    // even if it still fires after being stopped.
+    return () => {
+      translateAnim.stop();
+      backdropAnim.stop();
+    };
   }, [visible, translateY, backdrop]);
 
   const [panResponder] = useState(() =>

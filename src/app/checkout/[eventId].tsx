@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { EmptyState } from '@/components/ui/state-views';
 import { Radius, Spacing } from '@/constants/theme';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, tierUnitPrice } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
@@ -39,7 +40,7 @@ export default function CheckoutScreen() {
     currency?: Currency;
   }>();
   const theme = useTheme();
-  const router = useRouter();
+  const goBack = useGoBack();
   const insets = useSafeAreaInsets();
 
   const { data: event } = useEvent(eventId);
@@ -52,7 +53,7 @@ export default function CheckoutScreen() {
         <Touchable
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          onPress={() => router.back()}
+          onPress={goBack}
           pressedScale={0.9}
           style={[styles.backButton, { backgroundColor: theme.surfaceMuted }]}>
           <Ionicons name="chevron-back" size={22} color={theme.text} />
