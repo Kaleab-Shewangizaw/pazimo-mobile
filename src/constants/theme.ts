@@ -89,6 +89,19 @@ export const FontSize = {
   display: 32,
 } as const;
 
+/**
+ * Quicksand everywhere — the rounded geometric sans from the reference design.
+ * Weights are separate loaded families, so styles must reference these names
+ * instead of `fontWeight` (which would only synthesize a fake bold on top of
+ * the regular cut).
+ */
+export const FontFamily = {
+  regular: 'Quicksand_400Regular',
+  medium: 'Quicksand_500Medium',
+  semibold: 'Quicksand_600SemiBold',
+  bold: 'Quicksand_700Bold',
+} as const;
+
 export const Fonts = Platform.select({
   ios: { sans: 'system-ui', rounded: 'ui-rounded', mono: 'ui-monospace', serif: 'Georgia' },
   default: { sans: 'normal', rounded: 'normal', mono: 'monospace', serif: 'serif' },

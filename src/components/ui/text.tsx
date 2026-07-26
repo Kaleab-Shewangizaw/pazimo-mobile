@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Text as RNText, type TextProps as RNTextProps, StyleSheet } from 'react-native';
 
-import { FontSize, type ThemeColor } from '@/constants/theme';
+import { FontFamily, FontSize, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type TextVariant =
@@ -14,15 +14,17 @@ export type TextVariant =
   | 'caption'
   | 'label';
 
+// Weight comes from the loaded family cut, never `fontWeight` — see the note
+// on `FontFamily` in constants/theme.
 const variants = StyleSheet.create({
-  display: { fontSize: FontSize.display, fontWeight: '800', letterSpacing: -0.6 },
-  heading: { fontSize: FontSize.heading, fontWeight: '700', letterSpacing: -0.4 },
-  title: { fontSize: FontSize.title, fontWeight: '700', letterSpacing: -0.2 },
-  callout: { fontSize: FontSize.callout, fontWeight: '600' },
-  body: { fontSize: FontSize.body, fontWeight: '400' },
-  small: { fontSize: FontSize.small, fontWeight: '400' },
-  caption: { fontSize: FontSize.caption, fontWeight: '500' },
-  label: { fontSize: FontSize.caption, fontWeight: '700', letterSpacing: 0.6 },
+  display: { fontSize: FontSize.display, fontFamily: FontFamily.bold, letterSpacing: -0.3 },
+  heading: { fontSize: FontSize.heading, fontFamily: FontFamily.bold, letterSpacing: -0.2 },
+  title: { fontSize: FontSize.title, fontFamily: FontFamily.bold },
+  callout: { fontSize: FontSize.callout, fontFamily: FontFamily.semibold },
+  body: { fontSize: FontSize.body, fontFamily: FontFamily.medium },
+  small: { fontSize: FontSize.small, fontFamily: FontFamily.medium },
+  caption: { fontSize: FontSize.caption, fontFamily: FontFamily.medium },
+  label: { fontSize: FontSize.caption, fontFamily: FontFamily.bold, letterSpacing: 0.6 },
 });
 
 export type TextProps = RNTextProps & {

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -7,9 +6,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { AspectRatio, Radius, Spacing } from '@/constants/theme';
+import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateBadge, formatDateTime } from '@/lib/date';
+import { formatDateBadge, formatLongDate } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
 import { isSoldOut, priceLabel } from '@/lib/pricing';
 import type { Currency, PazimoEvent } from '@/types/api';
@@ -24,15 +23,20 @@ export type EventCardProps = {
   layout?: 'feed' | 'rail';
 };
 
+/**
+ * Poster card — a miniature of the event detail masthead: venue eyebrow and
+ * title over the photo's bottom scrim, date chip up top, so tapping through
+ * feels like the poster simply grows.
+ */
 function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardProps) {
   const theme = useTheme();
   const router = useRouter();
 
   const cover = eventCoverUrl(event.coverImages);
-  const badge = formatDateBadge(event.startDate);
   const soldOut = isSoldOut(event);
   const price = priceLabel(event, currency);
-  const venue = event.location?.city ?? event.location?.address;
+  const badge = formatDateBadge(event.startDate);
+  const eyebrow = (event.location?.city ?? event.location?.address)?.toUpperCase();
 
   const onPress = useCallback(() => {
     // shortId keeps the URL tidy and hits the cheaper public lookup.
@@ -42,78 +46,80 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
   return (
     <Touchable
       accessibilityRole="button"
-      accessibilityLabel={`${event.title}. ${formatDateTime(event.startDate, event.startTime)}`}
+      accessibilityLabel={`${event.title}. ${formatLongDate(event.startDate) ?? ''}`}
       onPress={onPress}
       style={[
         styles.card,
         layout === 'rail' ? styles.rail : styles.feed,
-        { backgroundColor: theme.surface, borderColor: theme.hairline },
+        { borderColor: theme.hairline },
       ]}>
-      <View style={styles.coverWrap}>
-        {cover ? (
-          <Image
-            source={{ uri: cover }}
-            style={styles.cover}
-            contentFit="cover"
-            transition={IMAGE_TRANSITION}
-            cachePolicy="memory-disk"
-            recyclingKey={event._id}
-          />
-        ) : (
-          <View style={[styles.cover, { backgroundColor: theme.surfaceMuted }]} />
-        )}
-
-        {/* Scrim keeps the date chip legible over bright or busy artwork. */}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.45)', 'transparent']}
-          style={styles.topScrim}
-          pointerEvents="none"
+      {cover ? (
+        <Image
+          source={{ uri: cover }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={IMAGE_TRANSITION}
+          cachePolicy="memory-disk"
+          recyclingKey={event._id}
         />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
+      )}
 
-        {badge ? (
-          <View style={[styles.dateBadge, { backgroundColor: theme.glassStrong }]}>
-            <Text variant="label" color="brand">
-              {badge.month}
-            </Text>
-            <Text variant="callout">{badge.day}</Text>
-          </View>
-        ) : null}
+      {/* Same scrim ramp as the detail screen — heavy only where type sits. */}
+      <LinearGradient
+        colors={['transparent', 'rgba(2,2,3,0.42)', 'rgba(2,2,3,0.90)']}
+        locations={[0, 0.35, 1]}
+        style={styles.bottomScrim}
+        pointerEvents="none"
+      />
+      {/* Light top scrim so the date chip reads over bright artwork. */}
+      <LinearGradient
+        colors={['rgba(2,2,3,0.35)', 'transparent']}
+        style={styles.topScrim}
+        pointerEvents="none"
+      />
 
-        {soldOut ? (
-          <View style={[styles.statusPill, { backgroundColor: theme.scrim }]}>
-            <Text variant="caption" style={{ color: '#FFFFFF' }}>
-              Sold out
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.body}>
-        <Text variant="callout" numberOfLines={2}>
-          {event.title}
-        </Text>
-
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={13} color={theme.textMuted} />
-          <Text variant="small" color="textSecondary" numberOfLines={1} style={styles.metaText}>
-            {formatDateTime(event.startDate, event.startTime)}
+      {badge ? (
+        <View style={[styles.dateBadge, { backgroundColor: theme.glassStrong }]}>
+          <Text variant="label" style={styles.badgeMonth}>
+            {badge.month}
+          </Text>
+          <Text variant="callout" style={styles.badgeDay}>
+            {badge.day}
           </Text>
         </View>
+      ) : null}
 
-        {venue ? (
-          <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={13} color={theme.textMuted} />
-            <Text variant="small" color="textSecondary" numberOfLines={1} style={styles.metaText}>
-              {venue}
-            </Text>
-          </View>
-        ) : null}
+      {soldOut ? (
+        <View style={[styles.statusPill, { backgroundColor: theme.scrim }]}>
+          <Text variant="label" style={styles.badgeText}>
+            SOLD OUT
+          </Text>
+        </View>
+      ) : null}
 
-        {price ? (
-          <Text variant="small" color="brand" style={styles.price}>
-            {price}
+      <View style={styles.body}>
+        {eyebrow ? (
+          <Text variant="label" numberOfLines={1} style={styles.eyebrow}>
+            {eyebrow}
           </Text>
         ) : null}
+        <View style={styles.titleRow}>
+          <Text
+            variant={layout === 'rail' ? 'title' : 'heading'}
+            numberOfLines={2}
+            style={styles.title}>
+            {event.title}
+          </Text>
+          {price ? (
+            <View style={styles.priceChip}>
+              <Text variant="caption" style={styles.priceText}>
+                {price}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
     </Touchable>
   );
@@ -125,10 +131,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  feed: { width: '100%' },
-  rail: { width: 240 },
-  coverWrap: { width: '100%', aspectRatio: AspectRatio.card },
-  cover: { width: '100%', height: '100%' },
+  feed: { width: '100%', aspectRatio: AspectRatio.hero },
+  rail: { width: 240, aspectRatio: AspectRatio.banner },
+  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '62%' },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 72 },
   dateBadge: {
     position: 'absolute',
@@ -140,18 +145,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 44,
   },
+  badgeMonth: { color: 'rgba(255,255,255,0.75)' },
+  badgeDay: { color: '#FFFFFF' },
   statusPill: {
     position: 'absolute',
     top: Spacing.sm,
     right: Spacing.sm,
     borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 5,
   },
-  body: { padding: Spacing.md, gap: Spacing.xs },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  metaText: { flex: 1 },
-  price: { marginTop: Spacing.xs, fontWeight: '700' },
+  badgeText: { color: '#FFFFFF' },
+  body: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  eyebrow: { color: 'rgba(255,255,255,0.70)', letterSpacing: 1.1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  title: { color: '#FFFFFF', flexShrink: 1 },
+  priceChip: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.30)',
+    marginBottom: 2,
+  },
+  priceText: { color: '#FFFFFF', fontFamily: FontFamily.semibold },
 });
 
 export const EventCard = memo(EventCardImpl);

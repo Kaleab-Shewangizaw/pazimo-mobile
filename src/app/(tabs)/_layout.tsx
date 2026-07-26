@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router/js-tabs';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/glass';
@@ -24,14 +24,42 @@ import { useTheme } from '@/hooks/use-theme';
 function TabBarBackground() {
   // radius=0 here: the outer `tabBarStyle` owns the capsule radius and clips
   // this to it via overflow:hidden, so this only needs to fill the shape.
+  // The extra tint pushes the capsule toward the near-opaque black of the
+  // reference design while keeping the blur alive at the edges.
   return (
     <Glass
       variant="regular"
       intensity={50}
       radius={0}
       bordered={false}
-      style={StyleSheet.absoluteFill}
-    />
+      style={StyleSheet.absoluteFill}>
+      <View style={[StyleSheet.absoluteFill, styles.barTint]} />
+    </Glass>
+  );
+}
+
+/**
+ * The reference bar highlights the active destination as a solid white pill
+ * with a black glyph — the same "one white element = the action" rule the
+ * rest of the app follows.
+ */
+function TabIcon({
+  focused,
+  active,
+  inactive,
+}: {
+  focused: boolean;
+  active: keyof typeof Ionicons.glyphMap;
+  inactive: keyof typeof Ionicons.glyphMap;
+}) {
+  return (
+    <View style={[styles.iconPill, focused && styles.iconPillActive]}>
+      <Ionicons
+        name={focused ? active : inactive}
+        size={23}
+        color={focused ? '#0A0A0B' : 'rgba(255,255,255,0.72)'}
+      />
+    </View>
   );
 }
 
@@ -77,8 +105,8 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={26} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} active="home" inactive="home-outline" />
           ),
         }}
       />
@@ -86,8 +114,8 @@ export default function TabsLayout() {
         name="discover"
         options={{
           title: 'Discover',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={26} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} active="search" inactive="search-outline" />
           ),
         }}
       />
@@ -95,8 +123,8 @@ export default function TabsLayout() {
         name="tickets"
         options={{
           title: 'Tickets',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'ticket' : 'ticket-outline'} size={26} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} active="ticket" inactive="ticket-outline" />
           ),
         }}
       />
@@ -104,11 +132,23 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} active="person" inactive="person-outline" />
           ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  barTint: { backgroundColor: 'rgba(12, 12, 14, 0.55)' },
+  iconPill: {
+    minWidth: 62,
+    height: 44,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconPillActive: { backgroundColor: '#FFFFFF' },
+});

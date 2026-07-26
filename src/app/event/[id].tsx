@@ -2,25 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Dimensions, ScrollView, Share, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Dimensions, ScrollView, Share, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
 import { TicketSheet } from '@/components/event/ticket-sheet';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
-import { Glass } from '@/components/ui/glass';
 import { Touchable } from '@/components/ui/pressable';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateTime } from '@/lib/date';
-import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
+import { formatLongDate } from '@/lib/date';
+import { eventCoverUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
 import { availableCurrencies, isSoldOut } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
@@ -31,6 +29,52 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 /** Preview lines before the description clamps behind "Read more". */
 const DESC_PREVIEW_LINES = 4;
 
+const GLOW = 'rgba(0,0,0,0.55)';
+
+/**
+ * Soft dark vignette bleeding in from every screen edge — frames the photo
+ * and pulls the eye inward. Sits above the scrim gradient.
+ */
+function EdgeGlow() {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <LinearGradient colors={[GLOW, 'transparent']} style={styles.glowTop} />
+      <LinearGradient colors={['transparent', GLOW]} style={styles.glowBottom} />
+      <LinearGradient
+        colors={[GLOW, 'transparent']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.glowLeft}
+      />
+      <LinearGradient
+        colors={['transparent', GLOW]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.glowRight}
+      />
+    </View>
+  );
+}
+
+function ExpandToggle({
+  label,
+  icon,
+  onPress,
+}: {
+  label: string;
+  icon: 'chevron-down' | 'chevron-up';
+  onPress: () => void;
+}) {
+  return (
+    <Touchable accessibilityRole="button" onPress={onPress} style={styles.readMore}>
+      <Text variant="small" style={styles.readMoreText}>
+        {label}
+      </Text>
+      <Ionicons name={icon} size={13} color="#FFFFFF" />
+    </Touchable>
+  );
+}
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -38,11 +82,16 @@ export default function EventDetailScreen() {
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
 
+  const scrollRef = useRef<ScrollView>(null);
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
   const [currency, setCurrency] = useState<Currency | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [sheetVisible, setSheetVisible] = useState(false);
+  // UI-only for now — there is no favorites endpoint yet, so the heart does
+  // not survive leaving the screen.
+  const [saved, setSaved] = useState(false);
+  const [coverReady, setCoverReady] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   // Full (unclamped) line count, measured by an invisible twin of the
   // description — `onTextLayout` on a clamped Text only reports the visible
@@ -68,27 +117,14 @@ export default function EventDetailScreen() {
   const cover = eventCoverUrl(event?.coverImages);
   const organizer = event ? organizerDisplayName(event) : null;
 
-  const gallery = (event?.eventImages ?? [])
-    .map((img) => resolveImageUrl(img.url))
-    .filter((uri): uri is string => Boolean(uri));
-
-  const venue = [event?.location?.address, event?.location?.city, event?.location?.country]
+  const venue = [event?.location?.address, event?.location?.city]
     .filter(Boolean)
     .join(', ');
 
-  // Date leads — it's the fact people decide on — with the age gate riding
-  // along so restrictions are seen before anyone reaches the buy button.
-  const eyebrow = event
-    ? [
-        formatDateTime(event.startDate, event.startTime),
-        event.ageRestriction?.hasRestriction && event.ageRestriction.minAge
-          ? `${event.ageRestriction.minAge}+`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-        .toUpperCase()
-    : null;
+  // Nothing shows until data AND artwork are in — a spinner on plain
+  // background, then the whole composition lands in one frame instead of
+  // glow-then-photo-then-text.
+  const ready = !isLoading && Boolean(event) && (!cover || coverReady);
 
   if (isError) {
     return (
@@ -111,30 +147,37 @@ export default function EventDetailScreen() {
             source={{ uri: cover }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
-            transition={220}
+            // No fade of its own — the loading overlay owns the reveal, so the
+            // photo, scrims, and glow all land in the same frame.
+            transition={0}
+            priority="high"
             cachePolicy="memory-disk"
+            onLoad={() => setCoverReady(true)}
+            // A broken URL must not strand the spinner; reveal the fallback.
+            onError={() => setCoverReady(true)}
           />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
         )}
-        {/*
-          Content is anchored to the bottom of the screen below (not wherever
-          it happens to end), so the darkest part of this gradient needs to
-          cover that whole region — otherwise short content (no gallery, a
-          one-line description) leaves a stretch of undimmed photo with
-          nothing on it, which reads as broken rather than spacious.
-        */}
-        {/* The upper stops set the contrast floor for near-white covers: the
-            photo's top can afford some dimming, small white text can't afford
-            a white background. */}
+        {/* Text now lives at both ends of the screen, so the scrim is darkest
+            top and bottom and eases off across the middle where the photo
+            should breathe. The dark ends double as the contrast floor for
+            near-white covers. */}
         <LinearGradient
-          colors={['rgba(2,2,3,0.45)', 'rgba(2,2,3,0.55)', 'rgba(2,2,3,0.82)', 'rgba(2,2,3,0.97)']}
-          locations={[0, 0.28, 0.5, 1]}
+          colors={[
+            'rgba(2,2,3,0.80)',
+            'rgba(2,2,3,0.38)',
+            'rgba(2,2,3,0.30)',
+            'rgba(2,2,3,0.60)',
+            'rgba(2,2,3,0.96)',
+          ]}
+          locations={[0, 0.3, 0.45, 0.64, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        {/* Reading mode — an expanded description climbs into the brightest
-            part of the photo, so the wallpaper recedes while it's open. */}
+        <EdgeGlow />
+        {/* Reading mode — an expanded description needs quiet behind it, so
+            the wallpaper recedes while it's open. */}
         {descExpanded ? (
           <Animated.View
             entering={FadeIn.duration(180)}
@@ -144,31 +187,29 @@ export default function EventDetailScreen() {
         ) : null}
       </View>
 
-      {/* Floating chrome — text sits directly on the photo below, so these stay
-          understated (no border, light blur) rather than reading as UI chrome. */}
+      {/* Chrome — plain icons, no glass circles: the darkened scrim ends give
+          them contrast, and the reference look is unboxed. */}
       <View style={[styles.chrome, { top: insets.top + Spacing.sm }]}>
-        <Glass
-          variant="clear"
-          intensity={20}
-          bordered={false}
-          radius={Radius.pill}
-          style={styles.chromeButton}>
+        <Touchable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={goBack}
+          pressedScale={0.85}
+          style={styles.chromeHit}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </Touchable>
+
+        <View style={styles.chromeRight}>
           <Touchable
             accessibilityRole="button"
-            accessibilityLabel="Go back"
-            onPress={goBack}
-            pressedScale={0.9}
+            accessibilityLabel={saved ? 'Remove from saved' : 'Save event'}
+            accessibilityState={{ selected: saved }}
+            haptic
+            onPress={() => setSaved((value) => !value)}
+            pressedScale={0.85}
             style={styles.chromeHit}>
-            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+            <Ionicons name={saved ? 'heart' : 'heart-outline'} size={23} color="#FFFFFF" />
           </Touchable>
-        </Glass>
-
-        <Glass
-          variant="clear"
-          intensity={20}
-          bordered={false}
-          radius={Radius.pill}
-          style={styles.chromeButton}>
           <Touchable
             accessibilityRole="button"
             accessibilityLabel="Share this event"
@@ -179,66 +220,78 @@ export default function EventDetailScreen() {
                 });
               }
             }}
-            pressedScale={0.9}
+            pressedScale={0.85}
             style={styles.chromeHit}>
-            <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
           </Touchable>
-        </Glass>
+        </View>
       </View>
 
       <ScrollView
+        ref={scrollRef}
+        // Collapsed, everything fits one screen like a poster — scrolling only
+        // unlocks when "Read more" opens the full description.
+        scrollEnabled={descExpanded}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + Spacing.xxl,
+            paddingTop: insets.top + 56,
             paddingBottom: insets.bottom + 120,
             minHeight: SCREEN_HEIGHT,
           },
         ]}>
-        {isLoading ? (
-          <View style={styles.loadingBlock}>
-            <Skeleton width="40%" height={12} />
-            <Skeleton width="85%" height={30} />
-            <Skeleton width="55%" height={14} />
-          </View>
-        ) : event ? (
+        {event ? (
           <>
-            {/* Identity block — when, what, where. One left rail; the type
-                scale alone carries the hierarchy, no cards or icons. */}
-            <View style={styles.headerBlock}>
-              {eyebrow ? (
-                <Text variant="label" style={styles.eyebrow}>
-                  {eyebrow}
-                </Text>
-              ) : null}
-              <Text variant="display" style={styles.title}>
+            {/* Identity — centered at the top like a poster masthead. */}
+            <View style={styles.topBlock}>
+              <Text variant="heading" role="heading" style={styles.title}>
                 {event.title}
               </Text>
-              {venue ? (
-                <View style={styles.venueRow}>
-                  <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.65)" />
-                  <Text variant="small" style={styles.venue}>
-                    {venue}
+              <View style={styles.factsRow}>
+                {formatLongDate(event.startDate) ? (
+                  <View style={styles.fact}>
+                    <Ionicons name="calendar-clear-outline" size={13} color="#FFFFFF" />
+                    <Text variant="small" style={styles.factText}>
+                      {formatLongDate(event.startDate)}
+                    </Text>
+                  </View>
+                ) : null}
+                {venue ? (
+                  <View style={styles.fact}>
+                    <Ionicons name="location-outline" size={14} color="#FFFFFF" />
+                    <Text variant="small" style={styles.factText} numberOfLines={1}>
+                      {venue}
+                    </Text>
+                  </View>
+                ) : null}
+                {event.ageRestriction?.hasRestriction && event.ageRestriction.minAge ? (
+                  <View style={styles.fact}>
+                    <Text variant="small" style={styles.factText}>
+                      {event.ageRestriction.minAge}+
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Narrative — host, story, tags, stacked over the bottom scrim. */}
+            <View style={styles.bottomBlock}>
+              {organizer ? (
+                <View style={styles.hostBlock}>
+                  <View style={styles.hostAvatar}>
+                    <Text variant="callout" style={styles.hostInitial}>
+                      {organizer.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text variant="callout" style={styles.hostedBy}>
+                    Hosted by {organizer}
                   </Text>
                 </View>
               ) : null}
-            </View>
-
-            {/* A short rule, not a full-width divider — it marks the seam
-                between identity above and narrative below without slicing
-                the composition in half. */}
-            <View style={styles.rule} />
-
-            <View style={styles.bodyBlock}>
-              {organizer ? (
-                <Text variant="callout" style={styles.hostedBy}>
-                  Hosted by {organizer}
-                </Text>
-              ) : null}
 
               {event.description ? (
-                <View>
+                <View style={styles.descriptionBlock}>
                   {/* Invisible twin — measures the full line count so "Read
                       more" only appears when something is actually cut off. */}
                   <Text
@@ -254,24 +307,14 @@ export default function EventDetailScreen() {
                     numberOfLines={descExpanded ? undefined : DESC_PREVIEW_LINES}>
                     {event.description}
                   </Text>
-                  {descOverflows ? (
-                    <Touchable
-                      accessibilityRole="button"
-                      onPress={() => setDescExpanded((value) => !value)}
-                      style={styles.readMore}>
-                      <Text variant="small" style={styles.readMoreText}>
-                        {descExpanded ? 'Show less' : 'Read more'}
-                      </Text>
-                      <Ionicons
-                        name={descExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={14}
-                        color="#FFFFFF"
-                      />
-                    </Touchable>
+                  {descOverflows && !descExpanded ? (
+                    <ExpandToggle label="Read more" icon="chevron-down" onPress={() => setDescExpanded(true)} />
                   ) : null}
                 </View>
               ) : null}
 
+              {/* Tags trail the toggle when collapsed and precede it when
+                  expanded, so they stay visible in both states. */}
               {event.tags?.length ? (
                 <View style={styles.tagRow}>
                   {event.tags.map((tag) => (
@@ -279,31 +322,20 @@ export default function EventDetailScreen() {
                   ))}
                 </View>
               ) : null}
-            </View>
 
-            {gallery.length ? (
-              <View style={styles.gallerySection}>
-                <Text variant="label" style={styles.galleryTitle}>
-                  GALLERY
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.galleryRow}>
-                  {gallery.map((uri, index) => (
-                    <View key={uri + index} style={styles.galleryThumbWrap}>
-                      <Image
-                        source={{ uri }}
-                        style={styles.galleryThumb}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={150}
-                      />
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
+              {event.description && descOverflows && descExpanded ? (
+                <ExpandToggle
+                  label="Show less"
+                  icon="chevron-up"
+                  onPress={() => {
+                    setDescExpanded(false);
+                    // Snap (not glide) back to the top so collapsing restores
+                    // the exact poster layout in one frame.
+                    scrollRef.current?.scrollTo({ y: 0, animated: false });
+                  }}
+                />
+              ) : null}
+            </View>
           </>
         ) : null}
       </ScrollView>
@@ -313,11 +345,7 @@ export default function EventDetailScreen() {
       {event && tiers.length > 0 ? (
         <View style={[styles.buyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
           <Button
-            label={
-              soldOut
-                ? 'Sold out'
-                : `Buy Now `
-            }
+            label={soldOut ? 'Sold out' : 'Buy Now'}
             disabled={soldOut}
             size="lg"
             style={styles.buyButton}
@@ -349,6 +377,16 @@ export default function EventDetailScreen() {
           }}
         />
       ) : null}
+
+      {/* Sits under the chrome (zIndex) so Back stays reachable on a slow
+          connection, but over everything else until the reveal. */}
+      {!ready ? (
+        <Animated.View
+          exiting={FadeOut.duration(220)}
+          style={[styles.loadingOverlay, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -363,58 +401,78 @@ const styles = StyleSheet.create({
     zIndex: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  // The faint dark fill keeps back/share visible on near-white covers, where
-  // blur alone would render white glass on a white sky.
-  chromeButton: { width: 36, height: 36, backgroundColor: 'rgba(10,10,12,0.35)' },
-  chromeHit: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  chromeRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  chromeHit: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  glowTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 130 },
+  glowBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 130 },
+  glowLeft: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 48 },
+  glowRight: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 48 },
+  readingScrim: { backgroundColor: 'rgba(2,2,3,0.55)' },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
+    justifyContent: 'space-between',
     gap: Spacing.xl,
-    justifyContent: 'flex-end',
   },
-  loadingBlock: { gap: Spacing.md },
-  headerBlock: { gap: Spacing.sm },
-  eyebrow: { color: 'rgba(255,255,255,0.72)', letterSpacing: 1.4 },
-  title: { color: '#FFFFFF' },
-  venueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  venue: { color: 'rgba(255,255,255,0.65)', flexShrink: 1 },
-  rule: {
-    width: 32,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  bodyBlock: { gap: Spacing.sm },
+  topBlock: { alignItems: 'center', gap: Spacing.md },
+  title: { color: '#FFFFFF', textAlign: 'center' },
+  factsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    columnGap: Spacing.lg,
+    rowGap: Spacing.xs,
+  },
+  fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexShrink: 1 },
+  factText: { color: 'rgba(255,255,255,0.9)', flexShrink: 1 },
+  bottomBlock: { alignItems: 'center', gap: Spacing.lg },
+  hostBlock: { alignItems: 'center', gap: Spacing.sm },
+  hostAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+  },
+  hostInitial: { color: '#FFFFFF' },
   hostedBy: { color: '#FFFFFF' },
-  description: { lineHeight: 23, color: 'rgba(255,255,255,0.78)' },
+  descriptionBlock: { alignItems: 'center', alignSelf: 'stretch', gap: Spacing.xs },
+  description: { textAlign: 'center', lineHeight: 22, color: 'rgba(255,255,255,0.82)' },
   descriptionMeasure: { position: 'absolute', left: 0, right: 0, opacity: 0 },
-  readingScrim: { backgroundColor: 'rgba(2,2,3,0.55)' },
   readMore: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    marginTop: Spacing.xs,
   },
-  readMoreText: { color: '#FFFFFF', fontWeight: '600' },
+  readMoreText: { color: '#FFFFFF', fontFamily: FontFamily.semibold },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: Spacing.xs,
-    marginTop: Spacing.xs,
   },
-  gallerySection: { gap: Spacing.md },
-  galleryTitle: { color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4 },
-  galleryRow: { gap: Spacing.sm },
-  galleryThumbWrap: {
-    width: 140,
-    height: 100,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  galleryThumb: { width: '100%', height: '100%' },
   buyBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.lg },
   buyButton: { width: '100%' },
 });

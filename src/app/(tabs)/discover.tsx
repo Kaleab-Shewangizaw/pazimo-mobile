@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { EventCard } from '@/components/event/event-card';
 import { Glass } from '@/components/ui/glass';
 import { Touchable } from '@/components/ui/pressable';
@@ -59,7 +60,8 @@ export default function DiscoverScreen() {
   }, []);
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <View style={styles.screen}>
+      <AmbientBackground />
       <Glass
         variant="regular"
         intensity={60}

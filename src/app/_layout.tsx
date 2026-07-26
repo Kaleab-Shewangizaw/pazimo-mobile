@@ -1,5 +1,12 @@
 import '@/global.css';
 
+import {
+  Quicksand_400Regular,
+  Quicksand_500Medium,
+  Quicksand_600SemiBold,
+  Quicksand_700Bold,
+  useFonts,
+} from '@expo-google-fonts/quicksand';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -31,11 +38,24 @@ const navigationTheme = {
 };
 
 export default function RootLayout() {
+  // `fontError` releases the gate too — a failed download falls back to the
+  // system font rather than trapping the app on the splash screen.
+  const [fontsLoaded, fontError] = useFonts({
+    Quicksand_400Regular,
+    Quicksand_500Medium,
+    Quicksand_600SemiBold,
+    Quicksand_700Bold,
+  });
+  const fontsReady = fontsLoaded || fontError != null;
+
   useEffect(() => {
+    if (!fontsReady) return;
     // Rehydrate the session before the first screen paints, so an authenticated
     // user never sees a signed-out flash.
     loadAuthToken().finally(() => SplashScreen.hideAsync());
-  }, []);
+  }, [fontsReady]);
+
+  if (!fontsReady) return null;
 
   return (
     <GestureHandlerRootView style={rootStyle}>

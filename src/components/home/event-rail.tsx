@@ -28,11 +28,12 @@ function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: 
     return (
       <View style={styles.skeletonRow}>
         {[0, 1].map((i) => (
-          <View key={i} style={styles.skeletonCard}>
-            <Skeleton width={CARD_WIDTH} height={CARD_WIDTH / AspectRatio.card} radius={Radius.lg} />
-            <Skeleton width={CARD_WIDTH * 0.8} height={14} />
-            <Skeleton width={CARD_WIDTH * 0.5} height={12} />
-          </View>
+          <Skeleton
+            key={i}
+            width={CARD_WIDTH}
+            height={CARD_WIDTH / AspectRatio.banner}
+            radius={Radius.lg}
+          />
         ))}
       </View>
     );
@@ -62,7 +63,6 @@ function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: GAP },
   skeletonRow: { flexDirection: 'row', gap: GAP, paddingHorizontal: Spacing.lg },
-  skeletonCard: { gap: Spacing.sm },
 });
 
 export const EventRail = memo(EventRailImpl);

@@ -17,7 +17,7 @@ import { Chip } from '@/components/ui/chip';
 import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
-import { AspectRatio, Fonts, Radius, Spacing } from '@/constants/theme';
+import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeDayLabel } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
@@ -195,9 +195,7 @@ const styles = StyleSheet.create({
   },
   chipRow: { flexDirection: 'row', gap: Spacing.xs },
   title: {
-    fontFamily: Fonts.serif,
-    fontStyle: 'italic',
-    fontWeight: '700',
+    fontFamily: FontFamily.bold,
     fontSize: 28,
     lineHeight: 32,
     color: '#FFFFFF',
@@ -219,7 +217,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  avatarInitial: { fontWeight: '700' },
+  avatarInitial: { fontFamily: FontFamily.bold },
   organizerName: { color: 'rgba(255,255,255,0.88)', flexShrink: 1 },
   arrowButton: {
     width: 34,

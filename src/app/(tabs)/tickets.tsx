@@ -1,11 +1,11 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { EmptyState } from '@/components/ui/state-views';
 import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 /**
  * Placeholder until the checkout phase lands. The data path is already known:
@@ -15,11 +15,11 @@ import { useTheme } from '@/hooks/use-theme';
  * because nothing in the backend ever writes the `used` or `expired` statuses.
  */
 export default function TicketsScreen() {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <View style={styles.screen}>
+      <AmbientBackground />
       <GlassHeader title="Tickets" />
       <ScrollView
         contentContainerStyle={{

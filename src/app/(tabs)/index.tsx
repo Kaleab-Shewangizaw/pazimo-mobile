@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
 import { EventCard } from '@/components/event/event-card';
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { BannerCarousel } from '@/components/home/banner-carousel';
 import { CategoryRail } from '@/components/home/category-rail';
 import { EventRail } from '@/components/home/event-rail';
@@ -113,11 +114,7 @@ export default function HomeScreen() {
   const empty = feed.isLoading ? (
     <View style={styles.skeletonList}>
       {[0, 1, 2].map((i) => (
-        <View key={i} style={styles.skeletonCard}>
-          <Skeleton height={180} radius={Radius.lg} />
-          <Skeleton width="70%" height={16} />
-          <Skeleton width="45%" height={12} />
-        </View>
+        <Skeleton key={i} height={240} radius={Radius.lg} />
       ))}
     </View>
   ) : feed.isError ? (
@@ -128,7 +125,8 @@ export default function HomeScreen() {
   ) : null;
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <View style={styles.screen}>
+      <AmbientBackground />
       <GlassHeader
         title="Pazimo"
         showLogo
@@ -189,6 +187,5 @@ const styles = StyleSheet.create({
   section: { gap: 0 },
   feedItem: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
   footer: { paddingVertical: Spacing.xl },
-  skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.xl },
-  skeletonCard: { gap: Spacing.sm },
+  skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
 });

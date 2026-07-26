@@ -1,22 +1,22 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { EmptyState } from '@/components/ui/state-views';
 import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 /**
  * Placeholder until the auth phase lands. Pazimo is guest-first — this screen
  * must never gate browsing or checkout behind a sign-in.
  */
 export default function ProfileScreen() {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+    <View style={styles.screen}>
+      <AmbientBackground />
       <GlassHeader title="Profile" />
       <ScrollView
         contentContainerStyle={{
