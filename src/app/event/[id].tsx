@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Dimensions, ScrollView, Share, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
@@ -27,6 +28,9 @@ import type { Currency } from '@/types/api';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
+/** Preview lines before the description clamps behind "Read more". */
+const DESC_PREVIEW_LINES = 4;
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
@@ -37,7 +41,20 @@ export default function EventDetailScreen() {
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
   const [currency, setCurrency] = useState<Currency | null>(null);
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+  // Full (unclamped) line count, measured by an invisible twin of the
+  // description — `onTextLayout` on a clamped Text only reports the visible
+  // lines, so it can't tell us whether anything was cut off.
+  const [descLines, setDescLines] = useState<number | null>(null);
+  // Until the measurement lands (react-native-web never fires onTextLayout),
+  // fall back to a length heuristic: ~45 chars/line at body size, 4 lines.
+  const description = event?.description ?? '';
+  const descOverflows =
+    descLines !== null
+      ? descLines > DESC_PREVIEW_LINES
+      : description.length > 180 || (description.match(/\n/g)?.length ?? 0) >= DESC_PREVIEW_LINES;
 
   const currencies = useMemo(
     () => (event ? availableCurrencies(event) : (['ETB'] as Currency[])),
@@ -107,12 +124,24 @@ export default function EventDetailScreen() {
           one-line description) leaves a stretch of undimmed photo with
           nothing on it, which reads as broken rather than spacious.
         */}
+        {/* The upper stops set the contrast floor for near-white covers: the
+            photo's top can afford some dimming, small white text can't afford
+            a white background. */}
         <LinearGradient
-          colors={['rgba(2,2,3,0.30)', 'rgba(2,2,3,0.42)', 'rgba(2,2,3,0.80)', 'rgba(2,2,3,0.97)']}
+          colors={['rgba(2,2,3,0.45)', 'rgba(2,2,3,0.55)', 'rgba(2,2,3,0.82)', 'rgba(2,2,3,0.97)']}
           locations={[0, 0.28, 0.5, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        {/* Reading mode — an expanded description climbs into the brightest
+            part of the photo, so the wallpaper recedes while it's open. */}
+        {descExpanded ? (
+          <Animated.View
+            entering={FadeIn.duration(180)}
+            style={[StyleSheet.absoluteFill, styles.readingScrim]}
+            pointerEvents="none"
+          />
+        ) : null}
       </View>
 
       {/* Floating chrome — text sits directly on the photo below, so these stay
@@ -209,9 +238,38 @@ export default function EventDetailScreen() {
               ) : null}
 
               {event.description ? (
-                <Text variant="body" style={styles.description}>
-                  {event.description}
-                </Text>
+                <View>
+                  {/* Invisible twin — measures the full line count so "Read
+                      more" only appears when something is actually cut off. */}
+                  <Text
+                    variant="body"
+                    style={[styles.description, styles.descriptionMeasure]}
+                    aria-hidden
+                    onTextLayout={(e) => setDescLines(e.nativeEvent.lines.length)}>
+                    {event.description}
+                  </Text>
+                  <Text
+                    variant="body"
+                    style={styles.description}
+                    numberOfLines={descExpanded ? undefined : DESC_PREVIEW_LINES}>
+                    {event.description}
+                  </Text>
+                  {descOverflows ? (
+                    <Touchable
+                      accessibilityRole="button"
+                      onPress={() => setDescExpanded((value) => !value)}
+                      style={styles.readMore}>
+                      <Text variant="small" style={styles.readMoreText}>
+                        {descExpanded ? 'Show less' : 'Read more'}
+                      </Text>
+                      <Ionicons
+                        name={descExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color="#FFFFFF"
+                      />
+                    </Touchable>
+                  ) : null}
+                </View>
               ) : null}
 
               {event.tags?.length ? (
@@ -277,10 +335,17 @@ export default function EventDetailScreen() {
           currencies={currencies}
           onChangeCurrency={setCurrency}
           selectedTierId={selectedTierId}
-          onSelectTier={setSelectedTierId}
+          onSelectTier={(tierId) => {
+            setSelectedTierId(tierId);
+            setQuantity(1);
+          }}
+          quantity={quantity}
+          onChangeQuantity={setQuantity}
           onContinue={() => {
             setSheetVisible(false);
-            router.push(`/checkout/${event._id}?tier=${selectedTierId}&currency=${activeCurrency}`);
+            router.push(
+              `/checkout/${event._id}?tier=${selectedTierId}&currency=${activeCurrency}&qty=${quantity}`,
+            );
           }}
         />
       ) : null}
@@ -299,7 +364,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  chromeButton: { width: 36, height: 36 },
+  // The faint dark fill keeps back/share visible on near-white covers, where
+  // blur alone would render white glass on a white sky.
+  chromeButton: { width: 36, height: 36, backgroundColor: 'rgba(10,10,12,0.35)' },
   chromeHit: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
@@ -320,6 +387,16 @@ const styles = StyleSheet.create({
   bodyBlock: { gap: Spacing.sm },
   hostedBy: { color: '#FFFFFF' },
   description: { lineHeight: 23, color: 'rgba(255,255,255,0.78)' },
+  descriptionMeasure: { position: 'absolute', left: 0, right: 0, opacity: 0 },
+  readingScrim: { backgroundColor: 'rgba(2,2,3,0.55)' },
+  readMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+  },
+  readMoreText: { color: '#FFFFFF', fontWeight: '600' },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

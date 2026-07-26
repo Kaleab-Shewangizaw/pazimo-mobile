@@ -19,6 +19,8 @@ export function TicketSheet({
   onChangeCurrency,
   selectedTierId,
   onSelectTier,
+  quantity,
+  onChangeQuantity,
   onContinue,
 }: {
   visible: boolean;
@@ -29,10 +31,13 @@ export function TicketSheet({
   onChangeCurrency: (currency: Currency) => void;
   selectedTierId: string | null;
   onSelectTier: (id: string) => void;
+  quantity: number;
+  onChangeQuantity: (quantity: number) => void;
   onContinue: () => void;
 }) {
   const theme = useTheme();
   const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
+  const total = selectedTier ? tierUnitPrice(selectedTier, currency) * quantity : 0;
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
@@ -78,6 +83,8 @@ export function TicketSheet({
             tier={tier}
             currency={currency}
             selected={tier._id === selectedTierId}
+            quantity={quantity}
+            onChangeQuantity={onChangeQuantity}
             onSelect={() => onSelectTier(tier._id)}
           />
         ))}
@@ -85,9 +92,7 @@ export function TicketSheet({
 
       <Button
         label={
-          selectedTier
-            ? `Continue — ${formatPrice(tierUnitPrice(selectedTier, currency), currency)}`
-            : 'Select a ticket'
+          selectedTier ? `Continue - ${formatPrice(total, currency)}` : 'Select a ticket'
         }
         disabled={!selectedTier}
         size="lg"
@@ -101,11 +106,15 @@ function TierRow({
   tier,
   currency,
   selected,
+  quantity,
+  onChangeQuantity,
   onSelect,
 }: {
   tier: TicketTier;
   currency: Currency;
   selected: boolean;
+  quantity: number;
+  onChangeQuantity: (quantity: number) => void;
   onSelect: () => void;
 }) {
   const theme = useTheme();
@@ -120,46 +129,103 @@ function TierRow({
       disabled={!buyable}
       onPress={onSelect}
       haptic
+      pressedScale={0.98}
       style={[
         styles.tier,
         {
-          backgroundColor: theme.surface,
-          borderColor: selected ? theme.brand : theme.hairline,
+          backgroundColor: selected ? theme.brandTint : theme.surface,
+          borderColor: selected ? 'rgba(255,255,255,0.85)' : theme.hairline,
           borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
           opacity: buyable ? 1 : 0.55,
         },
       ]}>
-      <View style={styles.tierMain}>
-        <Text variant="callout" numberOfLines={1}>
-          {tier.name}
-        </Text>
-        {tier.description ? (
-          <Text variant="caption" color="textMuted" numberOfLines={2}>
-            {tier.description}
+      <View style={styles.tierTop}>
+        <View style={styles.tierMain}>
+          <Text variant="callout" numberOfLines={1}>
+            {tier.name}
           </Text>
-        ) : null}
-        {!buyable ? (
-          <Text variant="caption" color="danger">
-            Unavailable
-          </Text>
-        ) : scarce ? (
-          <Text variant="caption" color="warning">
-            Only {tier.quantity} left
-          </Text>
-        ) : null}
+          {tier.description ? (
+            <Text variant="caption" color="textMuted" numberOfLines={2}>
+              {tier.description}
+            </Text>
+          ) : null}
+          {!buyable ? (
+            <Text variant="caption" color="danger">
+              Unavailable
+            </Text>
+          ) : scarce ? (
+            <Text variant="caption" color="warning">
+              Only {tier.quantity} left
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.tierRight}>
+          <Text variant="callout">{formatPrice(tierUnitPrice(tier, currency), currency)}</Text>
+          <Ionicons
+            name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+            size={22}
+            color={selected ? theme.brand : theme.textMuted}
+          />
+        </View>
       </View>
 
-      <View style={styles.tierRight}>
-        <Text variant="callout" color="brand">
-          {formatPrice(tierUnitPrice(tier, currency), currency)}
-        </Text>
-        <Ionicons
-          name={selected ? 'radio-button-on' : 'radio-button-off'}
-          size={20}
-          color={selected ? theme.brand : theme.textMuted}
-        />
-      </View>
+      {/* The stepper lives inside the selected card — choosing a tier and
+          choosing how many are one decision, not two screens. */}
+      {selected && buyable ? (
+        <View style={[styles.qtyRow, { borderTopColor: theme.hairline }]}>
+          <Text variant="small" color="textSecondary">
+            Tickets
+          </Text>
+          <Stepper value={quantity} max={tier.quantity} onChange={onChangeQuantity} />
+        </View>
+      ) : null}
     </Touchable>
+  );
+}
+
+function Stepper({
+  value,
+  max,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  const canDecrement = value > 1;
+  const canIncrement = value < max;
+
+  return (
+    <View style={styles.stepper}>
+      <Touchable
+        accessibilityRole="button"
+        accessibilityLabel="Remove one ticket"
+        disabled={!canDecrement}
+        onPress={() => onChange(value - 1)}
+        haptic
+        pressedScale={0.88}
+        style={[styles.stepButton, !canDecrement && styles.stepButtonDisabled]}>
+        <Ionicons name="remove" size={16} color="#FFFFFF" />
+      </Touchable>
+      <Text
+        variant="callout"
+        style={styles.stepValue}
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={`${value} tickets`}>
+        {value}
+      </Text>
+      <Touchable
+        accessibilityRole="button"
+        accessibilityLabel="Add one ticket"
+        disabled={!canIncrement}
+        onPress={() => onChange(value + 1)}
+        haptic
+        pressedScale={0.88}
+        style={[styles.stepButton, !canIncrement && styles.stepButtonDisabled]}>
+        <Ionicons name="add" size={16} color="#FFFFFF" />
+      </Touchable>
+    </View>
   );
 }
 
@@ -192,12 +258,35 @@ const styles = StyleSheet.create({
   },
   tierList: { gap: Spacing.md, marginBottom: Spacing.lg },
   tier: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
     padding: Spacing.md,
     borderRadius: Radius.lg,
   },
+  tierTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
   tierMain: { flex: 1, gap: 2 },
   tierRight: { alignItems: 'flex-end', gap: Spacing.xs },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
+  stepButton: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  stepButtonDisabled: { opacity: 0.35 },
+  stepValue: { minWidth: 22, textAlign: 'center', fontVariant: ['tabular-nums'] },
 });

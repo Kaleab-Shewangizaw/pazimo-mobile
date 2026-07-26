@@ -34,10 +34,11 @@ import type { Currency } from '@/types/api';
  *  - A guest response carries `token` + `user`; persist them to sign the buyer in.
  */
 export default function CheckoutScreen() {
-  const { eventId, tier, currency } = useLocalSearchParams<{
+  const { eventId, tier, currency, qty } = useLocalSearchParams<{
     eventId: string;
     tier?: string;
     currency?: Currency;
+    qty?: string;
   }>();
   const theme = useTheme();
   const goBack = useGoBack();
@@ -46,6 +47,8 @@ export default function CheckoutScreen() {
   const { data: event } = useEvent(eventId);
   const selected = event?.ticketTypes.find((t) => t._id === tier);
   const code: Currency = currency ?? 'ETB';
+  // The param is user-editable in a deep link; clamp to something orderable.
+  const count = Math.min(Math.max(Math.trunc(Number(qty)) || 1, 1), selected?.quantity ?? 99);
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -70,10 +73,10 @@ export default function CheckoutScreen() {
             <Text variant="callout">{event.title}</Text>
             <View style={styles.summaryRow}>
               <Text variant="small" color="textSecondary">
-                {selected.name}
+                {count > 1 ? `${count} × ${selected.name}` : selected.name}
               </Text>
               <Text variant="callout" color="brand">
-                {formatPrice(tierUnitPrice(selected, code), code)}
+                {formatPrice(tierUnitPrice(selected, code) * count, code)}
               </Text>
             </View>
           </Surface>
