@@ -21,7 +21,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
-import { availableCurrencies, formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
+import { availableCurrencies, isSoldOut } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
 import type { Currency } from '@/types/api';
 
@@ -58,6 +58,20 @@ export default function EventDetailScreen() {
   const venue = [event?.location?.address, event?.location?.city, event?.location?.country]
     .filter(Boolean)
     .join(', ');
+
+  // Date leads — it's the fact people decide on — with the age gate riding
+  // along so restrictions are seen before anyone reaches the buy button.
+  const eyebrow = event
+    ? [
+        formatDateTime(event.startDate, event.startTime),
+        event.ageRestriction?.hasRestriction && event.ageRestriction.minAge
+          ? `${event.ageRestriction.minAge}+`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+        .toUpperCase()
+    : null;
 
   if (isError) {
     return (
@@ -155,34 +169,39 @@ export default function EventDetailScreen() {
         ]}>
         {isLoading ? (
           <View style={styles.loadingBlock}>
-            <Skeleton width="85%" height={26} />
+            <Skeleton width="40%" height={12} />
+            <Skeleton width="85%" height={30} />
             <Skeleton width="55%" height={14} />
-            <Skeleton width="70%" height={14} />
           </View>
         ) : event ? (
           <>
-            {/* Header — left-aligned, directly on the gradient, no card. */}
+            {/* Identity block — when, what, where. One left rail; the type
+                scale alone carries the hierarchy, no cards or icons. */}
             <View style={styles.headerBlock}>
-              <Text variant="heading" style={styles.title}>
+              {eyebrow ? (
+                <Text variant="label" style={styles.eyebrow}>
+                  {eyebrow}
+                </Text>
+              ) : null}
+              <Text variant="display" style={styles.title}>
                 {event.title}
               </Text>
-              <View style={styles.factsRow}>
-                <Fact
-                  icon="calendar-outline"
-                  label={formatDateTime(event.startDate, event.startTime)}
-                />
-                {venue ? <Fact icon="location-outline" label={venue} /> : null}
-                {event.ageRestriction?.hasRestriction && event.ageRestriction.minAge ? (
-                  <Fact
-                    icon="alert-circle-outline"
-                    label={`${event.ageRestriction.minAge}+ only`}
-                  />
-                ) : null}
-              </View>
+              {venue ? (
+                <View style={styles.venueRow}>
+                  <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.65)" />
+                  <Text variant="small" style={styles.venue}>
+                    {venue}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
-            {/* Body — centered, matching the invite-card rhythm below the header. */}
-            <View style={styles.centerBlock}>
+            {/* A short rule, not a full-width divider — it marks the seam
+                between identity above and narrative below without slicing
+                the composition in half. */}
+            <View style={styles.rule} />
+
+            <View style={styles.bodyBlock}>
               {organizer ? (
                 <Text variant="callout" style={styles.hostedBy}>
                   Hosted by {organizer}
@@ -206,8 +225,8 @@ export default function EventDetailScreen() {
 
             {gallery.length ? (
               <View style={styles.gallerySection}>
-                <Text variant="title" style={styles.galleryTitle}>
-                  Gallery
+                <Text variant="label" style={styles.galleryTitle}>
+                  GALLERY
                 </Text>
                 <ScrollView
                   horizontal
@@ -231,16 +250,15 @@ export default function EventDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {/* A single floating pill, matching the reference exactly — no bar or
-          separate price readout behind it, since the gradient already carries
-          contrast down here. */}
+      {/* The only solid-white element on the screen — everything above is
+          transparent or dimmed, so the action reads instantly. */}
       {event && tiers.length > 0 ? (
         <View style={[styles.buyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
           <Button
             label={
               soldOut
                 ? 'Sold out'
-                : `Get Ticket — ${formatPrice(lowestPrice(event, activeCurrency) ?? 0, activeCurrency)}`
+                : `Buy Now `
             }
             disabled={soldOut}
             size="lg"
@@ -270,17 +288,6 @@ export default function EventDetailScreen() {
   );
 }
 
-function Fact({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
-  return (
-    <View style={styles.fact}>
-      <Ionicons name={icon} size={15} color="#FFFFFF" />
-      <Text variant="small" style={styles.factText} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { justifyContent: 'center' },
@@ -301,23 +308,27 @@ const styles = StyleSheet.create({
   },
   loadingBlock: { gap: Spacing.md },
   headerBlock: { gap: Spacing.sm },
+  eyebrow: { color: 'rgba(255,255,255,0.72)', letterSpacing: 1.4 },
   title: { color: '#FFFFFF' },
-  factsRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.lg, rowGap: Spacing.xs },
-  fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexShrink: 1 },
-  factText: { color: 'rgba(255,255,255,0.88)', flexShrink: 1 },
-  centerBlock: { alignItems: 'center', gap: Spacing.sm },
+  venueRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  venue: { color: 'rgba(255,255,255,0.65)', flexShrink: 1 },
+  rule: {
+    width: 32,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  bodyBlock: { gap: Spacing.sm },
   hostedBy: { color: '#FFFFFF' },
-  description: { textAlign: 'center', lineHeight: 22, color: 'rgba(255,255,255,0.85)' },
+  description: { lineHeight: 23, color: 'rgba(255,255,255,0.78)' },
   tagRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
     gap: Spacing.xs,
     marginTop: Spacing.xs,
   },
   gallerySection: { gap: Spacing.md },
-  galleryTitle: { textAlign: 'center' },
-  galleryRow: { gap: Spacing.sm, paddingHorizontal: Spacing.xs },
+  galleryTitle: { color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4 },
+  galleryRow: { gap: Spacing.sm },
   galleryThumbWrap: {
     width: 140,
     height: 100,

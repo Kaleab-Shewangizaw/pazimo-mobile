@@ -45,10 +45,12 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: theme.brand,
         tabBarInactiveTintColor: theme.textMuted,
-        tabBarShowLabel: true,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarItemStyle: { paddingVertical: 4 },
-        tabBarIconStyle: { marginTop: 2 },
+        // Icon-only bar; `title` still names each screen for accessibility.
+        tabBarShowLabel: false,
+        tabBarItemStyle: { justifyContent: 'center' },
+        // The icon wrapper keeps a fixed label-era height; letting it flex
+        // removes the phantom gap under the icons.
+        tabBarIconStyle: { flex: 1 },
         // Transparent so the Glass layer behind it is what actually shows.
         tabBarStyle: {
           position: 'absolute',
@@ -76,7 +78,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={26} color={color} />
           ),
         }}
       />
@@ -85,7 +87,7 @@ export default function TabsLayout() {
         options={{
           title: 'Discover',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'search' : 'search-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'search' : 'search-outline'} size={26} color={color} />
           ),
         }}
       />
@@ -94,7 +96,7 @@ export default function TabsLayout() {
         options={{
           title: 'Tickets',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'ticket' : 'ticket-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'ticket' : 'ticket-outline'} size={26} color={color} />
           ),
         }}
       />
@@ -103,7 +105,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} />
           ),
         }}
       />

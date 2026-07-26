@@ -1,28 +1,27 @@
 import { Platform } from 'react-native';
 
 /**
- * Pazimo mobile is dark-only by design, matching the gold-on-black identity the
- * web app uses in its `.dark .brand-scope` (`--primary: #facc15`,
- * `--primary-foreground: #000000`).
+ * Pazimo mobile is dark-only by design — a white-on-black identity.
  *
  * Surfaces are layered the way iOS does it: a near-black base, then progressively
  * lighter elevated fills, with translucent `glass*` tokens for the chrome that
- * floats above content. Gold is reserved for interactive and selected states —
- * it loses all meaning if it becomes a decorative colour.
+ * floats above content. Solid white is reserved for interactive and selected
+ * states — body text sits at `text`/`textSecondary` so the pure-white accent
+ * still reads as emphasis rather than blending into copy.
  */
 
-const gold = {
-  400: '#FACC15',
-  500: '#EAB308',
-  deep: '#D4AF37',
+const white = {
+  full: '#FFFFFF',
+  strong: '#E4E4E7',
+  deep: '#D4D4D8',
 };
 
 const palette = {
-  brand: gold[400],
-  brandStrong: gold[500],
-  brandDeep: gold.deep,
-  brandTint: 'rgba(250, 204, 21, 0.14)',
-  /** Text/icons drawn on top of a gold fill. */
+  brand: white.full,
+  brandStrong: white.strong,
+  brandDeep: white.deep,
+  brandTint: 'rgba(255, 255, 255, 0.12)',
+  /** Text/icons drawn on top of a white fill. */
   onBrand: '#0A0A0B',
 
   background: '#08080A',
@@ -42,7 +41,8 @@ const palette = {
 
   success: '#34D399',
   danger: '#FB7185',
-  warning: gold[400],
+  /** White like the brand — scarcity copy reads as emphasis, not a hue. */
+  warning: white.full,
 
   /** Scrim under text laid over cover art. */
   scrim: 'rgba(0, 0, 0, 0.62)',

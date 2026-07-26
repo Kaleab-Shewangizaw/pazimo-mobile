@@ -22,7 +22,7 @@ function GlassHeaderImpl({
 }: {
   title: string;
   right?: ReactNode;
-  /** Home only — replaces the text title with the gold wordmark. */
+  /** Home only — replaces the text title with the wordmark. */
   showLogo?: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -37,7 +37,8 @@ function GlassHeaderImpl({
       <View style={styles.row}>
         <View style={styles.titles}>
           {showLogo ? (
-            <Image source={wordmark} style={styles.logo} contentFit="contain" />
+            // The source PNG is gold — tinting flattens it to a white logotype.
+            <Image source={wordmark} style={styles.logo} contentFit="contain" tintColor="#FFFFFF" />
           ) : (
             <Text variant="heading" numberOfLines={1}>
               {title}
