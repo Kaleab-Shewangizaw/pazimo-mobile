@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useScrollToTop } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,15 +12,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
-import { EventCard } from '@/components/event/event-card';
-import { AmbientBackground } from '@/components/ui/ambient-background';
 import { BannerCarousel } from '@/components/home/banner-carousel';
-import { CategoryRail } from '@/components/home/category-rail';
+import { CategoryGrid } from '@/components/home/category-grid';
 import { EventRail } from '@/components/home/event-rail';
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { Touchable } from '@/components/ui/pressable';
 import { SectionHeader } from '@/components/ui/section';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
@@ -34,7 +32,16 @@ import {
 } from '@/queries/events';
 import type { PazimoEvent } from '@/types/api';
 
-const keyExtractor = (event: PazimoEvent) => event._id;
+/** Each row of "All events" scrolls horizontally, 7 cards to a row. */
+const ROW_SIZE = 7;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
+}
+
+const rowKeyExtractor = (row: PazimoEvent[], index: number) => row[0]?._id ?? `row-${index}`;
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -42,7 +49,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
 
-  const listRef = useRef<FlatList<PazimoEvent>>(null);
+  const listRef = useRef<FlatList<PazimoEvent[]>>(null);
   // Tapping the active tab returns to the top of the feed.
   useScrollToTop(listRef);
 
@@ -70,10 +77,14 @@ export default function HomeScreen() {
     }
   }, [feed]);
 
-  const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
+  // "All events" is grouped into rows of 7, each scrolling horizontally,
+  // rather than one full-width card per row scrolling vertically.
+  const feedRows = useMemo(() => chunk(feed.data ?? [], ROW_SIZE), [feed.data]);
+
+  const renderRow = useCallback<ListRenderItem<PazimoEvent[]>>(
     ({ item }) => (
-      <View style={styles.feedItem}>
-        <EventCard event={item} />
+      <View style={styles.feedRow}>
+        <EventRail events={item} />
       </View>
     ),
     [],
@@ -83,9 +94,9 @@ export default function HomeScreen() {
     <View style={styles.headerBlock}>
       <BannerCarousel events={banner.data} loading={banner.isLoading} />
 
-      <View style={styles.section}>
+      {/* <View style={styles.section}>
         <CategoryRail categories={categories.data} loading={categories.isLoading} />
-      </View>
+      </View> */}
 
       {featured.isLoading || featured.data?.length ? (
         <View style={styles.section}>
@@ -101,6 +112,13 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
+      {categories.isLoading || categories.data?.length ? (
+        <View style={styles.section}>
+          <SectionHeader title="Choose a Category" />
+          <CategoryGrid categories={categories.data} loading={categories.isLoading} />
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <SectionHeader title="All events" />
       </View>
@@ -113,9 +131,8 @@ export default function HomeScreen() {
 
   const empty = feed.isLoading ? (
     <View style={styles.skeletonList}>
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} height={240} radius={Radius.lg} />
-      ))}
+      <EventRail loading />
+      <EventRail loading />
     </View>
   ) : feed.isError ? (
     <ErrorState
@@ -144,9 +161,9 @@ export default function HomeScreen() {
 
       <FlatList
         ref={listRef}
-        data={feed.data ?? []}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
+        data={feedRows}
+        keyExtractor={rowKeyExtractor}
+        renderItem={renderRow}
         ListHeaderComponent={header}
         ListFooterComponent={footer}
         ListEmptyComponent={empty}
@@ -185,7 +202,7 @@ const styles = StyleSheet.create({
   },
   headerBlock: { gap: Spacing.xl, paddingBottom: Spacing.md },
   section: { gap: 0 },
-  feedItem: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
+  feedRow: { paddingBottom: Spacing.lg },
   footer: { paddingVertical: Spacing.xl },
   skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
 });

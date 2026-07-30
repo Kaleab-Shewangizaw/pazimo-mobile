@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AspectRatio, Radius, Spacing } from '@/constants/theme';
 import type { PazimoEvent } from '@/types/api';
 
-const CARD_WIDTH = 240;
+const CARD_WIDTH = 280;
 const GAP = Spacing.md;
 
 /** Fixed geometry lets the list skip measurement entirely while scrolling. */

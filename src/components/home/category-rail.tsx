@@ -29,7 +29,7 @@ const ICON_BY_KEYWORD: [RegExp, keyof typeof Ionicons.glyphMap][] = [
   [/film|movie|cinema/i, 'film'],
 ];
 
-function iconFor(name: string): keyof typeof Ionicons.glyphMap {
+export function iconFor(name: string): keyof typeof Ionicons.glyphMap {
   return ICON_BY_KEYWORD.find(([pattern]) => pattern.test(name))?.[1] ?? 'pricetag';
 }
 

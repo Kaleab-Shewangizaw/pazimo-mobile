@@ -29,7 +29,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 /** Preview lines before the description clamps behind "Read more". */
 const DESC_PREVIEW_LINES = 4;
 
-const GLOW = 'rgba(0,0,0,0.55)';
+const GLOW = 'rgba(255, 255, 255, 0.12)';
 
 /**
  * Soft dark vignette bleeding in from every screen edge — frames the photo
