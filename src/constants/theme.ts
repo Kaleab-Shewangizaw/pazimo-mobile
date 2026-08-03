@@ -90,16 +90,22 @@ export const FontSize = {
 } as const;
 
 /**
- * Quicksand everywhere — the rounded geometric sans from the reference design.
+ * Comic Relief everywhere — an open, metric-compatible stand-in for Comic Sans
+ * MS, which is proprietary and can't be bundled.
+ *
  * Weights are separate loaded families, so styles must reference these names
  * instead of `fontWeight` (which would only synthesize a fake bold on top of
  * the regular cut).
+ *
+ * The family only ships two cuts, so the four slots collapse onto them: the
+ * mid-weights fold down to regular and `semibold` folds up to bold, which keeps
+ * emphasis reading as emphasis rather than flattening the whole scale.
  */
 export const FontFamily = {
-  regular: 'Quicksand_400Regular',
-  medium: 'Quicksand_500Medium',
-  semibold: 'Quicksand_600SemiBold',
-  bold: 'Quicksand_700Bold',
+  regular: 'ComicRelief_400Regular',
+  medium: 'ComicRelief_400Regular',
+  semibold: 'ComicRelief_700Bold',
+  bold: 'ComicRelief_700Bold',
 } as const;
 
 export const Fonts = Platform.select({

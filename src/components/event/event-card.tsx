@@ -88,8 +88,8 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
       <View style={styles.topRow}>
         <View style={styles.priceChip}>
           <BlurView
-            intensity={40}
-            tint="light"
+            intensity={10}
+            tint="dark"
             experimentalBlurMethod={androidBlurMethod}
             style={[StyleSheet.absoluteFill, styles.chipSurface]}
           />
@@ -108,7 +108,7 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
           pressedScale={0.88}
           style={styles.heartButton}>
           <BlurView
-            intensity={40}
+            intensity={10}
             tint="light"
             experimentalBlurMethod={androidBlurMethod}
             style={[StyleSheet.absoluteFill, styles.chipSurface]}
@@ -129,14 +129,14 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
         pointerEvents="none"
         maskElement={
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.4)', '#000000']}
+            colors={['transparent', 'rgba(0, 0, 0, 0.4)', '#000000']}
             locations={[0, 0.45, 0.85]}
             style={StyleSheet.absoluteFill}
           />
         }>
         <BlurView
-          intensity={60}
-          tint="light"
+          intensity={30}
+          tint="dark"
           experimentalBlurMethod={androidBlurMethod}
           style={StyleSheet.absoluteFill}
         />
@@ -151,11 +151,11 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
       <LinearGradient
         colors={[
           'rgba(255,252,250,0)',
-          'rgba(246,240,236,0.18)',
-          'rgba(214,204,198,0.40)',
-          'rgba(170,158,152,0.60)',
-          'rgba(128,116,111,0.76)',
-          'rgba(104,93,88,0.86)',
+          'rgba(45, 44, 43, 0.18)',
+          'rgba(37, 36, 35, 0.4)',
+          'rgba(6, 6, 6, 0.6)',
+          'rgba(16, 15, 14, 0.76)',
+          'rgba(0, 0, 0, 0.86)',
         ]}
         locations={[0, 0.2, 0.42, 0.65, 0.85, 1]}
         style={styles.panel}
@@ -209,6 +209,10 @@ const styles = StyleSheet.create({
   },
   priceChip: {
     borderRadius: Radius.pill,
+    borderColor: '#FFFFFF4C',
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     maxWidth: '62%',
@@ -248,7 +252,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingBottom: Spacing.xl,
     gap: Spacing.sm,
     alignItems: 'center',
   },

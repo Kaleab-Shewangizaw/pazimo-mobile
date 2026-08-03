@@ -1,12 +1,10 @@
 import '@/global.css';
 
 import {
-  Quicksand_400Regular,
-  Quicksand_500Medium,
-  Quicksand_600SemiBold,
-  Quicksand_700Bold,
+  ComicRelief_400Regular,
+  ComicRelief_700Bold,
   useFonts,
-} from '@expo-google-fonts/quicksand';
+} from '@expo-google-fonts/comic-relief';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -41,10 +39,8 @@ export default function RootLayout() {
   // `fontError` releases the gate too — a failed download falls back to the
   // system font rather than trapping the app on the splash screen.
   const [fontsLoaded, fontError] = useFonts({
-    Quicksand_400Regular,
-    Quicksand_500Medium,
-    Quicksand_600SemiBold,
-    Quicksand_700Bold,
+    ComicRelief_400Regular,
+    ComicRelief_700Bold,
   });
   const fontsReady = fontsLoaded || fontError != null;
 
