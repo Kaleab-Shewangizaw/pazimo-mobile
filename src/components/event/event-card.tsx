@@ -91,9 +91,9 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
             intensity={40}
             tint="light"
             experimentalBlurMethod={androidBlurMethod}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, styles.chipSurface]}
           />
-          <View style={[StyleSheet.absoluteFill, styles.chipWash]} />
+          <View style={[StyleSheet.absoluteFill, styles.chipWash, styles.chipSurface]} />
           <Text variant="caption" style={styles.priceText} numberOfLines={1}>
             {soldOut ? 'Sold out' : (priceText ?? '')}
           </Text>
@@ -111,9 +111,9 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
             intensity={40}
             tint="light"
             experimentalBlurMethod={androidBlurMethod}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, styles.chipSurface]}
           />
-          <View style={[StyleSheet.absoluteFill, styles.chipWash]} />
+          <View style={[StyleSheet.absoluteFill, styles.chipWash, styles.chipSurface]} />
           <Ionicons name="heart" size={compact ? 16 : 18} color={saved ? '#E11D48' : '#FFFFFF'} />
         </Touchable>
       </View>
@@ -207,27 +207,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // `overflow: hidden` clips the BlurView to the pill/circle — without it the
-  // blur renders as an unclipped rectangle behind the shape.
   priceChip: {
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     maxWidth: '62%',
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
   },
   heartButton: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
   },
+  /**
+   * Applied to the blur/wash layers themselves. The parent's `overflow:
+   * hidden` is not enough: Android does not reliably clip a native BlurView
+   * surface to a rounded parent, so the blur leaks out as a square and the
+   * pill loses its edge. Rounding each layer makes the shape hold on both
+   * platforms.
+   */
+  chipSurface: { borderRadius: Radius.pill },
   /** `bg-[#ffffff4c]` + `backdrop-blur-[30px]` from the Figma export. */
   chipWash: { backgroundColor: 'rgba(255,255,255,0.30)' },
   priceText: {
