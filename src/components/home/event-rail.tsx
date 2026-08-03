@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { FlatList, type ListRenderItem, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, type ListRenderItem, StyleSheet, View } from 'react-native';
 
 import { EventCard } from '@/components/event/event-card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,7 +18,18 @@ const getItemLayout = (_: unknown, index: number) => ({
 
 const keyExtractor = (event: PazimoEvent) => event._id;
 
-function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: boolean }) {
+function EventRailImpl({
+  events,
+  loading,
+  onEndReached,
+  loadingMore,
+}: {
+  events?: PazimoEvent[];
+  loading?: boolean;
+  /** Wired to the horizontal scroll, not the page — this rail is now often the primary list. */
+  onEndReached?: () => void;
+  loadingMore?: boolean;
+}) {
   const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
     ({ item }) => <EventCard event={item} layout="rail" />,
     [],
@@ -31,8 +42,8 @@ function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: 
           <Skeleton
             key={i}
             width={CARD_WIDTH}
-            height={CARD_WIDTH / AspectRatio.banner}
-            radius={Radius.lg}
+            height={CARD_WIDTH / AspectRatio.poster}
+            radius={Radius.xl}
           />
         ))}
       </View>
@@ -52,6 +63,9 @@ function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: 
       contentContainerStyle={styles.content}
       snapToInterval={CARD_WIDTH + GAP}
       decelerationRate="fast"
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.footer} /> : null}
       initialNumToRender={3}
       maxToRenderPerBatch={3}
       windowSize={5}
@@ -63,6 +77,7 @@ function EventRailImpl({ events, loading }: { events?: PazimoEvent[]; loading?: 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: GAP },
   skeletonRow: { flexDirection: 'row', gap: GAP, paddingHorizontal: Spacing.lg },
+  footer: { width: 40 },
 });
 
 export const EventRail = memo(EventRailImpl);

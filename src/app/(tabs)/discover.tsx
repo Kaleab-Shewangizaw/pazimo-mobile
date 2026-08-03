@@ -36,6 +36,18 @@ export default function DiscoverScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(params.category ?? null);
   const [sort, setSort] = useState<SortOption>('newest');
 
+  // This is a tab screen, so it stays mounted once visited and the state
+  // initialiser above only ever sees the *first* category param. Without this
+  // re-sync, arriving from the home category grid a second time navigates here
+  // but leaves the previous filter applied. Adjusting state during render (not
+  // in an effect) is React's documented pattern for this, and avoids the
+  // `set-state-in-effect` rule this project lints for.
+  const [lastCategoryParam, setLastCategoryParam] = useState(params.category);
+  if (params.category !== lastCategoryParam) {
+    setLastCategoryParam(params.category);
+    setCategoryId(params.category ?? null);
+  }
+
   // Keeps typing smooth: the list re-filters at a lower priority than the input.
   const deferredQuery = useDeferredValue(query);
 

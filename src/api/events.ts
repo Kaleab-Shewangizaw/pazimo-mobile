@@ -16,41 +16,15 @@ export async function fetchEventsPage(params: { page: number; limit: number }) {
 }
 
 /**
- * The public, unauthenticated feed. Supports `isFeatured` / `isTrending` and
- * offset paging — but *only* applies a limit when one is passed. Omitting
- * `limit` returns the entire collection, so always pass one.
+ * The public, unauthenticated feed. Offset paging, but *only* applies a limit
+ * when one is passed — omitting `limit` returns the entire collection, so
+ * always pass one.
  */
-export async function fetchPublicEvents(params: {
-  limit: number;
-  skip?: number;
-  isFeatured?: boolean;
-  isTrending?: boolean;
-  sort?: string;
-}) {
-  const res = await api.get<{ data: PazimoEvent[]; meta: OffsetMeta }>(
-    '/events/public-events',
-    {
-      params: {
-        limit: params.limit,
-        skip: params.skip,
-        sort: params.sort,
-        // The server activates these only on the literal string "true".
-        isFeatured: params.isFeatured ? 'true' : undefined,
-        isTrending: params.isTrending ? 'true' : undefined,
-      },
-    },
-  );
+export async function fetchPublicEvents(params: { limit: number; skip?: number; sort?: string }) {
+  const res = await api.get<{ data: PazimoEvent[]; meta: OffsetMeta }>('/events/public-events', {
+    params,
+  });
   return { events: res.data.data, meta: res.data.meta };
-}
-
-/**
- * Banner events. `bannerStatus` is settable by admins but not queryable on any
- * endpoint, so the filter has to happen here. Kept to a bounded fetch rather
- * than pulling the whole collection.
- */
-export async function fetchBannerEvents(limit = 40): Promise<PazimoEvent[]> {
-  const { events } = await fetchPublicEvents({ limit, sort: '-createdAt' });
-  return events.filter((e) => e.bannerStatus);
 }
 
 const OBJECT_ID = /^[a-f\d]{24}$/i;

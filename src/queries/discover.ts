@@ -32,7 +32,7 @@ function useCatalogue() {
   });
 }
 
-function categoryIdOf(event: PazimoEvent): string | null {
+export function categoryIdOf(event: PazimoEvent): string | null {
   const { category } = event;
   if (!category) return null;
   return typeof category === 'string' ? category : category._id;

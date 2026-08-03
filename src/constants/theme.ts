@@ -119,4 +119,6 @@ export const AspectRatio = {
   banner: 4 / 5,
   card: 3 / 2,
   hero: 4 / 3,
+  /** Event cards — the Figma frame's 736x981. */
+  poster: 736 / 981,
 } as const;

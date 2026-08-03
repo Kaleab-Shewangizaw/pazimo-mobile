@@ -4,13 +4,33 @@ import { useRouter } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { iconFor } from '@/components/home/category-rail';
 import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { resolveImageUrl } from '@/lib/media';
 import type { Category } from '@/types/api';
+
+/**
+ * The Category model has an `image` (an upload path) but no `icon`, and many
+ * rows have neither, so this falls back to a keyword-matched Ionicon.
+ */
+const ICON_BY_KEYWORD: [RegExp, keyof typeof Ionicons.glyphMap][] = [
+  [/music|concert|dj|festival/i, 'musical-notes'],
+  [/sport|game|match|football|run/i, 'football'],
+  [/tech|conference|summit|hack/i, 'laptop'],
+  [/art|exhibit|gallery|theat/i, 'color-palette'],
+  [/food|drink|dining|taste/i, 'restaurant'],
+  [/business|network|career/i, 'briefcase'],
+  [/party|night|club/i, 'sparkles'],
+  [/edu|workshop|class|train/i, 'school'],
+  [/health|fitness|yoga|well/i, 'fitness'],
+  [/film|movie|cinema/i, 'film'],
+];
+
+function iconFor(name: string): keyof typeof Ionicons.glyphMap {
+  return ICON_BY_KEYWORD.find(([pattern]) => pattern.test(name))?.[1] ?? 'pricetag';
+}
 
 /**
  * Glass tile grid, two columns — a bigger, browsable alternative to the icon

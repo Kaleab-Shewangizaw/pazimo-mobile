@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { memo, useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
@@ -13,6 +15,12 @@ import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
 import { formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
 import type { Currency, PazimoEvent } from '@/types/api';
+
+/**
+ * Android's stock BlurView only tints (no real blur) without this renderer.
+ * Passed to every BlurView on the card below.
+ */
+const androidBlurMethod = Platform.OS === 'android' ? 'dimezisBlurView' : 'none';
 
 /** Cross-fade rather than a flash of empty box when art arrives from cache. */
 const IMAGE_TRANSITION = 180;
@@ -25,11 +33,19 @@ export type EventCardProps = {
 };
 
 /**
- * The chip, heart button, and info panel all use a flat translucent tint, not
- * a real BlurView — `ui/glass.tsx` is explicit that a genuine blur pass inside
- * a scrolling list is the easiest way to make this app janky. The tint reads
- * as frosted glass without paying that cost; only fixed chrome (the tab bar,
- * the header) gets the real thing.
+ * Real blur is confined to the two small chips. It is deliberately *not*
+ * used for the bottom scrim: blurring a large area of artwork only smears
+ * the photo's own colours around, which reads as muddy, and a BlurView's
+ * hard boundary shows as a crease across the card. A gradient does that job
+ * cleanly and for free.
+ *
+ * The chips pair their BlurView with an explicit white wash. Blur alone only
+ * softens what is already behind it, so a chip over a blue sky blurs into a
+ * blue chip; the wash is what makes them read as glass over any artwork.
+ *
+ * Note this still bends the app's "no BlurView in a list row" rule (see
+ * `ui/glass.tsx`). It stays affordable because rails mount few cards at
+ * once — `initialNumToRender=3`, `windowSize=5`, `removeClippedSubviews`.
  */
 function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardProps) {
   const theme = useTheme();
@@ -55,11 +71,7 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
       accessibilityRole="button"
       accessibilityLabel={`${event.title}. ${formatDateTime(event.startDate, event.startTime)}`}
       onPress={onPress}
-      style={[
-        styles.card,
-        compact ? styles.rail : styles.feed,
-        { borderColor: theme.hairline },
-      ]}>
+      style={[styles.card, compact ? styles.rail : styles.feed, { borderColor: theme.hairline }]}>
       {cover ? (
         <Image
           source={{ uri: cover }}
@@ -73,16 +85,16 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
         <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surfaceMuted }]} />
       )}
 
-      {/* Light top scrim keeps the chip and heart legible over bright skies. */}
-      <LinearGradient
-        colors={['rgba(2,2,3,0.30)', 'transparent']}
-        style={styles.topScrim}
-        pointerEvents="none"
-      />
-
       <View style={styles.topRow}>
-        <View style={[styles.glassChip, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-          <Text variant="caption" style={styles.priceChipText} numberOfLines={1}>
+        <View style={styles.priceChip}>
+          <BlurView
+            intensity={40}
+            tint="light"
+            experimentalBlurMethod={androidBlurMethod}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[StyleSheet.absoluteFill, styles.chipWash]} />
+          <Text variant="caption" style={styles.priceText} numberOfLines={1}>
             {soldOut ? 'Sold out' : (priceText ?? '')}
           </Text>
         </View>
@@ -94,50 +106,78 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
           haptic
           onPress={() => setSaved((value) => !value)}
           pressedScale={0.88}
-          style={[styles.heartButton, { backgroundColor: theme.glass, borderColor: theme.glassBorder }]}>
-          <Ionicons
-            name={saved ? 'heart' : 'heart-outline'}
-            size={compact ? 15 : 17}
-            color={saved ? '#E11D48' : '#FFFFFF'}
+          style={styles.heartButton}>
+          <BlurView
+            intensity={40}
+            tint="light"
+            experimentalBlurMethod={androidBlurMethod}
+            style={StyleSheet.absoluteFill}
           />
+          <View style={[StyleSheet.absoluteFill, styles.chipWash]} />
+          <Ionicons name="heart" size={compact ? 16 : 18} color={saved ? '#E11D48' : '#FFFFFF'} />
         </Touchable>
       </View>
 
-      {/* Text sits directly on the gradient — no boxed panel, no middle dark
-          stop: a single fade from transparent at top to white at the very
-          bottom. The title's own text shadow (not a dark backdrop) is what
-          keeps it legible against the lighter fill. */}
+      {/*
+        Progressive blur: the BlurView is masked by a gradient so the blur
+        itself ramps up from nothing instead of switching on at a hard edge.
+        That is what keeps it seamless — fading only the colour leaves the
+        *sharpness* stepping, which is the crease.
+      */}
+      <MaskedView
+        style={styles.panel}
+        pointerEvents="none"
+        maskElement={
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.4)', '#000000']}
+            locations={[0, 0.45, 0.85]}
+            style={StyleSheet.absoluteFill}
+          />
+        }>
+        <BlurView
+          intensity={60}
+          tint="light"
+          experimentalBlurMethod={androidBlurMethod}
+          style={StyleSheet.absoluteFill}
+        />
+      </MaskedView>
+
+      {/*
+        The designer's glow from the Figma export, lightened. Theirs ramps
+        cream -> #33140A; this keeps the cream shoulder but lands on a warm
+        smoke rather than that brown, so the panel reads white-ish. The alpha
+        still climbs slowly, standing in for the 200px blur's falloff.
+      */}
       <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.68)']}
-        style={styles.bottomScrim}
+        colors={[
+          'rgba(255,252,250,0)',
+          'rgba(246,240,236,0.18)',
+          'rgba(214,204,198,0.40)',
+          'rgba(170,158,152,0.60)',
+          'rgba(128,116,111,0.76)',
+          'rgba(104,93,88,0.86)',
+        ]}
+        locations={[0, 0.2, 0.42, 0.65, 0.85, 1]}
+        style={styles.panel}
         pointerEvents="none"
       />
 
       <View style={[styles.body, compact && styles.bodyCompact]}>
-        <Text
-          variant={compact ? 'title' : 'heading'}
-          numberOfLines={2}
-          style={styles.title}>
+        <Text variant="heading" numberOfLines={2} style={styles.title}>
           {event.title}
         </Text>
 
         <View style={styles.infoRows}>
           <View style={styles.infoRow}>
-            <Ionicons name="calendar-outline" size={compact ? 13 : 14} color="#FFFFFF" />
-            <Text
-              variant={compact ? 'small' : 'small'}
-              numberOfLines={1}
-              style={styles.infoText}>
+            <Ionicons name="calendar-clear" size={compact ? 12 : 13} color="#FFFFFF" />
+            <Text variant="small" numberOfLines={1} style={styles.infoText}>
               {formatDateTime(event.startDate, event.startTime)}
             </Text>
           </View>
           {venue ? (
             <View style={styles.infoRow}>
-              <Ionicons name="location-sharp" size={compact ? 13 : 14} color="#FFFFFF" />
-              <Text
-                variant={compact ? 'small' : 'small'}
-                numberOfLines={1}
-                style={styles.infoText}>
+              <Ionicons name="location-sharp" size={compact ? 12 : 13} color="#FFFFFF" />
+              <Text variant="small" numberOfLines={1} style={styles.infoText}>
                 {venue}
               </Text>
             </View>
@@ -150,64 +190,87 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  feed: { width: '100%', aspectRatio: 0.72 },
-  rail: { width: 280, aspectRatio: AspectRatio.banner },
-  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 80 },
-  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '58%' },
+  feed: { width: '100%', aspectRatio: AspectRatio.poster },
+  rail: { width: 280, aspectRatio: AspectRatio.poster },
+
   topRow: {
     position: 'absolute',
-    top: Spacing.sm,
-    left: Spacing.sm,
-    right: Spacing.sm,
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  glassChip: {
+  // `overflow: hidden` clips the BlurView to the pill/circle — without it the
+  // blur renders as an unclipped rectangle behind the shape.
+  priceChip: {
     borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 6,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
     maxWidth: '62%',
-  },
-  priceChipText: { color: '#FFFFFF', fontFamily: FontFamily.bold },
-  heartButton: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  heartButton: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
+  /** `bg-[#ffffff4c]` + `backdrop-blur-[30px]` from the Figma export. */
+  chipWash: { backgroundColor: 'rgba(255,255,255,0.30)' },
+  priceText: {
+    color: '#FFFFFF',
+    fontFamily: FontFamily.bold,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  /** 54% ≈ the Figma blob's top edge (453 of 981) relative to the frame. */
+  panel: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%' },
   body: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
     gap: Spacing.sm,
     alignItems: 'center',
   },
-  bodyCompact: { padding: Spacing.md, gap: Spacing.xs },
+  bodyCompact: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, gap: Spacing.xs },
+  // Tight leading and negative tracking, matching the Figma type ramp
+  // (leading 91.7 on 122.2 ≈ 0.75; tracking -9.77 ≈ -8% of size).
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
+    lineHeight: 30,
+    letterSpacing: -1,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  infoRows: { gap: 5, alignItems: 'center' },
+  infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  infoText: {
+    color: '#FFFFFF',
+    flexShrink: 1,
+    letterSpacing: -0.3,
     textShadowColor: 'rgba(0,0,0,0.45)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
-  },
-  infoRows: { gap: 4, alignItems: 'center' },
-  infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs },
-  infoText: {
-    color: 'rgba(255,255,255,0.9)',
-    flexShrink: 1,
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
 });
 

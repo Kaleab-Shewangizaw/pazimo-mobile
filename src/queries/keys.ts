@@ -3,9 +3,6 @@ export const queryKeys = {
   events: {
     all: ['events'] as const,
     feed: () => [...queryKeys.events.all, 'feed'] as const,
-    featured: () => [...queryKeys.events.all, 'featured'] as const,
-    trending: () => [...queryKeys.events.all, 'trending'] as const,
-    banner: () => [...queryKeys.events.all, 'banner'] as const,
     detail: (id: string) => [...queryKeys.events.all, 'detail', id] as const,
   },
   categories: ['categories'] as const,
