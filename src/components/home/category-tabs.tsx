@@ -65,7 +65,7 @@ function CategoryTabsImpl({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
+  content: { paddingHorizontal: Spacing.lg, gap: Spacing.xxl + Spacing.xs },
   tab: { paddingVertical: Spacing.xs },
   active: { color: '#FFFFFF' },
   inactive: { color: 'rgba(255,255,255,0.42)' },

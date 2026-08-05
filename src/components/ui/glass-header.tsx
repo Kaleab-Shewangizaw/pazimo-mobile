@@ -19,13 +19,43 @@ function GlassHeaderImpl({
   title,
   right,
   showLogo = false,
+  blurred = true,
 }: {
   title: string;
   right?: ReactNode;
   /** Home only — replaces the text title with the wordmark. */
   showLogo?: boolean;
+  /**
+   * Set false where the page should read as one continuous surface: the bar
+   * carries no material of its own and the feed passes under bare chrome.
+   *
+   * This also matters for whatever `right` holds. A glass control nested inside
+   * a glass bar blurs *the bar*, not the page, so it flattens into a plain grey
+   * disc instead of picking up what is behind the header.
+   */
+  blurred?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+
+  const content = (
+    <View style={styles.row}>
+      <View style={styles.titles}>
+        {showLogo ? (
+          // The source PNG is gold — tinting flattens it to a white logotype.
+          <Image source={wordmark} style={styles.logo} contentFit="contain" tintColor="#FFFFFF" />
+        ) : (
+          <Text variant="heading" numberOfLines={1}>
+            {title}
+          </Text>
+        )}
+      </View>
+      {right}
+    </View>
+  );
+
+  if (!blurred) {
+    return <View style={[styles.container, { paddingTop: insets.top }]}>{content}</View>;
+  }
 
   return (
     <Glass
@@ -34,19 +64,7 @@ function GlassHeaderImpl({
       radius={0}
       bordered={false}
       style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.row}>
-        <View style={styles.titles}>
-          {showLogo ? (
-            // The source PNG is gold — tinting flattens it to a white logotype.
-            <Image source={wordmark} style={styles.logo} contentFit="contain" tintColor="#FFFFFF" />
-          ) : (
-            <Text variant="heading" numberOfLines={1}>
-              {title}
-            </Text>
-          )}
-        </View>
-        {right}
-      </View>
+      {content}
     </Glass>
   );
 }

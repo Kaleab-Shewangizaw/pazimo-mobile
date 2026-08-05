@@ -12,12 +12,14 @@ import { EventRail } from '@/components/home/event-rail';
 // import { UpcomingRail } from '@/components/home/upcoming-rail';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
+import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { SectionHeader } from '@/components/ui/section';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useActivityEvents } from '@/queries/activities';
 import { useCategories } from '@/queries/categories';
 import { categoryIdOf } from '@/queries/discover';
@@ -28,6 +30,7 @@ import { useEventFeed } from '@/queries/events';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -35,6 +38,10 @@ export default function HomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   // Tapping the active tab returns to the top of the page.
   useScrollToTop(scrollRef);
+
+  // What the header's glass controls sample on Android — the ambient backdrop,
+  // which is static and therefore cheap to blur against.
+  const backdropRef = useRef<View>(null);
 
   const categories = useCategories();
   const feed = useEventFeed();
@@ -63,8 +70,44 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <AmbientBackground />
-      <GlassHeader title="Pazimo" showLogo />
+      <AmbientBackground blurTarget={backdropRef} />
+      {/* No material of its own — the page reads as one continuous surface, and
+          the glass controls below blur the backdrop rather than the bar. */}
+      <GlassHeader
+        title="Pazimo"
+        showLogo
+        blurred={false}
+        right={
+          <View style={styles.headerActions}>
+            <View>
+              <GlassIconButton
+                icon="notifications-outline"
+                accessibilityLabel="Notifications"
+                blurTarget={backdropRef}
+                // Presentational for now — there is no notifications route or
+                // feed yet, so this has nowhere to go (same caveat as the
+                // save hearts).
+                onPress={() => {}}
+              />
+              <View
+                style={[
+                  styles.badge,
+                  { backgroundColor: theme.danger, borderColor: theme.background },
+                ]}
+                pointerEvents="none"
+              />
+            </View>
+            {/* A glyph, not a photo: the app is guest-first and there is no
+                auth phase yet, so there is no avatar to show. */}
+            <GlassIconButton
+              icon="person"
+              accessibilityLabel="Your profile"
+              blurTarget={backdropRef}
+              onPress={() => router.push('/profile')}
+            />
+          </View>
+        }
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -72,7 +115,7 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + HEADER_CONTENT_HEIGHT + Spacing.lg,
+            paddingTop: insets.top + HEADER_CONTENT_HEIGHT + Spacing.xxl,
             paddingBottom: tabBarClearance(insets.bottom),
           },
         ]}
@@ -86,7 +129,7 @@ export default function HomeScreen() {
         }>
         <View style={styles.hero}>
           <Text variant="display" style={styles.heroTitle}>
-            Choose Today&rsquo;s{'\n'}Event
+            Choose{'\n'}Today&rsquo;s Event
           </Text>
           <Touchable
             accessibilityRole="button"
@@ -177,4 +220,15 @@ const styles = StyleSheet.create({
   },
   section: { gap: Spacing.md },
   stateBlock: { paddingHorizontal: Spacing.lg },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: Radius.pill,
+    // The ring is what separates the dot from the bell behind it.
+    borderWidth: 1.5,
+  },
 });

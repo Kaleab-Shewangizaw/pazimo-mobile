@@ -1,6 +1,6 @@
-import { BlurView } from 'expo-blur';
+import { BlurTargetView, BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import { memo } from 'react';
+import { type RefObject, memo } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 /**
@@ -16,9 +16,18 @@ const BG = require('@/assets/images/bg.jpg');
 /** Final darkening pass so panels and text keep their contrast floor. */
 const GLASS_TINT = 'rgba(3, 3, 4, 0.55)';
 
-function AmbientBackgroundImpl() {
+export type AmbientBackgroundProps = {
+  /**
+   * Hand this to any `<Glass>` floating above the page and Android will blur
+   * the real backdrop instead of settling for a flat tint (SDK 57 requires an
+   * explicit target). Cheap here because this backdrop never changes.
+   */
+  blurTarget?: RefObject<View | null>;
+};
+
+function AmbientBackgroundImpl({ blurTarget }: AmbientBackgroundProps) {
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Image
         source={BG}
         style={StyleSheet.absoluteFill}
@@ -34,7 +43,7 @@ function AmbientBackgroundImpl() {
         style={StyleSheet.absoluteFill}
       />
       <View style={[StyleSheet.absoluteFill, styles.glass]} />
-    </View>
+    </BlurTargetView>
   );
 }
 
