@@ -5,7 +5,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
-import { CategoryGrid } from '@/components/home/category-grid';
+import { CategoryRail } from '@/components/home/category-rail';
 import { CategoryTabs } from '@/components/home/category-tabs';
 import { EventRail } from '@/components/home/event-rail';
 // Parked with the "Upcoming" block below.
@@ -18,6 +18,7 @@ import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useActivityEvents } from '@/queries/activities';
 import { useCategories } from '@/queries/categories';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
@@ -37,6 +38,7 @@ export default function HomeScreen() {
 
   const categories = useCategories();
   const feed = useEventFeed();
+  const activities = useActivityEvents();
 
   // The API has no category filter on any event route, so this runs
   // client-side over whatever pages have been fetched so far — same stopgap
@@ -139,7 +141,14 @@ export default function HomeScreen() {
         {categories.isLoading || categories.data?.length ? (
           <View style={styles.section}>
             <SectionHeader title="Browse by category" />
-            <CategoryGrid categories={categories.data} loading={categories.isLoading} />
+            <CategoryRail categories={categories.data} loading={categories.isLoading} />
+          </View>
+        ) : null}
+
+        {activities.isLoading || activities.events.length ? (
+          <View style={styles.section}>
+            <SectionHeader title="Activities" />
+            <EventRail events={activities.events} loading={activities.isLoading} />
           </View>
         ) : null}
       </ScrollView>

@@ -1,11 +1,16 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router/js-tabs';
-import { StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Icon, IconWeight } from 'phosphor-react-native';
+// Per-icon subpath imports, not the package root: `phosphor-react-native`'s
+// barrel is a single ~9,000-icon module that Babel already warns about at
+// 500KB+, and Metro will not tree-shake it away. The line above is erased at
+// build time, so it costs nothing.
+import { HouseIcon } from 'phosphor-react-native/src/icons/House';
+import { MagnifyingGlassIcon } from 'phosphor-react-native/src/icons/MagnifyingGlass';
+import { TicketIcon } from 'phosphor-react-native/src/icons/Ticket';
+import { UserIcon } from 'phosphor-react-native/src/icons/User';
+import type { ColorValue } from 'react-native';
 
-import { Glass } from '@/components/ui/glass';
-import { TabBar } from '@/constants/layout';
-import { Radius } from '@/constants/theme';
+import { LiquidTabBar } from '@/components/navigation/liquid-tab-bar';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -16,139 +21,56 @@ import { useTheme } from '@/hooks/use-theme';
  * Note the import path. `import { Tabs } from 'expo-router'` is deprecated in
  * SDK 57 and re-exports this same navigator.
  *
- * The bar itself is styled as a floating capsule — inset from both edges and
- * the bottom safe area, rounded, and blurred — matching the iOS 18 tab bar
- * (Music, Photos) rather than the classic edge-to-edge Android/older-iOS bar.
+ * The bar is drawn by `LiquidTabBar`, which owns its own shape, glass and
+ * selection indicator — so `tabBarStyle` and `tabBarBackground` no longer apply
+ * and are not set here.
+ *
+ * `tabBarIcon` is called *twice* per tab by the bar, once for each focus state,
+ * so it must be a pure function of `focused` — the two results are stacked and
+ * crossfaded. Phosphor's `fill` weight is a separately drawn glyph rather than a
+ * thickened stroke, which is what lets the selected icon hold its own against
+ * the solid white pill.
  */
 
-function TabBarBackground() {
-  // radius=0 here: the outer `tabBarStyle` owns the capsule radius and clips
-  // this to it via overflow:hidden, so this only needs to fill the shape.
-  // The extra tint pushes the capsule toward the near-opaque black of the
-  // reference design while keeping the blur alive at the edges.
-  return (
-    <Glass
-      variant="regular"
-      intensity={50}
-      radius={0}
-      bordered={false}
-      style={StyleSheet.absoluteFill}>
-      <View style={[StyleSheet.absoluteFill, styles.barTint]} />
-    </Glass>
-  );
-}
+type TabIconArgs = { focused: boolean; color: ColorValue; size: number };
 
 /**
- * The reference bar highlights the active destination as a solid white pill
- * with a black glyph — the same "one white element = the action" rule the
- * rest of the app follows.
+ * React Navigation types `color` as `ColorValue` so platform colour objects are
+ * expressible; `LiquidTabBar` only ever passes plain strings, which is the
+ * narrower thing Phosphor accepts.
  */
-function TabIcon({
-  focused,
-  active,
-  inactive,
-}: {
-  focused: boolean;
-  active: keyof typeof Ionicons.glyphMap;
-  inactive: keyof typeof Ionicons.glyphMap;
-}) {
-  return (
-    <View style={[styles.iconPill, focused && styles.iconPillActive]}>
-      <Ionicons
-        name={focused ? active : inactive}
-        size={23}
-        color={focused ? '#0A0A0B' : 'rgba(255,255,255,0.72)'}
-      />
-    </View>
-  );
+function tabIcon(Glyph: Icon, activeWeight: IconWeight = 'fill') {
+  return function TabIcon({ focused, color, size }: TabIconArgs) {
+    return <Glyph size={size} color={color as string} weight={focused ? activeWeight : 'regular'} />;
+  };
 }
+
+// Module scope so each renderer keeps a stable identity — the bar memoises its
+// slots on it.
+const homeIcon = tabIcon(HouseIcon);
+// `bold`, not `fill`: a filled magnifying glass collapses into a featureless
+// blob at 24pt. Weight carries the selected state instead.
+const discoverIcon = tabIcon(MagnifyingGlassIcon, 'bold');
+const ticketsIcon = tabIcon(TicketIcon);
+const profileIcon = tabIcon(UserIcon);
 
 export default function TabsLayout() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
+      tabBar={(props) => <LiquidTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.brand,
         tabBarInactiveTintColor: theme.textMuted,
         // Icon-only bar; `title` still names each screen for accessibility.
         tabBarShowLabel: false,
-        tabBarItemStyle: { justifyContent: 'center' },
-        // The icon wrapper keeps a fixed label-era height; letting it flex
-        // removes the phantom gap under the icons.
-        tabBarIconStyle: { flex: 1 },
-        // Transparent so the Glass layer behind it is what actually shows.
-        tabBarStyle: {
-          position: 'absolute',
-          left: TabBar.inset,
-          right: TabBar.inset,
-          bottom: insets.bottom + TabBar.floatGap,
-          height: TabBar.height,
-          borderRadius: Radius.xl,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.glassBorder,
-          backgroundColor: 'transparent',
-          overflow: 'hidden',
-          elevation: 0,
-          // A floating capsule needs its own shadow — there's no edge-to-edge
-          // surface behind it to imply depth.
-          shadowColor: '#000000',
-          shadowOpacity: 0.35,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 },
-        },
-        tabBarBackground: TabBarBackground,
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} active="home" inactive="home-outline" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="discover"
-        options={{
-          title: 'Discover',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} active="search" inactive="search-outline" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="tickets"
-        options={{
-          title: 'Tickets',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} active="ticket" inactive="ticket-outline" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} active="person" inactive="person-outline" />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: homeIcon }} />
+      <Tabs.Screen name="discover" options={{ title: 'Discover', tabBarIcon: discoverIcon }} />
+      <Tabs.Screen name="tickets" options={{ title: 'Tickets', tabBarIcon: ticketsIcon }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: profileIcon }} />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  barTint: { backgroundColor: 'rgba(12, 12, 14, 0.55)' },
-  iconPill: {
-    minWidth: 62,
-    height: 44,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconPillActive: { backgroundColor: '#FFFFFF' },
-});

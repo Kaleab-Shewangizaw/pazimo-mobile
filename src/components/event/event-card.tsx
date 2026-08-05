@@ -7,9 +7,10 @@ import { useRouter } from 'expo-router';
 import { memo, useCallback, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
+import { GlassChip, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { AspectRatio, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
@@ -18,7 +19,7 @@ import type { Currency, PazimoEvent } from '@/types/api';
 
 /**
  * Android's stock BlurView only tints (no real blur) without this renderer.
- * Passed to every BlurView on the card below.
+ * Passed to the progressive-blur panel below.
  */
 const androidBlurMethod = Platform.OS === 'android' ? 'dimezisBlurView' : 'none';
 
@@ -33,19 +34,19 @@ export type EventCardProps = {
 };
 
 /**
- * Real blur is confined to the two small chips. It is deliberately *not*
- * used for the bottom scrim: blurring a large area of artwork only smears
- * the photo's own colours around, which reads as muddy, and a BlurView's
- * hard boundary shows as a crease across the card. A gradient does that job
- * cleanly and for free.
+ * Real blur is confined to the two small controls, which use the shared glass
+ * recipe from `ui/glass-button` — the same material as the detail page's Back
+ * button, so a chip reads identically wherever it lands.
  *
- * The chips pair their BlurView with an explicit white wash. Blur alone only
- * softens what is already behind it, so a chip over a blue sky blurs into a
- * blue chip; the wash is what makes them read as glass over any artwork.
+ * It is deliberately *not* used for the bottom scrim: blurring a large area of
+ * artwork only smears the photo's own colours around, which reads as muddy, and
+ * a BlurView's hard boundary shows as a crease across the card. A gradient does
+ * that job cleanly and for free.
  *
- * Note this still bends the app's "no BlurView in a list row" rule (see
+ * Note the controls still bend the app's "no BlurView in a list row" rule (see
  * `ui/glass.tsx`). It stays affordable because rails mount few cards at
- * once — `initialNumToRender=3`, `windowSize=5`, `removeClippedSubviews`.
+ * once — `initialNumToRender=3`, `windowSize=5`, `removeClippedSubviews` — and
+ * because they pass no `blurTarget`, so Android tints rather than sampling.
  */
 function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardProps) {
   const theme = useTheme();
@@ -86,36 +87,20 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
       )}
 
       <View style={styles.topRow}>
-        <View style={styles.priceChip}>
-          <BlurView
-            intensity={10}
-            tint="dark"
-            experimentalBlurMethod={androidBlurMethod}
-            style={[StyleSheet.absoluteFill, styles.chipSurface]}
-          />
-          <View style={[StyleSheet.absoluteFill, styles.chipWash, styles.chipSurface]} />
-          <Text variant="caption" style={styles.priceText} numberOfLines={1}>
-            {soldOut ? 'Sold out' : (priceText ?? '')}
-          </Text>
-        </View>
+        <GlassChip
+          label={soldOut ? 'Sold out' : (priceText ?? '')}
+          style={styles.priceChip}
+        />
 
-        <Touchable
-          accessibilityRole="button"
+        <GlassIconButton
+          icon="heart"
           accessibilityLabel={saved ? 'Remove from saved' : 'Save event'}
           accessibilityState={{ selected: saved }}
+          color={saved ? '#E11D48' : '#FFFFFF'}
+          size={36}
           haptic
           onPress={() => setSaved((value) => !value)}
-          pressedScale={0.88}
-          style={styles.heartButton}>
-          <BlurView
-            intensity={10}
-            tint="light"
-            experimentalBlurMethod={androidBlurMethod}
-            style={[StyleSheet.absoluteFill, styles.chipSurface]}
-          />
-          <View style={[StyleSheet.absoluteFill, styles.chipWash, styles.chipSurface]} />
-          <Ionicons name="heart" size={compact ? 16 : 18} color={saved ? '#E11D48' : '#FFFFFF'} />
-        </Touchable>
+        />
       </View>
 
       {/*
@@ -207,42 +192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  priceChip: {
-    borderRadius: Radius.pill,
-    borderColor: '#FFFFFF4C',
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 7,
-    maxWidth: '62%',
-    overflow: 'hidden',
-  },
-  heartButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  /**
-   * Applied to the blur/wash layers themselves. The parent's `overflow:
-   * hidden` is not enough: Android does not reliably clip a native BlurView
-   * surface to a rounded parent, so the blur leaks out as a square and the
-   * pill loses its edge. Rounding each layer makes the shape hold on both
-   * platforms.
-   */
-  chipSurface: { borderRadius: Radius.pill },
-  /** `bg-[#ffffff4c]` + `backdrop-blur-[30px]` from the Figma export. */
-  chipWash: { backgroundColor: 'rgba(255,255,255,0.30)' },
-  priceText: {
-    color: '#FFFFFF',
-    fontFamily: FontFamily.bold,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+  priceChip: { maxWidth: '62%' },
 
   /** 54% ≈ the Figma blob's top edge (453 of 981) relative to the frame. */
   panel: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '54%' },

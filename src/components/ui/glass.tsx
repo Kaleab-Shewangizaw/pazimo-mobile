@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { type ReactNode, memo } from 'react';
+import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { type ReactNode, type RefObject, memo } from 'react';
 import { Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
 
 import { Radius } from '@/constants/theme';
@@ -20,7 +20,14 @@ import { useTheme, useThemeName } from '@/hooks/use-theme';
  * Putting <Glass> in a list row is the single easiest way to make this app janky.
  */
 
-const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
+/**
+ * Two separate checks, both required. `isLiquidGlassAvailable` only reports that
+ * the app is *built* against the Liquid Glass design; several iOS 26 betas ship
+ * without the underlying API, where touching `GlassView` crashes. Expo added
+ * `isGlassEffectAPIAvailable` for exactly that gap (expo/expo#40911).
+ */
+export const hasLiquidGlass =
+  Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
 
 export type GlassProps = ViewProps & {
   children?: ReactNode;
@@ -30,7 +37,34 @@ export type GlassProps = ViewProps & {
   intensity?: number;
   radius?: number;
   bordered?: boolean;
+  /**
+   * Colour washed *into* the glass. Use this instead of stacking your own
+   * translucent `<View>` on top: an overlay sits above the native effect and
+   * flattens the lensing and specular highlights that make it read as glass,
+   * whereas `tintColor` is composited by the effect itself.
+   */
+  tint?: string;
+  /**
+   * Let the glass react to touch the way native iOS 26 chrome does — it warps
+   * and brightens around the finger. iOS 26+ only; a no-op elsewhere.
+   */
+  interactive?: boolean;
+  /**
+   * Ref to the `<BlurTargetView>` wrapping whatever should show through.
+   * Android-only, and mandatory there since SDK 57: a blur method without a
+   * target silently degrades to a flat tint (and warns). Point it at *static*
+   * content — a fixed backdrop, a hero photo — never at a scrolling subtree,
+   * which the blur would have to re-capture every frame.
+   */
+  blurTarget?: RefObject<View | null>;
 };
+
+/**
+ * SDK 31+ only. The pre-31 implementation is the one Expo flags as a
+ * performance risk, and `dimezisBlurViewSdk31Plus` falls back to a plain tint
+ * there rather than dragging the UI thread down.
+ */
+const ANDROID_BLUR = 'dimezisBlurViewSdk31Plus';
 
 function GlassImpl({
   children,
@@ -38,6 +72,9 @@ function GlassImpl({
   intensity = 40,
   radius = Radius.lg,
   bordered = true,
+  tint,
+  interactive = false,
+  blurTarget,
   style,
   ...rest
 }: GlassProps) {
@@ -53,17 +90,17 @@ function GlassImpl({
 
   // iOS 26+ renders true liquid glass natively — cheaper and better looking
   // than a BlurView, and it picks up the system's specular highlights.
-  if (liquidGlass) {
+  if (hasLiquidGlass) {
     return (
       <GlassView
         glassEffectStyle={variant}
         // Pinned rather than "auto": the app is dark-only, and this must not
         // drift if a user has their system appearance set to light.
         colorScheme="dark"
+        tintColor={tint}
+        isInteractive={interactive}
         style={[frame, style]}
-        {...rest}
-        // The native effect already draws its own edge treatment.
-        {...(bordered ? null : { borderWidth: 0 })}>
+        {...rest}>
         {children}
       </GlassView>
     );
@@ -76,7 +113,10 @@ function GlassImpl({
       <View
         style={[
           frame,
-          { backgroundColor: theme.glass, backdropFilter: `blur(${intensity / 2}px)` } as ViewStyle,
+          {
+            backgroundColor: tint ?? theme.glass,
+            backdropFilter: `blur(${intensity / 2}px)`,
+          } as ViewStyle,
           style,
         ]}
         {...rest}>
@@ -89,8 +129,15 @@ function GlassImpl({
     <BlurView
       intensity={intensity}
       tint={scheme === 'dark' ? 'dark' : 'light'}
+      // Naming a method with no target is worse than not asking for one: SDK 57
+      // warns and falls back anyway.
+      blurMethod={blurTarget ? ANDROID_BLUR : 'none'}
+      blurTarget={blurTarget}
       style={[frame, style]}
       {...rest}>
+      {/* No native tint to composite into, so the fallback paints it as a fill
+          under the content. */}
+      {tint ? <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} /> : null}
       {children}
     </BlurView>
   );
