@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useDeferredValue, useState } from 'react';
+import { useCallback, useDeferredValue, useRef, useState } from 'react';
 import {
   FlatList,
   type ListRenderItem,
@@ -11,30 +11,54 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { FilterSheet } from '@/components/discover/filter-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { EventCard } from '@/components/event/event-card';
 import { Glass } from '@/components/ui/glass';
+import { GLASS_TINT, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
+import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
-import { type SortOption, useDiscover } from '@/queries/discover';
+import { DEFAULT_FILTERS, activeFilterCount, useDiscover } from '@/queries/discover';
 import type { PazimoEvent } from '@/types/api';
 
 const keyExtractor = (event: PazimoEvent) => event._id;
+
+/**
+ * The floating search row, measured from its own paddings: `sm` top, a 42pt
+ * search bar, `sm` bottom. The list pads itself past this and the refresh
+ * spinner drops just below it.
+ */
+const HEADER_BLOCK_HEIGHT = 58;
+
+/**
+ * The field sits on glass now, not on an opaque fill, so its own furniture has
+ * to be white-on-dark like every other glass control rather than the muted grey
+ * that only worked against `surfaceMuted`.
+ */
+const PLACEHOLDER = 'rgba(255,255,255,0.55)';
 
 export default function DiscoverScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ category?: string }>();
 
+  // What the floating controls sample on Android — the static ambient backdrop.
+  const backdropRef = useRef<View>(null);
+
   const [query, setQuery] = useState('');
-  const [categoryId, setCategoryId] = useState<string | null>(params.category ?? null);
-  const [sort, setSort] = useState<SortOption>('newest');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    ...DEFAULT_FILTERS,
+    categoryId: params.category ?? null,
+  });
 
   // This is a tab screen, so it stays mounted once visited and the state
   // initialiser above only ever sees the *first* category param. Without this
@@ -45,7 +69,7 @@ export default function DiscoverScreen() {
   const [lastCategoryParam, setLastCategoryParam] = useState(params.category);
   if (params.category !== lastCategoryParam) {
     setLastCategoryParam(params.category);
-    setCategoryId(params.category ?? null);
+    setFilters((current) => ({ ...current, categoryId: params.category ?? null }));
   }
 
   // Keeps typing smooth: the list re-filters at a lower priority than the input.
@@ -53,10 +77,10 @@ export default function DiscoverScreen() {
 
   const categories = useCategories();
   const { results, isLoading, isError, error, refetch } = useDiscover({
+    ...filters,
     query: deferredQuery,
-    categoryId,
-    sort,
   });
+  const activeCount = activeFilterCount(filters);
 
   const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
     ({ item }) => (
@@ -67,27 +91,31 @@ export default function DiscoverScreen() {
     [],
   );
 
-  const toggleCategory = useCallback((id: string) => {
-    setCategoryId((current) => (current === id ? null : id));
-  }, []);
+  // The catalogue is one bounded fetch, so a pull re-pulls the whole thing —
+  // filtering and search run over it client-side and need no refetch of their own.
+  const { refreshing, onRefresh } = useRefresh(refetch, categories.refetch);
 
   return (
     <View style={styles.screen}>
-      <AmbientBackground />
-      <Glass
-        variant="regular"
-        intensity={60}
-        radius={0}
-        bordered={false}
-        style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-        <View style={[styles.searchBar, { backgroundColor: theme.surfaceMuted }]}>
-          <Ionicons name="search" size={18} color={theme.textMuted} />
+      <AmbientBackground blurTarget={backdropRef} />
+      {/* Bare, not a frosted bar. A glass control nested inside glass blurs the
+          bar rather than the page and flattens into a grey disc — the chips and
+          the field below only read as glass because nothing sits behind them. */}
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
+        <Glass
+          variant="clear"
+          intensity={28}
+          tint={GLASS_TINT}
+          radius={Radius.pill}
+          blurTarget={backdropRef}
+          style={styles.searchBar}>
+          <Ionicons name="search" size={18} color={PLACEHOLDER} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search events, venues, cities"
-            placeholderTextColor={theme.textMuted}
-            style={[styles.input, { color: theme.text }]}
+            placeholderTextColor={PLACEHOLDER}
+            style={styles.input}
             returnKeyType="search"
             autoCorrect={false}
             clearButtonMode="while-editing"
@@ -98,55 +126,48 @@ export default function DiscoverScreen() {
               accessibilityLabel="Clear search"
               onPress={() => setQuery('')}
               pressedScale={0.9}>
-              <Ionicons name="close-circle" size={18} color={theme.textMuted} />
+              <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
             </Touchable>
           ) : null}
-        </View>
+        </Glass>
 
-        <FlatList
-          horizontal
-          data={categories.data ?? []}
-          keyExtractor={(item) => item._id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-          renderItem={({ item }) => {
-            const active = item._id === categoryId;
-            return (
-              <Touchable
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => toggleCategory(item._id)}
-                pressedScale={0.95}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? theme.brand : theme.surfaceMuted,
-                    borderColor: active ? theme.brand : theme.hairline,
-                  },
-                ]}>
-                <Text
-                  variant="caption"
-                  style={{ color: active ? theme.onBrand : theme.textSecondary }}>
-                  {item.name}
-                </Text>
-              </Touchable>
-            );
-          }}
-          ListFooterComponent={
-            <Touchable
-              accessibilityRole="button"
-              accessibilityLabel={`Sort by ${sort === 'newest' ? 'soonest' : 'newest'}`}
-              onPress={() => setSort((s) => (s === 'newest' ? 'soonest' : 'newest'))}
-              pressedScale={0.95}
-              style={[styles.chip, styles.sortChip, { borderColor: theme.hairline }]}>
-              <Ionicons name="swap-vertical" size={13} color={theme.brand} />
-              <Text variant="caption" color="brand">
-                {sort === 'newest' ? 'Newest' : 'Soonest'}
+        {/* The badge is what replaces the chip row's visibility: with the
+            controls behind a sheet, this is the only thing telling you a filter
+            is narrowing the results. */}
+        <View>
+          <GlassIconButton
+            icon="options-outline"
+            accessibilityLabel={
+              activeCount ? `Filters, ${activeCount} applied` : 'Filters'
+            }
+            size={42}
+            onPress={() => setFiltersOpen(true)}
+            blurTarget={backdropRef}
+          />
+          {activeCount > 0 ? (
+            <View
+              style={[
+                styles.filterBadge,
+                { backgroundColor: theme.brand, borderColor: theme.background },
+              ]}
+              pointerEvents="none">
+              <Text variant="caption" style={{ color: theme.onBrand }}>
+                {activeCount}
               </Text>
-            </Touchable>
-          }
-        />
-      </Glass>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      <FilterSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        categories={categories.data}
+        filters={filters}
+        onChange={(patch) => setFilters((current) => ({ ...current, ...patch }))}
+        onReset={() => setFilters(DEFAULT_FILTERS)}
+        resultCount={results.length}
+      />
 
       <FlatList
         data={results}
@@ -156,9 +177,16 @@ export default function DiscoverScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
-          paddingTop: insets.top + 116,
+          paddingTop: insets.top + HEADER_BLOCK_HEIGHT + Spacing.lg,
           paddingBottom: tabBarClearance(insets.bottom),
         }}
+        refreshControl={
+          <PageRefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
+          />
+        }
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.skeletonList}>
@@ -178,7 +206,11 @@ export default function DiscoverScreen() {
               message={
                 query
                   ? `Nothing matches "${query}". Try a different search.`
-                  : 'There are no published events to show yet.'
+                  : activeCount
+                    ? // The filters live behind a sheet now, so an empty list has
+                      // to say why — otherwise it reads as "the app has nothing".
+                      'No events match these filters. Try widening them.'
+                    : 'There are no published events to show yet.'
               }
             />
           )
@@ -200,27 +232,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.md,
-  },
-  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    marginHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.md,
     height: 42,
-    borderRadius: Radius.pill,
   },
-  input: { flex: 1, fontSize: 15, padding: 0 },
-  chipRow: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+  input: { flex: 1, fontSize: 15, padding: 0, color: '#FFFFFF' },
+  filterBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
     borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // The ring is what separates the badge from the glass behind it.
+    borderWidth: 1.5,
   },
-  sortChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginLeft: Spacing.sm },
   item: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
   skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
 });

@@ -12,9 +12,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { loadAuthToken } from '@/api/client';
 import { Colors } from '@/constants/theme';
 import { queryClient } from '@/lib/query-client';
+import { useAuthStore } from '@/stores/use-auth-store';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,13 +43,15 @@ export default function RootLayout() {
     ComicRelief_700Bold,
   });
   const fontsReady = fontsLoaded || fontError != null;
+  const hydrate = useAuthStore((s) => s.hydrate);
 
   useEffect(() => {
     if (!fontsReady) return;
     // Rehydrate the session before the first screen paints, so an authenticated
-    // user never sees a signed-out flash.
-    loadAuthToken().finally(() => SplashScreen.hideAsync());
-  }, [fontsReady]);
+    // user never sees a signed-out flash — and so the first request out of the
+    // app already carries the bearer token.
+    hydrate().finally(() => SplashScreen.hideAsync());
+  }, [fontsReady, hydrate]);
 
   if (!fontsReady) return null;
 
@@ -65,6 +67,14 @@ export default function RootLayout() {
             }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="event/[id]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_right' }} />
+            {/* Fades rather than slides, and cannot be swiped away: the poll
+                running on this screen is what issues the ticket, so leaving it
+                by accident mid-payment has a real cost. */}
+            <Stack.Screen
+              name="checkout/[txn]"
+              options={{ animation: 'fade', gestureEnabled: false }}
+            />
           </Stack>
         </ThemeProvider>
       </QueryClientProvider>

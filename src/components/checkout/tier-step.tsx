@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
@@ -10,21 +10,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, isTierBuyable, tierUnitPrice } from '@/lib/pricing';
 import type { Currency, TicketTier } from '@/types/api';
 
-export function TicketSheet({
-  visible,
-  onClose,
-  tiers,
-  currency,
-  currencies,
-  onChangeCurrency,
-  selectedTierId,
-  onSelectTier,
-  quantity,
-  onChangeQuantity,
-  onContinue,
-}: {
-  visible: boolean;
-  onClose: () => void;
+/** Step one of the sheet: which ticket, and how many. */
+
+export type TierStepProps = {
   tiers: TicketTier[];
   currency: Currency;
   currencies: Currency[];
@@ -34,25 +22,25 @@ export function TicketSheet({
   quantity: number;
   onChangeQuantity: (quantity: number) => void;
   onContinue: () => void;
-}) {
+};
+
+function TierStepImpl({
+  tiers,
+  currency,
+  currencies,
+  onChangeCurrency,
+  selectedTierId,
+  onSelectTier,
+  quantity,
+  onChangeQuantity,
+  onContinue,
+}: TierStepProps) {
   const theme = useTheme();
   const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
   const total = selectedTier ? tierUnitPrice(selectedTier, currency) * quantity : 0;
 
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
-      <View style={styles.header}>
-        <Text variant="title">Select tickets</Text>
-        <Touchable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          onPress={onClose}
-          pressedScale={0.9}
-          style={[styles.closeButton, { backgroundColor: theme.surfaceMuted }]}>
-          <Ionicons name="close" size={18} color={theme.text} />
-        </Touchable>
-      </View>
-
+    <View>
       {currencies.length > 1 ? (
         <View style={[styles.currencyToggle, { backgroundColor: theme.surfaceMuted }]}>
           {currencies.map((code) => {
@@ -91,14 +79,12 @@ export function TicketSheet({
       </View>
 
       <Button
-        label={
-          selectedTier ? `Continue - ${formatPrice(total, currency)}` : 'Select a ticket'
-        }
+        label={selectedTier ? `Continue - ${formatPrice(total, currency)}` : 'Select a ticket'}
         disabled={!selectedTier}
         size="lg"
         onPress={onContinue}
       />
-    </BottomSheet>
+    </View>
   );
 }
 
@@ -230,19 +216,6 @@ function Stepper({
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   currencyToggle: {
     flexDirection: 'row',
     borderRadius: Radius.pill,
@@ -257,15 +230,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   tierList: { gap: Spacing.md, marginBottom: Spacing.lg },
-  tier: {
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-  },
-  tierTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
+  tier: { padding: Spacing.md, borderRadius: Radius.lg },
+  tierTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   tierMain: { flex: 1, gap: 2 },
   tierRight: { alignItems: 'flex-end', gap: Spacing.xs },
   qtyRow: {
@@ -290,3 +256,5 @@ const styles = StyleSheet.create({
   stepButtonDisabled: { opacity: 0.35 },
   stepValue: { minWidth: 22, textAlign: 'center', fontVariant: ['tabular-nums'] },
 });
+
+export const TierStep = memo(TierStepImpl);

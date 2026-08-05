@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useScrollToTop } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
@@ -14,11 +14,13 @@ import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
+import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { SectionHeader } from '@/components/ui/section';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useActivityEvents } from '@/queries/activities';
 import { useCategories } from '@/queries/categories';
@@ -32,7 +34,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const [refreshing, setRefreshing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -56,11 +57,8 @@ export default function HomeScreen() {
   }, [feed.data, activeCategory]);
   // const upcoming = (feed.data ?? []).slice(0, UPCOMING_COUNT);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await Promise.allSettled([categories.refetch(), feed.refetch()]);
-    setRefreshing(false);
-  }, [categories, feed]);
+  // Activities ride the same two caches, so refetching them covers the whole page.
+  const { refreshing, onRefresh } = useRefresh(categories.refetch, feed.refetch);
 
   const onEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) {
@@ -120,10 +118,9 @@ export default function HomeScreen() {
           },
         ]}
         refreshControl={
-          <RefreshControl
+          <PageRefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#FFFFFF"
             progressViewOffset={insets.top + HEADER_CONTENT_HEIGHT}
           />
         }>

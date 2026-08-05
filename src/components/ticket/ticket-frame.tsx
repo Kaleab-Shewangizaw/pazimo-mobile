@@ -1,0 +1,181 @@
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
+import { type ReactNode, memo, useEffect, useState } from 'react';
+import { Animated, Easing, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+
+import {
+  type TicketGeometry,
+  insetTicketPath,
+  tearLinePath,
+  ticketPath,
+} from '@/components/ticket/ticket-path';
+import { Radius } from '@/constants/theme';
+
+/**
+ * The card everything a ticket *is* gets drawn on: a real ticket silhouette,
+ * torn between the stub that carries the QR and the details below it.
+ *
+ * The same frame serves the wait and the ticket, which is the point — the light
+ * that runs its edge while a payment clears is running the outline of the thing
+ * being bought, and the flip at the end turns one object over rather than
+ * swapping two.
+ *
+ * The glow is not drawn along the path. It is an oversized gradient bar spun
+ * behind the card and masked to the silhouette, with the card's own face laid
+ * back on top so only a hairline escapes at the border. That keeps the whole
+ * effect on one native-driver transform — no per-frame path maths — which
+ * matters because this animates while a network poll is running.
+ */
+
+const SPIN_DURATION = 2200;
+
+/** Thickness of the lit edge. */
+const RING = 1.6;
+
+/** Radius of the bite out of each side at the tear. */
+const NOTCH = 15;
+
+/** White core with a soft falloff either side, so it reads as a travelling glow. */
+const BEAM = [
+  'rgba(255,255,255,0)',
+  'rgba(255,255,255,0.35)',
+  '#FFFFFF',
+  'rgba(255,255,255,0)',
+] as const;
+
+export type TicketFrameProps = {
+  /** The upper half — title and QR. Its height places the tear. */
+  stub: ReactNode;
+  /** The lower half, below the perforation. */
+  details?: ReactNode;
+  /** Runs the light around the edge. */
+  glowing?: boolean;
+  faceColor?: string;
+  /** Resting border, and what the beam travels over. */
+  idleColor?: string;
+};
+
+function TicketFrameImpl({
+  stub,
+  details,
+  glowing = false,
+  faceColor = 'rgba(16,16,20,0.94)',
+  idleColor = 'rgba(255,255,255,0.12)',
+}: TicketFrameProps) {
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const [stubHeight, setStubHeight] = useState(0);
+  const [spin] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!glowing) return;
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: SPIN_DURATION,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowing, spin]);
+
+  const onBox = (e: LayoutChangeEvent) =>
+    setBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
+
+  const geometry: TicketGeometry = {
+    width: box.width,
+    height: box.height,
+    radius: Radius.xl,
+    // Halfway through the gap between the two halves, so the perforation sits
+    // in open space rather than against either block's last line.
+    tearY: stubHeight,
+    notch: NOTCH,
+  };
+
+  // Nothing can be drawn until the content has told us how big it is; the frame
+  // is transparent for that one frame rather than flashing a wrong shape.
+  const ready = box.width > 0 && box.height > 0;
+  // The bar has to cover the card's diagonal at every angle, or a corner falls
+  // dark as it sweeps past.
+  const beamSize = Math.hypot(box.width, box.height) * 1.2;
+
+  const face = ready ? (
+    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Path
+        d={insetTicketPath(geometry, RING)}
+        transform={`translate(${RING}, ${RING})`}
+        fill={faceColor}
+      />
+      {details ? (
+        <Path
+          d={tearLinePath(geometry)}
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth={1.5}
+          strokeDasharray="5 6"
+          fill="none"
+        />
+      ) : null}
+    </Svg>
+  ) : null;
+
+  return (
+    <View style={styles.frame} onLayout={onBox}>
+      {ready && glowing ? (
+        <MaskedView
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+          maskElement={
+            <Svg style={StyleSheet.absoluteFill}>
+              <Path d={ticketPath(geometry)} fill="#000000" />
+            </Svg>
+          }>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: idleColor }]} />
+          <Animated.View
+            style={[
+              styles.beam,
+              {
+                width: beamSize,
+                height: beamSize,
+                marginLeft: -beamSize / 2,
+                marginTop: -beamSize / 2,
+                transform: [
+                  {
+                    rotate: spin.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '360deg'],
+                    }),
+                  },
+                ],
+              },
+            ]}>
+            <LinearGradient
+              colors={BEAM}
+              locations={[0, 0.42, 0.5, 0.58]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        </MaskedView>
+      ) : ready ? (
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Path d={ticketPath(geometry)} fill={idleColor} />
+        </Svg>
+      ) : null}
+
+      {face}
+
+      <View onLayout={(e) => setStubHeight(e.nativeEvent.layout.height)}>{stub}</View>
+      {details}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  frame: { width: '100%' },
+  beam: { position: 'absolute', left: '50%', top: '50%' },
+});
+
+export const TicketFrame = memo(TicketFrameImpl);

@@ -6,6 +6,11 @@ const weekdayLong = new Intl.DateTimeFormat('en-US', {
 });
 const monthShort = new Intl.DateTimeFormat('en-US', { month: 'short' });
 const weekdayShort = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+const fullDate = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
 const MS_PER_DAY = 86_400_000;
 
@@ -41,6 +46,15 @@ export function formatDateBadge(value?: string | null): { month: string; day: st
 export function formatDateTime(startDate?: string | null, startTime?: string | null): string {
   const parts = [formatLongDate(startDate), startTime?.trim()].filter(Boolean);
   return parts.join(' · ');
+}
+
+/**
+ * "Jan 25, 2026 · 6:00 PM" — the year is spelled out because a ticket is kept
+ * and looked at long after the feed's relative dates stop making sense.
+ */
+export function formatTicketDate(startDate?: string | null, startTime?: string | null): string {
+  const date = parse(startDate);
+  return [date ? fullDate.format(date) : null, startTime?.trim()].filter(Boolean).join(' · ');
 }
 
 export function isPast(value?: string | null): boolean {

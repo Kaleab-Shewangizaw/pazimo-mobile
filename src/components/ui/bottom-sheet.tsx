@@ -1,5 +1,16 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { Animated, Dimensions, Modal, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Dimensions,
+  Keyboard,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/glass';
@@ -19,6 +30,10 @@ import { useTheme } from '@/hooks/use-theme';
  */
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+/** Page still visible above a full-height sheet, so it never reads as a screen. */
+const TOP_GAP = Spacing.xxl;
+/** The handle strip: `Spacing.sm` above and below a 4pt bar. */
+const DRAG_AREA_HEIGHT = Spacing.sm * 2 + 4;
 const DISMISS_DISTANCE = 120;
 /** PanResponder velocity is px/ms, so ~1.2 is a brisk downward flick. */
 const DISMISS_VELOCITY = 1.2;
@@ -54,6 +69,23 @@ export function BottomSheet({
   // ever touched from gesture callbacks. A non-ref container sidesteps that
   // check entirely while behaving identically.
   const [dragStart] = useState(() => ({ value: 0 }));
+  // A sheet with fields in it has to get out of the keyboard's way. RN's
+  // `adjustResize` doesn't reach inside a `statusBarTranslucent` Modal, so the
+  // lift is measured from the keyboard itself.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const shown = Keyboard.addListener(showEvent, (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hidden = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -112,6 +144,13 @@ export function BottomSheet({
 
   if (!mounted) return null;
 
+  // Tall content scrolls inside the sheet rather than pushing its top edge off
+  // the screen — and the ceiling drops as the keyboard rises, so the field
+  // being typed into stays in view. The drag strip is the sheet's only other
+  // row, so it is what separates the sheet's budget from the scroller's.
+  const contentCeiling =
+    (maxHeight ?? SCREEN_HEIGHT - insets.top - TOP_GAP) - keyboardHeight - DRAG_AREA_HEIGHT;
+
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdrop }]}>
@@ -119,25 +158,32 @@ export function BottomSheet({
       </Animated.View>
 
       <Animated.View
-        style={[styles.sheetWrap, { transform: [{ translateY }] }, maxHeight ? { maxHeight } : null]}>
+        style={[
+          styles.sheetWrap,
+          { transform: [{ translateY }], paddingBottom: keyboardHeight },
+        ]}>
         <Glass
           variant="regular"
           intensity={80}
           radius={Radius.xl}
-          style={[
-            styles.sheet,
-            {
-              paddingBottom: insets.bottom + Spacing.lg,
-              borderBottomLeftRadius: 0,
-              borderBottomRightRadius: 0,
-            },
-          ]}>
+          style={styles.sheet}>
           {/* Only the handle is a drag target — the rest of the sheet stays
               tappable (tier rows, buttons) without fighting the responder. */}
           <View {...panResponder.panHandlers} style={styles.dragArea}>
             <View style={[styles.handle, { backgroundColor: theme.hairline }]} />
           </View>
-          {children}
+          <ScrollView
+            style={{ maxHeight: Math.max(contentCeiling, 0) }}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: (keyboardHeight > 0 ? 0 : insets.bottom) + Spacing.lg },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            bounces={false}>
+            {children}
+          </ScrollView>
         </Glass>
       </Animated.View>
     </Modal>
@@ -147,7 +193,10 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(2,2,3,0.6)' },
   sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  sheet: { paddingHorizontal: Spacing.lg },
+  // The bottom corners meet the screen edge, so rounding them would show the
+  // page through two notches under the sheet.
+  sheet: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  content: { paddingHorizontal: Spacing.lg },
   dragArea: { paddingVertical: Spacing.sm, alignItems: 'center' },
   handle: { width: 36, height: 4, borderRadius: Radius.pill },
 });

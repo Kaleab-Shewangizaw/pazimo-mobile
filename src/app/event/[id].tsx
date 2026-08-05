@@ -2,30 +2,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurTargetView } from 'expo-blur';
 import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
-import { TicketSheet } from '@/components/event/ticket-sheet';
+import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
+import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { SectionHeader } from '@/components/ui/section';
 import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
+import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
-import { availableCurrencies, isSoldOut } from '@/lib/pricing';
+import { isSoldOut } from '@/lib/pricing';
 import { useEvent } from '@/queries/events';
-import type { Currency } from '@/types/api';
 
 /** Floating chrome — the scroll starts below it. */
 const HEADER_HEIGHT = 44;
@@ -68,7 +69,6 @@ function ExpandToggle({
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
-  const router = useRouter();
   const goBack = useGoBack();
   const insets = useSafeAreaInsets();
 
@@ -77,9 +77,8 @@ export default function EventDetailScreen() {
   const backdropRef = useRef<View>(null);
 
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
-  const [currency, setCurrency] = useState<Currency | null>(null);
-  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  // Tier, currency, quantity and payment details all live inside the sheet —
+  // this page only decides whether it is open.
   const [sheetVisible, setSheetVisible] = useState(false);
   // UI-only for now — there is no favorites endpoint yet, so the heart does
   // not survive leaving the screen.
@@ -101,12 +100,6 @@ export default function EventDetailScreen() {
     descLines !== null
       ? descLines > DESC_PREVIEW_LINES
       : description.length > 180 || (description.match(/\n/g)?.length ?? 0) >= DESC_PREVIEW_LINES;
-
-  const currencies = useMemo(
-    () => (event ? availableCurrencies(event) : (['ETB'] as Currency[])),
-    [event],
-  );
-  const activeCurrency = currency ?? currencies[0];
 
   const tiers = event?.ticketTypes ?? [];
   const soldOut = event ? isSoldOut(event) : false;
@@ -140,6 +133,10 @@ export default function EventDetailScreen() {
       // User dismissed the sheet; nothing to recover from.
     });
   }, [event]);
+
+  // Worth pulling on: tier inventory and sold-out state are the parts of this
+  // page most likely to have moved since it was cached.
+  const { refreshing, onRefresh } = useRefresh(refetch);
 
   // Nothing shows until data AND artwork are in — a spinner on plain
   // background, then the whole composition lands in one frame instead of
@@ -188,7 +185,14 @@ export default function EventDetailScreen() {
             paddingTop: insets.top + Spacing.sm + HEADER_HEIGHT + POSTER_TOP,
             paddingBottom: insets.bottom + BUY_BAR_HEIGHT + Spacing.lg,
           },
-        ]}>
+        ]}
+        refreshControl={
+          <PageRefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressViewOffset={insets.top + Spacing.sm + HEADER_HEIGHT}
+          />
+        }>
         {event ? (
           <>
             <View style={styles.posterBlock}>
@@ -384,26 +388,10 @@ export default function EventDetailScreen() {
       ) : null}
 
       {event ? (
-        <TicketSheet
+        <CheckoutSheet
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
-          tiers={tiers}
-          currency={activeCurrency}
-          currencies={currencies}
-          onChangeCurrency={setCurrency}
-          selectedTierId={selectedTierId}
-          onSelectTier={(tierId) => {
-            setSelectedTierId(tierId);
-            setQuantity(1);
-          }}
-          quantity={quantity}
-          onChangeQuantity={setQuantity}
-          onContinue={() => {
-            setSheetVisible(false);
-            router.push(
-              `/checkout/${event._id}?tier=${selectedTierId}&currency=${activeCurrency}&qty=${quantity}`,
-            );
-          }}
+          event={event}
         />
       ) : null}
 
