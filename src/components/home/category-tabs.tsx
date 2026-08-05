@@ -8,7 +8,11 @@ import type { Category } from '@/types/api';
 
 type Tab = { id: string | null; name: string };
 
-const ALL_TAB: Tab = { id: null, name: 'All' };
+/**
+ * The leading tab is a shelf, not an "everything" escape hatch: `null` means
+ * *featured*, so there is no longer any tab that shows the whole feed.
+ */
+const FEATURED_TAB: Tab = { id: null, name: 'Featured' };
 
 /**
  * Plain text tabs, not chips — weight and opacity carry the active state,
@@ -25,7 +29,7 @@ function CategoryTabsImpl({
   onChange: (id: string | null) => void;
 }) {
   const tabs = useMemo<Tab[]>(
-    () => [ALL_TAB, ...(categories ?? []).map((c) => ({ id: c._id, name: c.name }))],
+    () => [FEATURED_TAB, ...(categories ?? []).map((c) => ({ id: c._id, name: c.name }))],
     [categories],
   );
 
@@ -55,7 +59,7 @@ function CategoryTabsImpl({
     <FlatList
       horizontal
       data={tabs}
-      keyExtractor={(item) => item.id ?? 'all'}
+      keyExtractor={(item) => item.id ?? 'featured'}
       renderItem={renderItem}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.content}

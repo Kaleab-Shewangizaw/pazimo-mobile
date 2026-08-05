@@ -47,12 +47,17 @@ export default function HomeScreen() {
   const feed = useEventFeed();
   const activities = useActivityEvents();
 
-  // The API has no category filter on any event route, so this runs
-  // client-side over whatever pages have been fetched so far — same stopgap
+  // The API has no category *or* featured filter on any event route, so both
+  // run client-side over whatever pages have been fetched so far — same stopgap
   // `useDiscover` already relies on.
+  //
+  // `activeCategory === null` is the Featured shelf, not "unfiltered": there is
+  // no tab that shows the whole feed any more.
   const filteredEvents = useMemo(() => {
     const events = feed.data ?? [];
-    return activeCategory ? events.filter((event) => categoryIdOf(event) === activeCategory) : events;
+    return activeCategory
+      ? events.filter((event) => categoryIdOf(event) === activeCategory)
+      : events.filter((event) => event.isFeatured);
   }, [feed.data, activeCategory]);
   // const upcoming = (feed.data ?? []).slice(0, UPCOMING_COUNT);
 
@@ -167,7 +172,11 @@ export default function HomeScreen() {
             <EmptyState
               icon="calendar-outline"
               title="No events here"
-              message="Try a different category."
+              message={
+                activeCategory
+                  ? 'Try a different category.'
+                  : 'Nothing is featured right now — try a category.'
+              }
             />
           </View>
         )}
