@@ -13,11 +13,15 @@ import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTicketDownloadQueue } from '@/hooks/use-ticket-download';
-import { useMyTickets, useTicketCovers } from '@/queries/tickets';
-import type { Ticket } from '@/types/api';
+import { type TicketGroup, useTicketGroups } from '@/queries/tickets';
 
 /**
- * Every ticket this person holds, newest first.
+ * Every event this person holds tickets to, newest first.
+ *
+ * One row per event, not per ticket. Buying twice for the same night is two
+ * admissions with two QR codes, but it is still one thing on your calendar —
+ * listing it twice makes the list look like a ledger instead of a wallet. The
+ * admissions live behind the row, swipeable once it's open.
  *
  * Deliberately uncategorised. Filters exist to cut a list down to something
  * findable, and nobody holds enough tickets for that to be the problem — the
@@ -28,21 +32,19 @@ export default function TicketsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { tickets, isLoading, isError, error, refetch } = useMyTickets();
-  const covers = useTicketCovers(tickets);
+  const { groups, isLoading, isError, error, refetch } = useTicketGroups();
   const { refreshing, onRefresh } = useRefresh(refetch);
   const { posterRef, pending, request, busyTicketId } = useTicketDownloadQueue();
 
   const renderItem = useCallback(
-    ({ item }: { item: Ticket }) => (
+    ({ item }: { item: TicketGroup }) => (
       <TicketStub
-        ticket={item}
-        cover={covers[item.event._id]}
+        group={item}
         onDownload={request}
-        downloading={busyTicketId === item._id}
+        downloading={item.tickets.some((ticket) => ticket._id === busyTicketId)}
       />
     ),
-    [request, busyTicketId, covers],
+    [request, busyTicketId],
   );
 
   const topPadding = insets.top + HEADER_CONTENT_HEIGHT + Spacing.lg;
@@ -52,14 +54,14 @@ export default function TicketsScreen() {
       <AmbientBackground />
       <GlassHeader title="Tickets" />
 
-      {isLoading && tickets.length === 0 ? (
+      {isLoading && groups.length === 0 ? (
         <View style={[styles.centered, { paddingTop: topPadding }]}>
           <ActivityIndicator size="large" color="#FFFFFF" />
         </View>
       ) : (
         <FlatList
-          data={tickets}
-          keyExtractor={(ticket) => ticket._id}
+          data={groups}
+          keyExtractor={(group) => group.key}
           renderItem={renderItem}
           contentContainerStyle={[
             styles.list,

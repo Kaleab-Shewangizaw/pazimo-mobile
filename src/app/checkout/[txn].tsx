@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, Easing, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,7 +11,7 @@ import { TicketScreen } from '@/components/ticket/ticket-screen';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { usePaymentWatcher } from '@/hooks/use-payment-watcher';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -100,15 +100,7 @@ export default function CheckoutScreen() {
         <TicketScreen
           tickets={tickets}
           onBack={toTickets}
-          backLabel="Go to your tickets"
-          footer={
-            <Button
-              label="See all my tickets"
-              variant="secondary"
-              onPress={toTickets}
-              style={styles.wide}
-            />
-          }>
+          backLabel="Go to your tickets">
           {(body) => (
             <Animated.View
               style={{
@@ -161,6 +153,7 @@ function WaitingOverlay({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const backdrop = useRef<View>(null);
   const failure = phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
 
   return (
@@ -172,7 +165,7 @@ function WaitingOverlay({
         },
       ]}
       pointerEvents={phase === 'issued' ? 'none' : 'auto'}>
-      <AmbientBackground />
+      <AmbientBackground blurTarget={backdrop} />
 
       <View style={[styles.stage, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Animated.View
@@ -191,46 +184,34 @@ function WaitingOverlay({
               ],
             },
           ]}>
-          {/* The same silhouette the ticket arrives on, so the flip at the end
-              turns one object over instead of trading a box for a ticket. */}
+          {/* Empty on purpose. The wait has nothing to report that the buyer
+              doesn't already know — they are staring at their own phone waiting
+              for a prompt — so it is the outline of the ticket they are buying,
+              full size, with the light going round it. The flip at the end then
+              turns *that* object over rather than trading a notice for a ticket.
+              Failures are the exception: those have to say what went wrong. */}
           <TicketFrame
+            fill
+            glass
+            blurTarget={backdrop}
             glowing={phase === 'waiting'}
             stub={
-              <View style={styles.cardBody}>
-                {failure ? (
-                  <>
-                    <Ionicons name={failure.icon} size={40} color={theme.text} />
-                    <Text variant="title" style={styles.centered}>
-                      {failure.title}
-                    </Text>
-                    <Text variant="small" color="textSecondary" style={styles.centered}>
-                      {message ??
-                        'We stopped waiting for this payment. If it went through, your ticket will be in the Tickets tab.'}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <View style={[styles.plate, { borderColor: theme.glassBorder }]}>
-                      <Ionicons name="qr-code-outline" size={52} color="rgba(255,255,255,0.22)" />
-                    </View>
-                    <Text variant="title" style={styles.centered}>
-                      Confirming your payment
-                    </Text>
-                    <Text variant="small" color="textSecondary" style={styles.centered}>
-                      Approve the prompt on your phone. Your ticket appears here the moment it
-                      clears.
-                    </Text>
-                  </>
-                )}
-              </View>
+              failure ? (
+                <View style={styles.cardBody}>
+                  <Ionicons name={failure.icon} size={40} color={theme.text} />
+                  <Text variant="title" style={styles.centered}>
+                    {failure.title}
+                  </Text>
+                  <Text variant="small" color="textSecondary" style={styles.centered}>
+                    {message ??
+                      'We stopped waiting for this payment. If it went through, your ticket will be in the Tickets tab.'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.blank} />
+              )
             }
-            details={
-              <View style={styles.cardFooter}>
-                <Text variant="caption" color="textMuted" style={styles.centered}>
-                  {failure ? 'No ticket was issued' : 'Do not close this screen'}
-                </Text>
-              </View>
-            }
+            details={<View style={styles.cardFooter} />}
           />
         </Animated.View>
 
@@ -267,26 +248,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     gap: Spacing.xl,
   },
-  card: { width: '100%' },
+  card: { flex: 1, width: '100%' },
+  blank: { flex: 1 },
   cardBody: {
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xxl,
-    paddingBottom: Spacing.xl,
-  },
-  cardFooter: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
-  plate: {
-    width: 132,
-    height: 132,
-    borderRadius: Radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
   },
+  // Matched to the height of the real ticket's three detail rows, so the tear
+  // lands in the same place before and after the flip.
+  cardFooter: { height: 152 },
   centered: { textAlign: 'center' },
   actions: { gap: Spacing.xs },
   wide: { width: '100%' },

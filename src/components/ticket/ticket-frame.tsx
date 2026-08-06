@@ -1,15 +1,17 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import { type ReactNode, memo, useEffect, useState } from 'react';
+import { type ReactNode, type RefObject, memo, useEffect, useState } from 'react';
 import { Animated, Easing, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import {
   type TicketGeometry,
-  insetTicketPath,
+  insetGeometry,
   tearLinePath,
+  ticketFootPath,
   ticketPath,
 } from '@/components/ticket/ticket-path';
+import { Glass } from '@/components/ui/glass';
 import { Radius } from '@/constants/theme';
 
 /**
@@ -49,8 +51,21 @@ export type TicketFrameProps = {
   stub: ReactNode;
   /** The lower half, below the perforation. */
   details?: ReactNode;
+  /**
+   * Artwork for the lower half, masked to the torn edge so it fills the foot
+   * without paving over the notches.
+   */
+  detailsBackground?: ReactNode;
   /** Runs the light around the edge. */
   glowing?: boolean;
+  /** Stretches the card to its parent, and the stub to whatever is left over. */
+  fill?: boolean;
+  /**
+   * Frost the face instead of filling it. Real backdrop blur, so on Android it
+   * needs a `blurTarget` to have anything to sample.
+   */
+  glass?: boolean;
+  blurTarget?: RefObject<View | null>;
   faceColor?: string;
   /** Resting border, and what the beam travels over. */
   idleColor?: string;
@@ -59,7 +74,11 @@ export type TicketFrameProps = {
 function TicketFrameImpl({
   stub,
   details,
+  detailsBackground,
   glowing = false,
+  fill = false,
+  glass = false,
+  blurTarget,
   faceColor = 'rgba(16,16,20,0.94)',
   idleColor = 'rgba(255,255,255,0.12)',
 }: TicketFrameProps) {
@@ -88,11 +107,11 @@ function TicketFrameImpl({
     width: box.width,
     height: box.height,
     radius: Radius.xl,
-    // Halfway through the gap between the two halves, so the perforation sits
-    // in open space rather than against either block's last line.
     tearY: stubHeight,
     notch: NOTCH,
   };
+  const face = insetGeometry(geometry, RING);
+  const shift = `translate(${RING}, ${RING})`;
 
   // Nothing can be drawn until the content has told us how big it is; the frame
   // is transparent for that one frame rather than flashing a wrong shape.
@@ -101,33 +120,19 @@ function TicketFrameImpl({
   // dark as it sweeps past.
   const beamSize = Math.hypot(box.width, box.height) * 1.2;
 
-  const face = ready ? (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Path
-        d={insetTicketPath(geometry, RING)}
-        transform={`translate(${RING}, ${RING})`}
-        fill={faceColor}
-      />
-      {details ? (
-        <Path
-          d={tearLinePath(geometry)}
-          stroke="rgba(255,255,255,0.22)"
-          strokeWidth={1.5}
-          strokeDasharray="5 6"
-          fill="none"
-        />
-      ) : null}
-    </Svg>
-  ) : null;
+  // Sizes are passed explicitly rather than left to `absoluteFill`: without a
+  // viewBox the path's numbers are already in points, and an SVG that has to
+  // infer its own box from layout is the one that renders empty on Android.
+  const svgSize = { width: box.width, height: box.height };
 
   return (
-    <View style={styles.frame} onLayout={onBox}>
+    <View style={[styles.frame, fill && styles.filled]} onLayout={onBox}>
       {ready && glowing ? (
         <MaskedView
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
           maskElement={
-            <Svg style={StyleSheet.absoluteFill}>
+            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
               <Path d={ticketPath(geometry)} fill="#000000" />
             </Svg>
           }>
@@ -160,14 +165,65 @@ function TicketFrameImpl({
           </Animated.View>
         </MaskedView>
       ) : ready ? (
-        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
           <Path d={ticketPath(geometry)} fill={idleColor} />
         </Svg>
       ) : null}
 
-      {face}
+      {ready && glass ? (
+        <MaskedView
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+          maskElement={
+            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
+              <Path d={ticketPath(face)} transform={shift} fill="#000000" />
+            </Svg>
+          }>
+          <Glass
+            intensity={26}
+            radius={0}
+            bordered={false}
+            blurTarget={blurTarget}
+            tint="rgba(255,255,255,0.05)"
+            style={StyleSheet.absoluteFill}
+          />
+        </MaskedView>
+      ) : ready ? (
+        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Path d={ticketPath(face)} transform={shift} fill={faceColor} />
+        </Svg>
+      ) : null}
 
-      <View onLayout={(e) => setStubHeight(e.nativeEvent.layout.height)}>{stub}</View>
+      {ready && detailsBackground ? (
+        <MaskedView
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+          maskElement={
+            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
+              <Path d={ticketFootPath(face)} transform={shift} fill="#000000" />
+            </Svg>
+          }>
+          {detailsBackground}
+        </MaskedView>
+      ) : null}
+
+      {ready && details ? (
+        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Path
+            d={tearLinePath(geometry)}
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth={1.5}
+            strokeDasharray="5 6"
+            fill="none"
+          />
+        </Svg>
+      ) : null}
+
+      <View
+        style={fill ? styles.filled : undefined}
+        onLayout={(e) => setStubHeight(e.nativeEvent.layout.height)}>
+        {stub}
+      </View>
       {details}
     </View>
   );
@@ -175,6 +231,7 @@ function TicketFrameImpl({
 
 const styles = StyleSheet.create({
   frame: { width: '100%' },
+  filled: { flex: 1 },
   beam: { position: 'absolute', left: '50%', top: '50%' },
 });
 

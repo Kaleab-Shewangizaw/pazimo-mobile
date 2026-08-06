@@ -204,14 +204,18 @@ export function useTicketGroups() {
 export function useTicketGroup(ticketId: string | undefined) {
   const { tickets, isLoading: listLoading } = useMyTickets();
 
-  const mine = tickets.filter(
-    (ticket) => ticket.event._id && ticket.event._id === findEventId(tickets, ticketId),
-  );
-  const inList = mine.length > 0;
+  const held = ticketId ? tickets.find((ticket) => ticket.ticketId === ticketId) : undefined;
+  // A ticket whose event has been deleted has nothing to be grouped with, so it
+  // stands alone rather than pooling with every other orphan.
+  const mine = held
+    ? held.event._id
+      ? tickets.filter((ticket) => ticket.event._id === held.event._id)
+      : [held]
+    : [];
 
-  const single = useTicket(inList ? undefined : ticketId);
+  const single = useTicket(held ? undefined : ticketId);
 
-  const group = inList ? mine : (single.data ?? []);
+  const group = held ? mine : (single.data ?? []);
   const index = Math.max(
     0,
     group.findIndex((ticket) => ticket.ticketId === ticketId),
@@ -220,14 +224,9 @@ export function useTicketGroup(ticketId: string | undefined) {
   return {
     tickets: group,
     initialIndex: index,
-    isLoading: inList ? false : listLoading || single.isLoading,
-    isError: !inList && single.isError,
+    isLoading: held ? false : listLoading || single.isLoading,
+    isError: !held && single.isError,
     error: single.error,
     refetch: single.refetch,
   };
-}
-
-function findEventId(tickets: Ticket[], ticketId: string | undefined): string | undefined {
-  if (!ticketId) return undefined;
-  return tickets.find((ticket) => ticket.ticketId === ticketId)?.event._id || undefined;
 }

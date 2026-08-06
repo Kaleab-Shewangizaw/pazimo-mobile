@@ -62,14 +62,57 @@ export function ticketPath({ width, height, radius, tearY, notch }: TicketGeomet
  * Note the notch grows rather than shrinks: it is a hole, so moving the
  * boundary into the material moves that arc *away* from its own centre.
  */
-export function insetTicketPath(geometry: TicketGeometry, inset: number): string {
-  return ticketPath({
+export function insetGeometry(geometry: TicketGeometry, inset: number): TicketGeometry {
+  return {
     width: geometry.width - inset * 2,
     height: geometry.height - inset * 2,
     radius: geometry.radius - inset,
     tearY: geometry.tearY - inset,
     notch: geometry.notch + inset,
-  });
+  };
+}
+
+export function insetTicketPath(geometry: TicketGeometry, inset: number): string {
+  return ticketPath(insetGeometry(geometry, inset));
+}
+
+/**
+ * Everything below the tear: the stub's counterfoil, cut off at the waist.
+ *
+ * Used to mask artwork into the lower half without it spilling into the notches
+ * — the bite is only half-eaten at that height, and a plain rounded rectangle
+ * would fill the other half back in and lose the shape.
+ */
+export function ticketFootPath({
+  width,
+  height,
+  radius,
+  tearY,
+  notch,
+}: TicketGeometry): string {
+  const w = r2(width);
+  const h = r2(height);
+  const c = r2(Math.max(0, Math.min(radius, w / 2, h / 2)));
+  const n = r2(Math.max(0, Math.min(notch, w / 2)));
+  const y = r2(Math.max(c + n, Math.min(tearY, h - c - n)));
+
+  // The cut runs between the deepest points of the two notches, then follows the
+  // outline round — so these arcs are literally the lower halves of the same
+  // notches `ticketPath` traces, down to the sweep flag.
+  return [
+    `M${n},${y}`,
+    `H${r2(w - n)}`,
+    n > 0 ? `A${n},${n} 0 0 0 ${w},${r2(y + n)}` : '',
+    `V${r2(h - c)}`,
+    `A${c},${c} 0 0 1 ${r2(w - c)},${h}`,
+    `H${c}`,
+    `A${c},${c} 0 0 1 0,${r2(h - c)}`,
+    `V${r2(y + n)}`,
+    n > 0 ? `A${n},${n} 0 0 0 ${n},${y}` : '',
+    'Z',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** The perforation itself, drawn between the two notches. */

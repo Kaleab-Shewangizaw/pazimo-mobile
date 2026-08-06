@@ -168,7 +168,7 @@ export const TicketPoster = forwardRef<Svg, TicketPosterProps>(function TicketPo
         fontSize={LABEL_SIZE}
         fontFamily={FontFamily.regular}
         textAnchor="middle">
-        {`Ticket: ${ticket.ticketId}`}
+        {/* {`Ticket: ${ticket.ticketId}`} */}
       </SvgText>
 
       <Rect x={plateX} y={plateY} width={PLATE} height={PLATE} rx={40} fill="#FFFFFF" />

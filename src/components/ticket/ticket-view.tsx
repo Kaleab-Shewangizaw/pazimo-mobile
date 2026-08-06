@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
@@ -8,6 +10,7 @@ import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatTicketDate } from '@/lib/date';
+import { eventCoverUrl } from '@/lib/media';
 import { formatPrice } from '@/lib/pricing';
 import { ticketQrPayload } from '@/lib/qr';
 import type { Ticket } from '@/types/api';
@@ -44,9 +47,40 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
   const venue =
     [ticket.event.location?.address, ticket.event.location?.city].filter(Boolean).join(', ') ||
     'Announced by the organizer';
+  const cover = eventCoverUrl(ticket.event.coverImages);
 
   return (
     <TicketFrame
+      detailsBackground={
+        cover ? (
+          <>
+            {/* Frosted at decode rather than by a BlurView. The artwork never
+                moves, so there is nothing for a live backdrop blur to track —
+                and the pager mounts every ticket in the group at once, which is
+                exactly where real blur views start costing frames. */}
+            <Image
+              source={{ uri: cover }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              blurRadius={18}
+              transition={220}
+              cachePolicy="memory-disk"
+              recyclingKey={ticket._id}
+            />
+            {/* Darkest under the text column and clearing toward the right, so
+                the artwork stays legible as artwork where nothing is read over it. */}
+            <LinearGradient
+              colors={['rgba(10,10,12,0.9)', 'rgba(10,10,12,0.7)', 'rgba(10,10,12,0.42)']}
+              locations={[0, 0.6, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0.4 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {/* The specular lift that separates glass from a dark scrim. */}
+            <View style={styles.sheen} />
+          </>
+        ) : null
+      }
       stub={
         <View style={styles.stub}>
           <Text variant="heading" role="heading" style={styles.title}>
@@ -55,9 +89,9 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
           <Text variant="small" color="textSecondary" style={styles.centered}>
             Show this QR code at the event entrance
           </Text>
-          <Text variant="caption" color="textMuted" style={styles.centered}>
+          {/* <Text variant="caption" color="textMuted" style={styles.centered}>
             Ticket: {ticket.ticketId}
-          </Text>
+          </Text> */}
 
           <View style={[styles.plate, { width: plate, height: plate }]}>
             <PazimoQr value={payload} size={plate * QR_SHARE} />
@@ -162,6 +196,15 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: Radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+
+  sheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
 
   details: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
