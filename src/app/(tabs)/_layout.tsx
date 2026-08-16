@@ -1,16 +1,17 @@
 import { Tabs } from 'expo-router/js-tabs';
-import type { Icon, IconWeight } from 'phosphor-react-native';
+import { type Icon, type IconWeight } from 'phosphor-react-native';
 // Per-icon subpath imports, not the package root: `phosphor-react-native`'s
 // barrel is a single ~9,000-icon module that Babel already warns about at
 // 500KB+, and Metro will not tree-shake it away. The line above is erased at
 // build time, so it costs nothing.
+import { FilmSlateIcon } from 'phosphor-react-native/src/icons/FilmSlate';
 import { HouseIcon } from 'phosphor-react-native/src/icons/House';
-import { MagnifyingGlassIcon } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 import { TicketIcon } from 'phosphor-react-native/src/icons/Ticket';
 import { UserIcon } from 'phosphor-react-native/src/icons/User';
 import type { ColorValue } from 'react-native';
 
 import { LiquidTabBar } from '@/components/navigation/liquid-tab-bar';
+import { Text } from '@/components/ui/text';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -48,18 +49,31 @@ function tabIcon(Glyph: Icon, activeWeight: IconWeight = 'fill') {
 // Module scope so each renderer keeps a stable identity — the bar memoises its
 // slots on it.
 const homeIcon = tabIcon(HouseIcon);
-// `bold`, not `fill`: a filled magnifying glass collapses into a featureless
-// blob at 24pt. Weight carries the selected state instead.
-const discoverIcon = tabIcon(MagnifyingGlassIcon, 'bold');
+const cinemaIcon = tabIcon(FilmSlateIcon);
 const ticketsIcon = tabIcon(TicketIcon);
 const profileIcon = tabIcon(UserIcon);
+
+/**
+ * The centre action says its name rather than drawing one. A drink glyph has to
+ * be guessed at; the word does not, and this is the one control in the bar whose
+ * purpose isn't obvious from its position.
+ */
+function refillLabel({ color }: { color: string }) {
+  return (
+    <Text variant="label" style={{ color, fontWeight: '900', letterSpacing: 0.5, fontSize: 12, textTransform: 'uppercase' }}>
+      Refill
+    </Text>
+  );
+}
 
 export default function TabsLayout() {
   const theme = useTheme();
 
   return (
     <Tabs
-      tabBar={(props) => <LiquidTabBar {...props} />}
+      tabBar={(props) => (
+        <LiquidTabBar {...props} centerRoute="refill" renderCenterContent={refillLabel} />
+      )}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.brand,
@@ -68,9 +82,17 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
       }}>
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: homeIcon }} />
-      <Tabs.Screen name="discover" options={{ title: 'Discover', tabBarIcon: discoverIcon }} />
+      <Tabs.Screen name="cinema" options={{ title: 'Cinema', tabBarIcon: cinemaIcon }} />
+      {/* Raised out of the bar as the centre action — see `LiquidTabBar`. It
+          declares no icon because the bar draws that one itself. */}
+      <Tabs.Screen name="refill" options={{ title: 'Refill' }} />
       <Tabs.Screen name="tickets" options={{ title: 'Tickets', tabBarIcon: ticketsIcon }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: profileIcon }} />
+      {/* Search keeps working and keeps its route — it is pushed from the home
+          category rail and the empty tickets state — it just gave up its slot
+          to Cinema. `href: null` is how expo-router says "routable, not on the
+          bar". */}
+      <Tabs.Screen name="discover" options={{ title: 'Search', href: null }} />
     </Tabs>
   );
 }

@@ -130,11 +130,25 @@ export type Ticket = {
   _id: string;
   /** 8-char human-readable id, and what the QR encodes. */
   ticketId: string;
+  /**
+   * `my-tickets` populates only `title startDate endDate location`; the public
+   * lookup adds times, cover art and the organizer. Everything past the first
+   * three fields is therefore optional at the type level.
+   *
+   * Non-null only because `src/api/tickets.ts` substitutes a stand-in for the
+   * `null` the server sends when the event has been deleted — read it directly,
+   * but do not fetch tickets around that module.
+   */
   event: Pick<PazimoEvent, '_id' | 'title' | 'startDate'> & {
     endDate?: string;
+    startTime?: string;
+    endTime?: string;
     location?: EventLocation;
+    coverImages?: string[];
+    organizer?: EventOrganizer | string;
   };
-  user?: string;
+  /** An id string on `my-tickets`; populated to a name/email on the public read. */
+  user?: string | Pick<User, 'firstName' | 'lastName' | 'email'>;
   guestName?: string;
   guestEmail?: string;
   guestPhone?: string;
@@ -155,6 +169,8 @@ export type Ticket = {
   qrCode?: string;
   isInvitation: boolean;
   createdAt: string;
+  /** Only on `GET /api/tickets/public/details/:id` — stock left in this tier. */
+  ticketsRemaining?: number | null;
 };
 
 /* ---------------------------- payments ---------------------------- */
@@ -164,7 +180,49 @@ export type PaymentProvider = 'CHAPA' | 'SANTIM';
 export type PaymentConfig = {
   activeProvider: PaymentProvider;
   giftCardMode: boolean;
+  giftCardRouting?: { ETB: string | null; USD: string | null };
 };
+
+/**
+ * The wire ids the two providers accept for the same four mobile-money rails.
+ * They differ in spelling *and* case, and the backend matches on them, so these
+ * strings are the contract — do not normalise them.
+ */
+export type SantimMethod = 'Telebirr' | 'CBE Birr' | 'Mpesa' | 'Awash Bank';
+export type ChapaMethod = 'telebirr' | 'CBEBirr' | 'mpesa' | 'AwashBirr';
+/** USD always routes through Chapa's hosted card checkout. */
+export type CardMethod = 'visa' | 'mastercard';
+export type PaymentMethodId = SantimMethod | ChapaMethod | CardMethod;
+
+export type PaymentInitiateRequest = {
+  currency: Currency;
+  paymentReason: string;
+  phoneNumber: string;
+  orderId: string;
+  method: PaymentMethodId;
+  ticketDetails: {
+    ticketId: string;
+    eventId: string;
+    ticketTypeId: string;
+    quantity: number;
+    userId?: string;
+    fullName: string;
+    email: string;
+  };
+  /**
+   * Chapa's `return_url` for card checkout. Left unset on mobile: the app never
+   * relies on the redirect (it polls the payment either way), and a custom
+   * `pazimomobile://` scheme is not something Chapa's URL validation is
+   * documented to accept. Omitting it lets the backend supply its own web page.
+   */
+  successUrl?: string;
+};
+
+/**
+ * The `user` here is the initiate route's own projection: it carries `id` but
+ * not `_id`, unlike every other user payload in the API.
+ */
+export type PaymentInitiateUser = Omit<User, '_id'> & { id: string };
 
 export type PaymentInitiateResponse = {
   success: true;
@@ -174,7 +232,7 @@ export type PaymentInitiateResponse = {
   message?: string;
   /** Guest checkout auto-creates an account and returns its session here. */
   token?: string | null;
-  user?: User | null;
+  user?: PaymentInitiateUser | null;
 };
 
 export type PaymentStatus = 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'FAILED' | 'NOT_FOUND';

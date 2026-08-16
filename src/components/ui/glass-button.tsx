@@ -27,10 +27,15 @@ import { useTheme } from '@/hooks/use-theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** Washed into the glass, not stacked on top of it. */
-const TINT = 'rgba(255, 255, 255, 0.14)';
+/**
+ * Washed into the glass, not stacked on top of it. Exported so surfaces that
+ * can't use these components — a text field, say — still land on the same
+ * material instead of eyeballing their own.
+ */
+export const GLASS_TINT = 'rgba(255, 255, 255, 0.14)';
 
-const SHADOW = {
+/** The lift that separates floating chrome from the page under it. */
+export const GLASS_SHADOW = {
   shadowColor: '#000000',
   shadowOpacity: 0.38,
   shadowRadius: 16,
@@ -53,6 +58,12 @@ export type GlassButtonProps = Omit<TouchableProps, 'children'> & {
   iconTone?: 'solid' | 'subtle';
   size?: 'md' | 'lg';
   blurTarget?: RefObject<View | null>;
+  /**
+   * Fills the pill solid white instead of glass. For a control that holds a
+   * chosen state — the app reserves solid white for exactly that (see the note
+   * on the palette in constants/theme).
+   */
+  selected?: boolean;
 };
 
 function GlassButtonImpl({
@@ -61,6 +72,7 @@ function GlassButtonImpl({
   iconTone = 'subtle',
   size = 'md',
   blurTarget,
+  selected = false,
   disabled,
   style,
   ...rest
@@ -68,46 +80,64 @@ function GlassButtonImpl({
   const theme = useTheme();
   const solid = iconTone === 'solid';
   const m = metrics[size];
+  const foreground = selected ? theme.onBrand : '#FFFFFF';
+
+  const bodyStyle = [
+    styles.body,
+    {
+      // A bare glyph reads as part of the label, so it sits closer to it than a
+      // disc does.
+      gap: icon && !solid ? 4 : m.gap,
+      paddingVertical: m.padding,
+      // A disc sits flush against the pill's inner edge; anything else needs
+      // the full optical inset.
+      paddingLeft: icon ? (solid ? m.padding : m.text - 2) : m.text,
+      paddingRight: m.text,
+    },
+  ];
+
+  const content = (
+    <>
+      {icon && solid ? (
+        <View style={[styles.disc, { width: m.disc, height: m.disc, backgroundColor: theme.brand }]}>
+          <Ionicons name={icon} size={Math.round(m.disc * 0.54)} color={theme.onBrand} />
+        </View>
+      ) : icon ? (
+        <Ionicons name={icon} size={Math.round(m.disc * 0.75)} color={foreground} />
+      ) : null}
+      <Text
+        variant={size === 'lg' ? 'callout' : 'body'}
+        // The label's drop shadow exists to hold it against artwork; on a solid
+        // white fill it only smudges the dark text.
+        style={[styles.label, selected && { color: foreground, textShadowColor: 'transparent' }]}
+        numberOfLines={1}>
+        {label}
+      </Text>
+    </>
+  );
 
   return (
     <Touchable
       accessibilityRole="button"
-      accessibilityState={{ disabled: Boolean(disabled) }}
+      accessibilityState={{ disabled: Boolean(disabled), selected }}
       haptic
       pressedScale={0.94}
       disabled={disabled}
       style={[styles.shadow, disabled ? styles.disabled : null, style]}
       {...rest}>
-      <Glass
-        variant="clear"
-        intensity={28}
-        tint={TINT}
-        radius={Radius.pill}
-        blurTarget={blurTarget}
-        style={[
-          styles.body,
-          {
-            // A bare glyph reads as part of the label, so it sits closer to it
-            // than a disc does.
-            gap: icon && !solid ? 4 : m.gap,
-            paddingVertical: m.padding,
-            // A disc sits flush against the pill's inner edge; anything else
-            // needs the full optical inset.
-            paddingLeft: icon ? (solid ? m.padding : m.text - 2) : m.text,
-            paddingRight: m.text,
-          },
-        ]}>
-        {icon && solid ? (
-          <View style={[styles.disc, { width: m.disc, height: m.disc, backgroundColor: theme.brand }]}>
-            <Ionicons name={icon} size={Math.round(m.disc * 0.54)} color={theme.onBrand} />
-          </View>
-        ) : icon ? (
-          <Ionicons name={icon} size={Math.round(m.disc * 0.75)} color="#FFFFFF" />
-        ) : null}
-        <Text variant={size === 'lg' ? 'callout' : 'body'} style={styles.label} numberOfLines={1}>
-          {label}
-        </Text>
-      </Glass>
+      {selected ? (
+        <View style={[bodyStyle, styles.selected, { backgroundColor: theme.brand }]}>{content}</View>
+      ) : (
+        <Glass
+          variant="clear"
+          intensity={28}
+          tint={GLASS_TINT}
+          radius={Radius.pill}
+          blurTarget={blurTarget}
+          style={bodyStyle}>
+          {content}
+        </Glass>
+      )}
     </Touchable>
   );
 }
@@ -136,7 +166,7 @@ function GlassIconButtonImpl({
       <Glass
         variant="clear"
         intensity={28}
-        tint={TINT}
+        tint={GLASS_TINT}
         radius={Radius.pill}
         blurTarget={blurTarget}
         style={[styles.iconBody, { width: size, height: size }]}>
@@ -160,7 +190,7 @@ function GlassChipImpl({ label, style }: GlassChipProps) {
       <Glass
         variant="clear"
         intensity={28}
-        tint={TINT}
+        tint={GLASS_TINT}
         radius={Radius.pill}
         style={styles.chipBody}>
         <Text variant="caption" style={styles.label} numberOfLines={1}>
@@ -176,9 +206,11 @@ export const GlassChip = memo(GlassChipImpl);
 const styles = StyleSheet.create({
   // The radius has to be repeated here: on Android the elevation shadow is cast
   // from this view's own shape, not from the rounded glass nested inside it.
-  shadow: { borderRadius: Radius.pill, ...SHADOW },
+  shadow: { borderRadius: Radius.pill, ...GLASS_SHADOW },
   disabled: { opacity: 0.5 },
   body: { flexDirection: 'row', alignItems: 'center' },
+  /** The glass path gets its radius from `<Glass>`; the solid fill needs its own. */
+  selected: { borderRadius: Radius.pill },
   iconBody: { alignItems: 'center', justifyContent: 'center' },
   chipBody: { paddingHorizontal: Spacing.md, paddingVertical: 6, alignItems: 'center' },
   disc: { borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },

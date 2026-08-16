@@ -35,4 +35,6 @@ export const StorageKeys = {
   user: 'pazimo.auth.user',
   wishlist: 'pazimo.wishlist',
   recentSearches: 'pazimo.search.recent',
+  /** Ticket ids bought on this device — the guest fallback for `my-tickets`. */
+  deviceTickets: 'pazimo.tickets.device',
 } as const;
