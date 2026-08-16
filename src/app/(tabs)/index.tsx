@@ -11,8 +11,8 @@ import { EventRail } from '@/components/home/event-rail';
 // Parked with the "Upcoming" block below.
 // import { UpcomingRail } from '@/components/home/upcoming-rail';
 import { AmbientBackground } from '@/components/ui/ambient-background';
-import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { GlassIconButton } from '@/components/ui/glass-button';
+import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { SectionHeader } from '@/components/ui/section';
@@ -208,8 +208,8 @@ const styles = StyleSheet.create({
   },
   heroTitle: { color: '#FFFFFF', flexShrink: 1 },
   heroSearch: {
-    width: 52,
-    height: 52,
+    width: 45,
+    height: 72,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
