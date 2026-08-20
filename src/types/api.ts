@@ -118,13 +118,7 @@ export type AuthPayload = { user: User; token: string };
  * `used` — `checkedIn` is the real "already used" signal.
  */
 export type TicketStatus =
-  | 'active'
-  | 'used'
-  | 'cancelled'
-  | 'expired'
-  | 'pending'
-  | 'confirmed'
-  | 'declined';
+  'active' | 'used' | 'cancelled' | 'expired' | 'pending' | 'confirmed' | 'declined';
 
 export type Ticket = {
   _id: string;
@@ -314,4 +308,72 @@ export type RsvpResponse = {
   qrCodePayload: string;
   qrCodeDataUrl: string;
   submittedAt: string;
+};
+
+/**
+ * Cinemas and their programme, from `/api/cinemas/public/*`.
+ *
+ * The public projections are deliberately narrow server-side — commission
+ * rates, VAT coverage and the owning account are stripped before they leave the
+ * controller — so these types are the whole of what a customer can ever see.
+ */
+export type Cinema = {
+  _id: string;
+  name: string;
+  description?: string;
+  city?: string;
+  address?: string;
+  phoneNumber?: string;
+  /** Server path or full URL; run it through `resolveImageUrl`. */
+  image?: string | null;
+};
+
+export type CinemaMovie = {
+  _id: string;
+  title: string;
+  slug?: string;
+  shortId?: string;
+  poster?: string | null;
+  durationMinutes?: number;
+  ageRating?: string;
+  genre?: string[] | string;
+  language?: string;
+  subtitles?: string;
+  description?: string;
+  /** Earliest upcoming screening, ISO. Added by the grouping aggregate. */
+  nextShowtime?: string;
+  /** How many screenings are still to come. */
+  upcomingCount?: number;
+  /** Cheapest seat across those screenings, or null when none is priced. */
+  fromPrice?: number | null;
+};
+
+export type CinemaHall = {
+  _id: string;
+  name: string;
+  screenType?: string;
+};
+
+export type CinemaTicketType = {
+  _id: string;
+  name: string;
+  price: number;
+  description?: string;
+  seatsRemaining: number;
+};
+
+/**
+ * A single screening. `movie` and `hall` arrive populated, and `ticketTypes` is
+ * pre-filtered server-side to the ones actually on sale — an unavailable tier is
+ * simply absent rather than flagged.
+ */
+export type CinemaShowtime = {
+  _id: string;
+  cinema: string;
+  movie: CinemaMovie;
+  hall?: CinemaHall;
+  startsAt: string;
+  endsAt?: string;
+  currency: 'ETB';
+  ticketTypes: CinemaTicketType[];
 };
