@@ -17,5 +17,11 @@ export const queryKeys = {
     forms: () => [...queryKeys.rsvp.all, 'forms'] as const,
     form: (publicId: string) => [...queryKeys.rsvp.all, 'form', publicId] as const,
   },
+  cinemas: {
+    all: ['cinemas'] as const,
+    list: (city?: string, search?: string) =>
+      [...queryKeys.cinemas.all, 'list', city ?? '', search ?? ''] as const,
+    showtimes: (cinemaId: string) => [...queryKeys.cinemas.all, 'showtimes', cinemaId] as const,
+  },
   paymentConfig: ['payment-config'] as const,
 } as const;
