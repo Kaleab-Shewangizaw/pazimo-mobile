@@ -12,6 +12,7 @@ import {
   ticketPath,
 } from '@/components/ticket/ticket-path';
 import { Glass } from '@/components/ui/glass';
+import { GLASS_TINT } from '@/components/ui/glass-button';
 import { Radius } from '@/constants/theme';
 
 /**
@@ -30,19 +31,23 @@ import { Radius } from '@/constants/theme';
  * matters because this animates while a network poll is running.
  */
 
-const SPIN_DURATION = 2200;
+const SPIN_DURATION = 2600;
 
 /** Thickness of the lit edge. */
-const RING = 1.6;
+const RING = 2.5;
 
 /** Radius of the bite out of each side at the tear. */
 const NOTCH = 15;
 
-/** White core with a soft falloff either side, so it reads as a travelling glow. */
+/** Angular thickness of the spoke, as a fraction of the sweep's diameter. */
+const SPOKE_WIDTH = 0.34;
+
+/** White core falling off to nothing either side, so the light has soft ends. */
 const BEAM = [
   'rgba(255,255,255,0)',
-  'rgba(255,255,255,0.35)',
+  'rgba(255,255,255,0.28)',
   '#FFFFFF',
+  'rgba(255,255,255,0.28)',
   'rgba(255,255,255,0)',
 ] as const;
 
@@ -137,9 +142,16 @@ function TicketFrameImpl({
             </Svg>
           }>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: idleColor }]} />
+          {/* A spoke, not a bar. A gradient spanning the whole card crosses it
+              and lights the rim in two places at once, which reads as two lamps
+              rather than one light going round. Anchoring the bright band at the
+              centre and letting it reach out in a single direction means it
+              leaves the shape at exactly one point — and because the spoke is
+              radial, that point tracks the outline whatever shape it is, tall
+              card and notches included. */}
           <Animated.View
             style={[
-              styles.beam,
+              styles.sweep,
               {
                 width: beamSize,
                 height: beamSize,
@@ -157,10 +169,17 @@ function TicketFrameImpl({
             ]}>
             <LinearGradient
               colors={BEAM}
-              locations={[0, 0.42, 0.5, 0.58]}
+              locations={[0, 0.34, 0.5, 0.66, 1]}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              end={{ x: 1, y: 0 }}
+              style={[
+                styles.spoke,
+                {
+                  width: beamSize * SPOKE_WIDTH,
+                  height: beamSize / 2,
+                  marginLeft: (-beamSize * SPOKE_WIDTH) / 2,
+                },
+              ]}
             />
           </Animated.View>
         </MaskedView>
@@ -179,12 +198,17 @@ function TicketFrameImpl({
               <Path d={ticketPath(face)} transform={shift} fill="#000000" />
             </Svg>
           }>
+          {/* The same material as the floating buttons — `clear` at 28 with
+              GLASS_TINT washed *into* the effect. The tint is what keeps it
+              reading as glass rather than as a dark panel: blur alone only
+              softens what is behind it. */}
           <Glass
-            intensity={26}
+            variant="clear"
+            intensity={28}
             radius={0}
             bordered={false}
             blurTarget={blurTarget}
-            tint="rgba(255,255,255,0.05)"
+            tint={GLASS_TINT}
             style={StyleSheet.absoluteFill}
           />
         </MaskedView>
@@ -232,7 +256,10 @@ function TicketFrameImpl({
 const styles = StyleSheet.create({
   frame: { width: '100%' },
   filled: { flex: 1 },
-  beam: { position: 'absolute', left: '50%', top: '50%' },
+  sweep: { position: 'absolute', left: '50%', top: '50%' },
+  // Top half only: the spoke runs from the centre of the sweep to beyond the
+  // card's edge, so rotating it walks one lit point around the outline.
+  spoke: { position: 'absolute', left: '50%', top: 0 },
 });
 
 export const TicketFrame = memo(TicketFrameImpl);
