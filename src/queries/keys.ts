@@ -22,6 +22,11 @@ export const queryKeys = {
     list: (city?: string, search?: string) =>
       [...queryKeys.cinemas.all, 'list', city ?? '', search ?? ''] as const,
     showtimes: (cinemaId: string) => [...queryKeys.cinemas.all, 'showtimes', cinemaId] as const,
+    movie: (movieId: string) => [...queryKeys.cinemas.all, 'movie', movieId] as const,
+  },
+  cinemaCheckout: {
+    seats: (showtimeId: string) => ['cinema-checkout', 'seats', showtimeId] as const,
+    concessions: (cinemaId: string) => ['cinema-checkout', 'concessions', cinemaId] as const,
   },
   paymentConfig: ['payment-config'] as const,
 } as const;

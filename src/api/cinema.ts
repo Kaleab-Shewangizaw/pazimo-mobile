@@ -1,5 +1,5 @@
 import { getData } from '@/api/client';
-import type { Cinema, CinemaShowtime } from '@/types/api';
+import type { Cinema, CinemaConcessionItem, CinemaMoviePage, CinemaShowtime } from '@/types/api';
 
 /**
  * Cinema browsing. Mounted at `/api/cinemas`, so every path here starts
@@ -20,4 +20,21 @@ export async function fetchCinemas(params?: { city?: string; search?: string }) 
  */
 export async function fetchCinemaShowtimes(cinemaId: string) {
   return getData<CinemaShowtime[]>(`/cinemas/public/${cinemaId}/showtimes`);
+}
+
+/**
+ * One film's page: the movie, its cinema, and its screenings grouped by day.
+ *
+ * Accepts a raw id or a `pretty-slug-shortid`. Note this endpoint is gated on
+ * `publicationStatus: "published"` while the showtimes endpoint is not, so a
+ * film can legitimately appear in a programme and 404 here — callers must treat
+ * a miss as "not published yet", not as a broken link.
+ */
+export async function fetchCinemaMovie(movieId: string) {
+  return getData<CinemaMoviePage>(`/cinemas/public/movies/${movieId}`);
+}
+
+/** What a customer can buy at this cinema's counter — already filtered to in-stock, active items. */
+export async function fetchCinemaConcessions(cinemaId: string) {
+  return getData<CinemaConcessionItem[]>(`/cinemas/public/${cinemaId}/concessions`);
 }

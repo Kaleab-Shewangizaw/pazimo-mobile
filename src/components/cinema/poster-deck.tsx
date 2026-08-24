@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, useCallback, useMemo, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Animated, Easing, PanResponder, StyleSheet, View } from 'react-native';
 
+import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { resolveImageUrl } from '@/lib/media';
@@ -34,6 +35,17 @@ const COMMIT_VELOCITY = 0.6;
 const SPRING = { useNativeDriver: true, speed: 14, bounciness: 5 } as const;
 const SETTLE = { useNativeDriver: true, duration: 240 } as const;
 
+/**
+ * The arriving nudge. A deck is indistinguishable from a single poster until
+ * something moves, so on arrival the top card lifts the lid on the one behind
+ * it and settles back — the gesture demonstrated rather than captioned.
+ *
+ * Far enough to expose the card behind, nowhere near `COMMIT_DISTANCE`, so it
+ * can never be mistaken for a real swipe.
+ */
+const HINT_DISTANCE = 54;
+const HINT_DELAY = 620;
+
 /** Rounder than any token: a poster card reads as an object, not a panel. */
 const CARD_RADIUS = 32;
 
@@ -47,11 +59,39 @@ export type PosterDeckProps = {
   height: number;
   /** Reports the visible card so the screen can headline its date. */
   onIndexChange?: (index: number) => void;
+  /** Tapping the front card. Only the front one is tappable. */
+  onOpen?: (entry: ProgrammeEntry) => void;
 };
 
-function PosterDeckImpl({ entries, width, height, onIndexChange }: PosterDeckProps) {
+function PosterDeckImpl({ entries, width, height, onIndexChange, onOpen }: PosterDeckProps) {
   const [index, setIndex] = useState(0);
   const [drag] = useState(() => new Animated.Value(0));
+  // Disarmed by the first touch, so the hint never argues with a real gesture
+  // and never replays for someone who has already found the swipe.
+  const [armed, setArmed] = useState(true);
+
+  const count = entries.length;
+
+  useEffect(() => {
+    // Nothing to reveal, or the viewer already found it themselves.
+    if (count < 2 || !armed) return;
+
+    const timer = setTimeout(() => {
+      Animated.sequence([
+        Animated.timing(drag, {
+          toValue: HINT_DISTANCE,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(drag, { toValue: 0, speed: 10, bounciness: 8, useNativeDriver: true }),
+      ]).start();
+    }, HINT_DELAY);
+
+    // Covers both unmount and disarming: a touch inside the delay window clears
+    // the timer before it ever fires.
+    return () => clearTimeout(timer);
+  }, [armed, count, drag]);
 
   const step = useCallback(
     (delta: number) => {
@@ -68,12 +108,18 @@ function PosterDeckImpl({ entries, width, height, onIndexChange }: PosterDeckPro
   // Rebuilt when the position or the deck's size changes, so the handlers close
   // over live values instead of reaching through a ref. `panHandlers` is just a
   // bag of callbacks handed to a View, so swapping it between renders is free.
-  const count = entries.length;
   const pan = useMemo(
     () =>
       PanResponder.create({
         // Only claim clearly vertical drags, so a horizontal swipe still belongs
         // to whatever sits around the deck.
+        onStartShouldSetPanResponder: () => {
+          // A finger down outranks the hint: stop it mid-flight so the card is
+          // never fighting the person holding it.
+          setArmed(false);
+          drag.stopAnimation();
+          return false;
+        },
         onMoveShouldSetPanResponder: (_, g) =>
           Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
         onPanResponderMove: (_, g) => {
@@ -154,7 +200,12 @@ function PosterDeckImpl({ entries, width, height, onIndexChange }: PosterDeckPro
       ) : null}
 
       <Animated.View style={[styles.layer, { transform: [{ translateY: frontY }] }]}>
-        <PosterCard entry={current} width={width} height={height} />
+        <PosterCard
+          entry={current}
+          width={width}
+          height={height}
+          onPress={onOpen ? () => onOpen(current) : undefined}
+        />
       </Animated.View>
 
       {previous ? (
@@ -170,16 +221,33 @@ function PosterCard({
   entry,
   width,
   height,
+  onPress,
 }: {
   entry: ProgrammeEntry;
   width: number;
   height: number;
+  onPress?: () => void;
 }) {
   const poster = resolveImageUrl(entry.movie.poster);
   const chips = movieChips(entry.movie);
 
+  // A plain tap never reaches the pan responder — it only claims the gesture
+  // once a finger has travelled 6pt — so the card can be pressable and
+  // draggable at once without the two arguing.
+  const Card = onPress ? Touchable : View;
+
   return (
-    <View style={[styles.card, { width, height }]}>
+    <Card
+      {...(onPress
+        ? {
+            accessibilityRole: 'button' as const,
+            accessibilityLabel: `${entry.movie.title}. Open details`,
+            onPress,
+            pressedScale: 0.98,
+          }
+        : {})}
+      style={[styles.card, { width, height }]}
+    >
       {poster ? (
         <Image
           source={{ uri: poster }}
@@ -212,7 +280,7 @@ function PosterCard({
           ))}
         </View>
       ) : null}
-    </View>
+    </Card>
   );
 }
 

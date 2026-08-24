@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -40,6 +41,7 @@ import type { Cinema } from '@/types/api';
  */
 export default function CinemaScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [chosen, setChosen] = useState<Cinema | null>(null);
   const [day, setDay] = useState<DayKey>('now');
   const [card, setCard] = useState(0);
@@ -187,6 +189,14 @@ export default function CinemaScreen() {
             width={stage.width - Spacing.lg * 2}
             height={stage.height}
             onIndexChange={setCard}
+            // The cinema goes along so the film page can seed itself from the
+            // programme already in cache instead of waiting on its own fetch.
+            onOpen={(entry) =>
+              router.push({
+                pathname: '/movie/[id]',
+                params: { id: entry.movie._id, cinemaId: chosen._id },
+              })
+            }
           />
         ) : null}
       </View>

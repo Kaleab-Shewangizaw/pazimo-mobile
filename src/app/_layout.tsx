@@ -68,11 +68,21 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="event/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
             {/* Fades rather than slides, and cannot be swiped away: the poll
                 running on this screen is what issues the ticket, so leaving it
                 by accident mid-payment has a real cost. */}
             <Stack.Screen
               name="checkout/[txn]"
+              options={{ animation: 'fade', gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="cinema/[showtimeId]/seats"
+              options={{ animation: 'slide_from_right' }}
+            />
+            {/* Same reasoning as checkout/[txn]: the poll here is what settles the order. */}
+            <Stack.Screen
+              name="cinema-order/[txn]"
               options={{ animation: 'fade', gestureEnabled: false }}
             />
           </Stack>
