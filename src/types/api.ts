@@ -377,3 +377,196 @@ export type CinemaShowtime = {
   currency: 'ETB';
   ticketTypes: CinemaTicketType[];
 };
+
+/** The extra fields only the single-film endpoint returns. */
+export type CinemaMovieDetail = CinemaMovie & {
+  coverImage?: string | null;
+  trailerUrl?: string | null;
+  releaseDate?: string | null;
+  status?: 'coming_soon' | 'now_showing' | 'archived';
+};
+
+export type CinemaShowtimeSlot = {
+  _id: string;
+  startsAt: string;
+  endsAt?: string;
+  currency: 'ETB';
+  hall?: CinemaHall;
+  ticketTypes: CinemaTicketType[];
+  /** Server-computed so the client never disagrees with it by summing tiers. */
+  soldOut: boolean;
+};
+
+export type CinemaMovieDay = {
+  /** `YYYY-MM-DD`, in the cinema's own local reckoning. */
+  date: string;
+  showtimes: CinemaShowtimeSlot[];
+};
+
+export type CinemaMoviePage = {
+  movie: CinemaMovieDetail;
+  cinema: Cinema;
+  days: CinemaMovieDay[];
+  fromPrice: number | null;
+  upcomingCount: number;
+};
+
+/**
+ * Buying a cinema ticket, from `/api/cinemas/public/{showtimes,checkout,orders}/*`.
+ *
+ * `curve`/`offset` on a row are arbitrary renderer-scaled units (see
+ * `CinemaHall.seatMap.rows` server-side) — purely presentational, and never
+ * part of a seat's identity. `seatKey` (`"${row}-${number}"`) is that identity,
+ * computed identically on both sides.
+ */
+export type CinemaSeatStatus = 'gap' | 'blocked' | 'sold' | 'held' | 'available';
+
+export type CinemaSeatCategory = {
+  key: string;
+  label: string;
+  color: string;
+  /** Only present once the showtime's tiers actually price this category. */
+  ticketTypeId?: string;
+  name?: string;
+  price?: number;
+  isAvailable?: boolean;
+};
+
+export type CinemaSeat = {
+  number: string;
+  seatKey: string;
+  categoryKey: string;
+  exists: boolean;
+  status: CinemaSeatStatus;
+};
+
+export type CinemaSeatRow = {
+  label: string;
+  curve: number;
+  offset: number;
+  seats: CinemaSeat[];
+};
+
+export type CinemaSeatMap =
+  | { assignedSeating: false; showtimeId: string }
+  | {
+      assignedSeating: true;
+      showtimeId: string;
+      currency: 'ETB';
+      holdMinutes: number;
+      categories: CinemaSeatCategory[];
+      rows: CinemaSeatRow[];
+      /** True when the hall has a map but this showtime's tiers don't price its categories yet. */
+      needsRepricing: boolean;
+    };
+
+export type CinemaConcessionItem = {
+  _id: string;
+  beverage: {
+    name: string;
+    image?: string | null;
+    color?: string;
+    category?: string;
+    isActive: boolean;
+  };
+  price: number;
+  currency: 'ETB';
+  inStock: boolean;
+  isAvailable: boolean;
+};
+
+export type CinemaBasketConcession = { cinemaBeverage: string; quantity: number };
+
+/** Assigned-seating halls send `seats`; capacity-only halls send `ticketType` + `quantity`. */
+export type CinemaCheckoutBasket = {
+  showtime: string;
+  seats?: string[];
+  ticketType?: string;
+  quantity?: number;
+  concessions?: CinemaBasketConcession[];
+};
+
+export type CinemaQuoteTicketLine = {
+  seatKey?: string;
+  row?: string;
+  number?: string;
+  categoryKey?: string;
+  categoryLabel?: string;
+  ticketTypeId: string;
+  ticketType: string;
+  price: number;
+};
+
+export type CinemaQuoteConcessionLine = {
+  cinemaBeverage: string;
+  name: string;
+  image?: string | null;
+  category?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+/** Server-recomputed total — never trust or send a client-side price alongside a basket. */
+export type CinemaCheckoutQuote = {
+  showtimeId: string;
+  cinemaId: string;
+  movieTitle: string;
+  startsAt: string;
+  assignedSeating: boolean;
+  currency: 'ETB';
+  tickets: CinemaQuoteTicketLine[];
+  ticketTotal: number;
+  concessions: CinemaQuoteConcessionLine[];
+  concessionTotal: number;
+  total: number;
+};
+
+export type CinemaCheckoutStartRequest = CinemaCheckoutBasket & {
+  phoneNumber: string;
+  customerName: string;
+  customerEmail?: string;
+  method: PaymentMethodId;
+  origin?: string;
+};
+
+export type CinemaCheckoutStartResponse = {
+  transactionId: string;
+  /** Only set for Chapa web checkout (cards). Null for a direct-charge prompt. */
+  checkoutUrl: string | null;
+  provider: string;
+  action: 'redirect' | 'prompt';
+  total: number;
+  currency: 'ETB';
+  /** So the payment screen can react if the seat hold lapses before paying finishes. */
+  expiresAt: string;
+  seats: string[];
+};
+
+export type CinemaTicket = {
+  ticketId: string;
+  movieTitle: string;
+  hallName?: string;
+  showtimeStartsAt: string;
+  ticketType: string;
+  price: number;
+  quantity: number;
+  totalAmount: number;
+  currency: 'ETB';
+  /** Absent on capacity-only halls — that ticket admits to the room, not a chair. */
+  seat?: { row: string; number: string; seatKey: string; categoryKey: string; categoryLabel: string };
+  status: 'active' | 'used' | 'cancelled' | 'refunded' | 'expired';
+  paymentStatus: 'pending' | 'completed' | 'failed';
+  purchaseDate: string;
+  movie: { _id: string; title: string; poster?: string | null };
+  cinema: { _id: string; name: string; address?: string; city?: string };
+};
+
+export type CinemaOrder = {
+  transactionId: string;
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
+  total: number;
+  currency: 'ETB';
+  tickets: CinemaTicket[];
+  concessions: CinemaQuoteConcessionLine[];
+};

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchCinemaShowtimes, fetchCinemas } from '@/api/cinema';
+import { fetchCinemaMovie, fetchCinemaShowtimes, fetchCinemas } from '@/api/cinema';
 import { queryKeys } from '@/queries/keys';
 
 /**
@@ -34,4 +34,23 @@ export function useCinemaShowtimes(cinemaId: string | undefined) {
   });
 
   return { ...query, showtimes: query.data ?? [] };
+}
+
+/**
+ * A single film's page.
+ *
+ * `retry: false` on purpose: the common failure here is a 404 for a film the
+ * admin has not published, which is a settled answer rather than a blip, and
+ * retrying it three times only delays the screen showing what it does know.
+ */
+export function useCinemaMovie(movieId: string | undefined) {
+  const query = useQuery({
+    queryKey: queryKeys.cinemas.movie(movieId ?? ''),
+    queryFn: () => fetchCinemaMovie(movieId!),
+    enabled: Boolean(movieId),
+    staleTime: CINEMA_STALE_TIME,
+    retry: false,
+  });
+
+  return { ...query, page: query.data };
 }
