@@ -1,10 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaCheckoutSheet } from '@/components/cinema/cinema-checkout-sheet';
-import { SeatMap } from '@/components/cinema/seat-map';
+import { SEAT_ACCENT, SeatMap } from '@/components/cinema/seat-map';
 import { Button } from '@/components/ui/button';
 import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
@@ -22,6 +23,9 @@ import type { CinemaSeat } from '@/types/api';
 /** The server's own cap — mirrored here for a responsive no-op, not enforced here. */
 const MAX_SEATS = 10;
 
+/** Looping backdrop for the auditorium's screen, until cinemas can upload their own. */
+const SCREEN_PREVIEW = require('@/assets/videos/c894168c4145c485105d7646f5a5d8c7.mp4');
+
 export default function SeatsScreen() {
   const { showtimeId } = useLocalSearchParams<{ showtimeId: string }>();
   const insets = useSafeAreaInsets();
@@ -37,13 +41,8 @@ export default function SeatsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [checkoutVisible, setCheckoutVisible] = useState(false);
 
-  // Covers a deep link straight into this route without going through the
-  // movie page first, where the booking store would still be empty.
   const bookingReady = store.showtimeId === showtimeId;
 
-  // Drops any local selection that got taken out from under the buyer while
-  // they were on snacks/payment, whether that's discovered by a fresh fetch
-  // on refocus or reported directly by a failed checkout (`onSeatConflict`).
   const syncSeatAvailability = useCallback(async () => {
     const result = await refetch();
     const map = result.data;
@@ -62,10 +61,6 @@ export default function SeatsScreen() {
     });
   }, [refetch]);
 
-  // Snacks/payment happen in a sheet over this screen, not a separate route,
-  // so this only re-fires on a real navigation back onto this screen (e.g.
-  // from a failed order) — a seat conflict discovered while paying is
-  // synced explicitly in `onSeatConflict` below instead.
   useFocusEffect(
     useCallback(() => {
       syncSeatAvailability();
@@ -140,12 +135,13 @@ export default function SeatsScreen() {
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
         <GlassIconButton icon="arrow-back" accessibilityLabel="Go back" onPress={goBack} />
-        <View style={styles.headerTitles}>
-          <Text variant="title" numberOfLines={1}>
-            {store.movieTitle ?? 'Select seats'}
-          </Text>
-        </View>
-        <View style={styles.headerSpacer} />
+      </View>
+
+      <View style={styles.titleBlock}>
+        <Text variant="heading">Where to Sit?</Text>
+        <Text variant="small" color="textSecondary">
+          Select Seats
+        </Text>
       </View>
 
       {!bookingReady ? (
@@ -163,10 +159,8 @@ export default function SeatsScreen() {
         <ErrorState message="This screening isn't bookable online yet. Please check back later." />
       ) : (
         <>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.body}>
-            {seatMap.assignedSeating === false ? (
+          {seatMap.assignedSeating === false ? (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
               <UnassignedPicker
                 tiers={store.ticketTypes}
                 selectedId={selectedTier?._id ?? null}
@@ -174,41 +168,47 @@ export default function SeatsScreen() {
                 quantity={quantity}
                 onChangeQuantity={setQuantity}
               />
-            ) : (
+              {notice ? (
+                <Text variant="caption" color="warning" style={styles.notice}>
+                  {notice}
+                </Text>
+              ) : null}
+            </ScrollView>
+          ) : (
+            <View style={styles.seatArea}>
               <SeatMap
                 categories={seatMap.categories}
                 rows={seatMap.rows}
                 selectedKeys={selected.map((s) => s.seatKey)}
                 onToggle={onToggleSeat}
+                screenPreview={SCREEN_PREVIEW}
               />
-            )}
-            {notice ? (
-              <Text variant="caption" color="warning" style={styles.notice}>
-                {notice}
-              </Text>
-            ) : null}
-          </ScrollView>
+
+              {notice ? (
+                <Text variant="caption" color="warning" style={styles.notice}>
+                  {notice}
+                </Text>
+              ) : null}
+            </View>
+          )}
 
           <View
             style={[
               styles.bar,
-              { paddingBottom: insets.bottom + Spacing.md, borderTopColor: theme.hairline },
+              { paddingBottom: insets.bottom + Spacing.md, borderTopColor: 'transparent' },
             ]}>
-            <View style={styles.barInfo}>
-              <Text variant="small" color="textSecondary">
-                {seatMap.assignedSeating === false
-                  ? `${quantity} × ${selectedTier?.name ?? 'ticket'}`
-                  : `${selected.length} seat${selected.length === 1 ? '' : 's'}`}
-              </Text>
-              <Text variant="callout">{formatPrice(total, 'ETB')}</Text>
-            </View>
             <Button
-              label="Continue"
+              label={total > 0 ? `Continue · ${formatPrice(total, 'ETB')}` : 'Continue'}
               size="lg"
               disabled={!canContinue}
               onPress={onContinue}
-              style={styles.barButton}
+              style={[
+                styles.continueButton,
+                { backgroundColor: canContinue ? '#FFFFFF' : 'rgba(255,255,255,0.15)' },
+              ]}
+              textStyle={{ color: canContinue ? '#000000' : 'rgba(255,255,255,0.4)' }}
             />
+
           </View>
         </>
       )}
@@ -297,26 +297,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
-  headerTitles: { flex: 1 },
-  headerSpacer: { width: 38 },
+  titleBlock: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xs, gap: 2 },
 
   body: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxxl, gap: Spacing.lg },
+  seatArea: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.xs, gap: Spacing.xs },
   notice: { textAlign: 'center' },
 
   bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.sm,
   },
-  barInfo: { flex: 1, gap: 2 },
-  barButton: { minWidth: 160 },
+  continueButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: Radius.pill,
+  },
 
   unassigned: { gap: Spacing.md },
   tierRow: { gap: Spacing.sm },
@@ -335,3 +333,4 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
 });
+

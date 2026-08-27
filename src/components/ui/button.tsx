@@ -12,6 +12,7 @@ export type ButtonProps = Omit<TouchableProps, 'children'> & {
   size?: 'md' | 'lg';
   loading?: boolean;
   icon?: React.ReactNode;
+  textStyle?: React.ComponentProps<typeof Text>['style'];
 };
 
 function ButtonImpl({
@@ -22,6 +23,7 @@ function ButtonImpl({
   icon,
   disabled,
   style,
+  textStyle,
   ...rest
 }: ButtonProps) {
   const theme = useTheme();
@@ -49,7 +51,7 @@ function ButtonImpl({
       ) : (
         <View style={styles.content}>
           {icon}
-          <Text variant="callout" style={{ color: foreground }}>
+          <Text variant="callout" style={[{ color: foreground }, textStyle]}>
             {label}
           </Text>
         </View>
