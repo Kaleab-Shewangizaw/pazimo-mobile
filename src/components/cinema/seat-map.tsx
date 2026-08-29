@@ -151,9 +151,12 @@ function ZoomableGrid({
           onLayout={(e: LayoutChangeEvent) =>
             setContentSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
           }>
-          {rows.map((row) => (
+          {rows.map((row, rowIndex) => (
             <SeatRow
-              key={row.label}
+              // Not row.label: a row with no existing seats is a blank space
+              // between blocks of seating and carries no label at all, so more
+              // than one of those in the same map would collide on the label.
+              key={rowIndex}
               row={row}
               categoryByKey={categoryByKey}
               selected={selected}
@@ -187,7 +190,10 @@ function SeatRow({
 }) {
   const count = row.seats.length;
   const center = (count - 1) / 2;
-  const pickedSeats = row.seats.filter((s) => selected.has(s.seatKey));
+  // A gap is never selectable and must never count as picked, even though its
+  // seatKey can coincide with the real seat right after it — a gap keeps the
+  // stale number it had before that seat was renumbered into its old spot.
+  const pickedSeats = row.seats.filter((s) => s.exists && selected.has(s.seatKey));
   const pickedHere = pickedSeats.length;
 
   const firstPickedCategory = pickedSeats.length > 0 ? categoryByKey.get(pickedSeats[0].categoryKey) : null;
@@ -212,7 +218,10 @@ function SeatRow({
         const translateY = -row.curve * CURVE_SCALE * (1 - t * t);
         return (
           <SeatCell
-            key={seat.seatKey || `${row.label}-gap-${i}`}
+            // Not seat.seatKey: a gap keeps whatever number it had before a
+            // neighboring seat was removed, so its seatKey can coincide with a
+            // real seat's after renumbering. Position in the row is always unique.
+            key={i}
             seat={seat}
             category={categoryByKey.get(seat.categoryKey)}
             isSelected={selected.has(seat.seatKey)}

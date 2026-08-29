@@ -47,9 +47,14 @@ export default function SeatsScreen() {
     const result = await refetch();
     const map = result.data;
     if (!map || !map.assignedSeating) return;
+    // Allowlist, not a blocklist excluding 'sold'/'held': a gap can carry a
+    // stale seat number that coincides with a real seat's after renumbering
+    // (see CinemaHall's seat map), so its seatKey can shadow a real seat's and
+    // must not count as "still available" just because its own status isn't
+    // sold/held.
     const stillAvailable = new Set(
       map.rows.flatMap((row) =>
-        row.seats.filter((s) => s.status !== 'sold' && s.status !== 'held').map((s) => s.seatKey),
+        row.seats.filter((s) => s.status === 'available').map((s) => s.seatKey),
       ),
     );
     setSelected((current) => {
