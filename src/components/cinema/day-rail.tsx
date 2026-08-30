@@ -1,97 +1,164 @@
+import { Ionicons } from '@expo/vector-icons';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
-import type { DayKey, DaySegment } from '@/lib/programme';
+import type { DayKey } from '@/lib/programme';
 
 /**
- * Now Playing / Tomorrow / Coming Soon.
+ * Today / Tomorrow / Coming Soon.
  *
- * Every segment stays visible and tappable even when it holds nothing — an
- * empty "Tomorrow" is information ("they haven't posted tomorrow yet"), whereas
- * hiding it would read as a missing feature. The count rides along so the state
- * is legible before you commit a tap.
+ * Rendered as three discrete controls matching the reference design:
+ *   - "Coming Soon" — plain dim text on the left (opens date picker)
+ *   - "Now Playing"  — the active center label, white + bold when selected
+ *   - "Tomorrow ›"  — pill with border on the right, always pill-shaped
+ *
+ * Count badges are intentionally omitted — the reference image doesn't show
+ * them and the poster deck communicates availability through its own empty-state.
  */
 
 export type DayRailProps = {
-  segments: DaySegment[];
   active: DayKey;
-  onSelect: (key: DayKey) => void;
+  todayCount: number;
+  tomorrowCount: number;
+  /** "Coming Soon", or the picked date's short label once one is chosen. */
+  laterLabel: string;
+  laterCount: number;
+  onSelectToday: () => void;
+  onSelectTomorrow: () => void;
+  /** Opens the date picker rather than selecting a day directly. */
+  onOpenLater: () => void;
 };
 
-function DayRailImpl({ segments, active, onSelect }: DayRailProps) {
+function DayRailImpl({
+  active,
+  laterLabel,
+  onSelectToday,
+  onSelectTomorrow,
+  onOpenLater,
+}: DayRailProps) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.rail}
-    >
-      {segments.map((segment) => {
-        const on = segment.key === active;
-        const empty = segment.entries.length === 0;
+    <View style={styles.rail}>
+      {/* Left — "Coming Soon" plain text */}
+      <Touchable
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active === 'later' }}
+        accessibilityLabel={`${laterLabel}, open date picker`}
+        onPress={onOpenLater}
+        pressedScale={0.94}
+        style={styles.sideTab}
+      >
+        <Text
+          variant="small"
+          numberOfLines={1}
+          style={[styles.sideLabel, active === 'later' && styles.sideLabelActive]}
+        >
+          {laterLabel}
+        </Text>
+      </Touchable>
 
-        return (
-          <Touchable
-            key={segment.key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={`${segment.label}, ${segment.entries.length} films`}
-            onPress={() => onSelect(segment.key)}
-            pressedScale={0.94}
-            style={[styles.tab, on && styles.tabOn]}
-          >
-            <Text
-              variant="small"
-              style={[styles.label, on && styles.labelOn, !on && empty && styles.labelEmpty]}
-            >
-              {segment.label}
-            </Text>
-            {!empty ? (
-              <View style={[styles.count, on && styles.countOn]}>
-                <Text variant="caption" style={[styles.countText, on && styles.countTextOn]}>
-                  {segment.entries.length}
-                </Text>
-              </View>
-            ) : null}
-          </Touchable>
-        );
-      })}
-    </ScrollView>
+      {/* Center — "Now Playing" / "Tomorrow" — the primary active state */}
+      <Touchable
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active === 'today' }}
+        accessibilityLabel="Now Playing"
+        onPress={onSelectToday}
+        pressedScale={0.94}
+        style={styles.centerTab}
+      >
+        <Text
+          variant="callout"
+          numberOfLines={1}
+          style={[styles.centerLabel, active === 'today' && styles.centerLabelActive]}
+        >
+          Now Playing
+        </Text>
+      </Touchable>
+
+      {/* Right — "Tomorrow ›" pill button */}
+      <Touchable
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active === 'tomorrow' }}
+        accessibilityLabel="Tomorrow"
+        onPress={onSelectTomorrow}
+        pressedScale={0.94}
+        style={[styles.pillTab, active === 'tomorrow' && styles.pillTabActive]}
+      >
+        <Text
+          variant="small"
+          numberOfLines={1}
+          style={[styles.pillLabel, active === 'tomorrow' && styles.pillLabelActive]}
+        >
+          Tomorrow
+        </Text>
+        <Ionicons
+          name="chevron-forward"
+          size={12}
+          color={active === 'tomorrow' ? '#0A0A0C' : 'rgba(255,255,255,0.75)'}
+        />
+      </Touchable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  rail: { gap: Spacing.xs, paddingHorizontal: Spacing.lg, alignItems: 'center' },
-  tab: {
+  rail: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+  },
+
+  // ── Left: "Coming Soon" plain text ───────────────────────────────────────
+  sideTab: {
+    paddingVertical: 6,
+    flexShrink: 1,
+  },
+  sideLabel: {
+    color: 'rgba(255,255,255,0.45)',
+  },
+  sideLabelActive: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+
+  // ── Center: "Now Playing" active label ───────────────────────────────────
+  centerTab: {
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+  },
+  centerLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '500',
+  },
+  centerLabelActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // ── Right: "Tomorrow ›" pill ──────────────────────────────────────────────
+  pillTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     borderRadius: Radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  tabOn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-
-  label: { color: 'rgba(255,255,255,0.82)' },
-  labelOn: { color: '#0A0A0C' },
-  // Dimmed rather than removed: an empty day is a fact worth showing.
-  labelEmpty: { color: 'rgba(255,255,255,0.42)' },
-
-  count: {
-    minWidth: 18,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    alignItems: 'center',
+  pillTabActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
-  countOn: { backgroundColor: 'rgba(10,10,12,0.12)' },
-  countText: { color: 'rgba(255,255,255,0.9)' },
-  countTextOn: { color: '#0A0A0C' },
+  pillLabel: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+  pillLabelActive: {
+    color: '#0A0A0C',
+  },
 });
 
 export const DayRail = memo(DayRailImpl);

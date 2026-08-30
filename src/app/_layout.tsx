@@ -5,11 +5,12 @@ import {
   ComicRelief_700Bold,
   useFonts,
 } from '@expo-google-fonts/comic-relief';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
@@ -44,6 +45,18 @@ export default function RootLayout() {
   });
   const fontsReady = fontsLoaded || fontError != null;
   const hydrate = useAuthStore((s) => s.hydrate);
+
+  // React Query's `refetchOnWindowFocus` has nothing to listen to on native —
+  // there is no browser window — so without this, a query that goes stale
+  // while the app sits backgrounded (the cinema screen's "today" bucket is
+  // the sharpest case: correct at 11pm, wrong by the time someone reopens the
+  // app at 9am) never gets a trigger to refetch on. This is what gives it one.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+      focusManager.setFocused(status === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!fontsReady) return;

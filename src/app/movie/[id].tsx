@@ -15,7 +15,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
 import { resolveImageUrl } from '@/lib/media';
-import { movieChips } from '@/lib/programme';
+import { dayKeyOf, movieChips } from '@/lib/programme';
 import { parseTrailer } from '@/lib/trailer';
 import { useCinemaMovie, useCinemaShowtimes } from '@/queries/cinema';
 import { useCinemaBookingStore } from '@/stores/use-cinema-booking-store';
@@ -41,7 +41,13 @@ const BOOK_BAR_HEIGHT = Spacing.md + Spacing.lg * 2 + 22;
  * the viewer was just looking at.
  */
 export default function MovieScreen() {
-  const { id, cinemaId } = useLocalSearchParams<{ id: string; cinemaId?: string }>();
+  const { id, cinemaId, date } = useLocalSearchParams<{
+    id: string;
+    cinemaId?: string;
+    /** `YYYY-MM-DD` — the single day picked on the cinema screen. Booking is
+     * scoped to it: this page only ever offers the day the viewer already chose. */
+    date?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const goBack = useGoBack();
@@ -55,10 +61,14 @@ export default function MovieScreen() {
   const cached = useCinemaShowtimes(cinemaId);
 
   // The programme's own copy of this film, used until the detail lands and as
-  // the fallback if it never does.
+  // the fallback if it never does. Scoped to the picked day too, so the page
+  // never flashes other days' times before the real day-grouped list arrives.
   const fallback = useMemo(
-    () => cached.showtimes.filter((s) => s.movie?._id === id),
-    [cached.showtimes, id],
+    () =>
+      cached.showtimes.filter(
+        (s) => s.movie?._id === id && (!date || dayKeyOf(s.startsAt) === date),
+      ),
+    [cached.showtimes, id, date],
   );
 
   const movie = detail.page?.movie ?? fallback[0]?.movie;
@@ -114,7 +124,12 @@ export default function MovieScreen() {
 
   const poster = resolveImageUrl(movie.poster);
   const chips = movieChips(movie);
-  const days = detail.page?.days ?? [];
+  // Scoped to the single day picked on the cinema screen — this page (the
+  // "Showtimes" list and the booking sheet alike) never offers a day the
+  // viewer didn't ask for. Without a `date` param (a route entered some other
+  // way) it falls back to every upcoming day, same as before this existed.
+  const allDays = detail.page?.days ?? [];
+  const days = date ? allDays.filter((d) => d.date === date) : allDays;
   const bookable = days.length > 0;
   const allSlots = days.flatMap((d) => d.showtimes);
   const soldOut = bookable && allSlots.every((s) => s.soldOut);

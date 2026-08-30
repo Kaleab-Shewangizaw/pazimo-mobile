@@ -1,31 +1,39 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useDeferredValue, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   type LayoutChangeEvent,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaRow } from '@/components/cinema/cinema-picker';
+import { ComingSoonSheet } from '@/components/cinema/coming-soon-sheet';
 import { DayRail } from '@/components/cinema/day-rail';
 import { PosterDeck } from '@/components/cinema/poster-deck';
+import { Surface } from '@/components/ui/glass';
 import { GlassIconButton } from '@/components/ui/glass-button';
+import { GlassHeader } from '@/components/ui/glass-header';
+import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { resolveImageUrl } from '@/lib/media';
-import { type DayKey, groupByDay, headlineDate } from '@/lib/programme';
+import { type DayKey, buildSchedule, headlineDate, todayKey, tomorrowKey } from '@/lib/programme';
 import { useCinemaShowtimes, useCinemas } from '@/queries/cinema';
 import type { Cinema } from '@/types/api';
+
+/** Matches the glass search field's furniture on Discover. */
+const PLACEHOLDER = 'rgba(255,255,255,0.55)';
 
 /**
  * Pick a cinema, then swipe its programme as a deck of posters.
@@ -42,21 +50,73 @@ import type { Cinema } from '@/types/api';
 export default function CinemaScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Set when someone taps a cinema from Discover's search rather than picking
+  // one here directly — see the pre-select effect below.
+  const params = useLocalSearchParams<{ cinemaId?: string }>();
   const [chosen, setChosen] = useState<Cinema | null>(null);
-  const [day, setDay] = useState<DayKey>('now');
+  const [day, setDay] = useState<DayKey>('today');
+  /** Which "coming soon" date is picked, once the user has picked one. */
+  const [laterDate, setLaterDate] = useState<string | null>(null);
+  const [laterSheetVisible, setLaterSheetVisible] = useState(false);
   const [card, setCard] = useState(0);
   const [stage, setStage] = useState({ width: 0, height: 0 });
+  const [cinemaQuery, setCinemaQuery] = useState('');
+  // Which `cinemaId` param this screen has already acted on, so re-tapping the
+  // same Discover result (or the param simply persisting across renders)
+  // doesn't fight someone who has since picked a different cinema by hand.
+  const [appliedCinemaId, setAppliedCinemaId] = useState<string | undefined>();
 
-  const cinemas = useCinemas();
+  // Keeps typing smooth: the list re-searches at a lower priority than the input.
+  const deferredCinemaQuery = useDeferredValue(cinemaQuery);
+
+  const cinemas = useCinemas({ search: deferredCinemaQuery });
   const showtimes = useCinemaShowtimes(chosen?._id);
 
   const refetch = chosen ? showtimes.refetch : cinemas.refetch;
   const { refreshing, onRefresh } = useRefresh(refetch);
 
-  const segments = useMemo(() => groupByDay(showtimes.showtimes), [showtimes.showtimes]);
-  const segment = segments.find((s) => s.key === day) ?? segments[0];
-  const entries = segment?.entries ?? [];
+  // Tabs stay mounted when you switch away in Expo Router, so nothing else
+  // re-fetches this on its own when you come back — the "Today" bucket would
+  // otherwise still reflect whatever wall-clock day it was when this cinema
+  // was first opened, hours or a tab-switch ago.
+  useFocusEffect(
+    useCallback(() => {
+      if (chosen) showtimes.refetch();
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch is stable per query key; only a newly chosen cinema should re-arm this.
+    }, [chosen]),
+  );
+
+  // Arriving here with a `cinemaId` (from a Discover search result) re-syncs
+  // `chosen` during render, same trick `discover.tsx` uses for its category
+  // param — it just also has to wait for the list to actually contain the
+  // match, which it does for free: react-query re-renders this component
+  // itself once the fetch resolves, and this check runs again then.
+  if (params.cinemaId && params.cinemaId !== appliedCinemaId) {
+    const match = cinemas.cinemas.find((c) => c._id === params.cinemaId);
+    if (match) {
+      setAppliedCinemaId(params.cinemaId);
+      setChosen(match);
+      setDay('today');
+      setLaterDate(null);
+      setCard(0);
+    }
+  }
+
+  // Not memoized on `showtimes.showtimes`: react-query's structural sharing
+  // keeps that array's identity unchanged across a refetch that returned the
+  // same data, which would freeze "today" at whichever day it was computed on
+  // — memoizing here would silently undo the two fixes above. `buildSchedule`
+  // is a single cheap pass, so recomputing it every render just keeps the
+  // today/tomorrow boundary honest against the actual current time.
+  const schedule = buildSchedule(showtimes.showtimes);
+  const laterDay = laterDate ? schedule.laterDays.find((d) => d.date === laterDate) : undefined;
+  const entries =
+    day === 'today' ? schedule.today : day === 'tomorrow' ? schedule.tomorrow : (laterDay?.entries ?? []);
   const visible = entries[Math.min(card, Math.max(entries.length - 1, 0))];
+
+  // The date this window's showtimes actually fall on, so opening a film
+  // carries it forward — the booking sheet only ever offers this one day.
+  const selectedDate = day === 'today' ? todayKey() : day === 'tomorrow' ? tomorrowKey() : laterDate;
 
   const onStage = useCallback(
     (e: LayoutChangeEvent) =>
@@ -71,6 +131,13 @@ export default function CinemaScreen() {
     setCard(0);
   }, []);
 
+  const pickLaterDate = useCallback((date: string) => {
+    setLaterDate(date);
+    setDay('later');
+    setCard(0);
+    setLaterSheetVisible(false);
+  }, []);
+
   const renderCinema = useCallback(
     ({ item }: { item: Cinema }) => (
       <CinemaRow
@@ -78,7 +145,8 @@ export default function CinemaScreen() {
         selected={item._id === chosen?._id}
         onPress={(next) => {
           setChosen(next);
-          setDay('now');
+          setDay('today');
+          setLaterDate(null);
           setCard(0);
         }}
       />
@@ -94,6 +162,7 @@ export default function CinemaScreen() {
     return (
       <View style={styles.screen}>
         <Backdrop />
+        <GlassHeader title="Cinema" />
         {cinemas.isLoading ? (
           <View style={[styles.centre, { paddingTop: topPadding }]}>
             <ActivityIndicator size="large" color="#FFFFFF" />
@@ -111,17 +180,39 @@ export default function CinemaScreen() {
             refreshControl={<PageRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ListHeaderComponent={
               <View style={styles.pickerHead}>
-                <Text variant="display" style={styles.headline}>
-                  CINEMA
-                </Text>
-                <Text variant="small" color="textSecondary">
-                  {`Pick a cinema to see what's on`}
-                </Text>
+                <Surface radius={Radius.pill} tone="muted" style={styles.searchBar}>
+                  <Ionicons name="search" size={18} color={PLACEHOLDER} />
+                  <TextInput
+                    value={cinemaQuery}
+                    onChangeText={setCinemaQuery}
+                    placeholder="Search cinemas, cities"
+                    placeholderTextColor={PLACEHOLDER}
+                    style={styles.searchInput}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    clearButtonMode="while-editing"
+                  />
+                  {cinemaQuery.length > 0 ? (
+                    <Touchable
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear search"
+                      onPress={() => setCinemaQuery('')}
+                      pressedScale={0.9}>
+                      <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
+                    </Touchable>
+                  ) : null}
+                </Surface>
               </View>
             }
             ListEmptyComponent={
               cinemas.isError ? (
                 <ErrorState message={cinemas.error?.message} onRetry={() => cinemas.refetch()} />
+              ) : cinemaQuery ? (
+                <EmptyState
+                  icon="search-outline"
+                  title="No cinemas found"
+                  message={`Nothing matches "${cinemaQuery}". Try a different search.`}
+                />
               ) : (
                 <EmptyState
                   icon="business-outline"
@@ -138,6 +229,7 @@ export default function CinemaScreen() {
 
   // ── programme ────────────────────────────────────────────────────────────
   const poster = resolveImageUrl(visible?.movie.poster);
+  const dayLabel = day === 'today' ? 'TODAY' : day === 'tomorrow' ? 'TOMORROW' : (laterDay?.label ?? 'COMING SOON');
 
   return (
     <View style={styles.screen}>
@@ -159,14 +251,26 @@ export default function CinemaScreen() {
           />
         </View>
 
-        <DayRail segments={segments} active={day} onSelect={pickDay} />
+        <DayRail
+          active={day}
+          todayCount={schedule.today.length}
+          tomorrowCount={schedule.tomorrow.length}
+          laterLabel={laterDay?.label ?? 'Coming Soon'}
+          laterCount={laterDay?.entries.length ?? 0}
+          onSelectToday={() => pickDay('today')}
+          onSelectTomorrow={() => pickDay('tomorrow')}
+          onOpenLater={() => setLaterSheetVisible(true)}
+        />
 
         <Text variant="display" style={styles.headline} numberOfLines={1}>
-          {headlineDate(visible?.startsAt) || segment?.label.toUpperCase()}
+          {headlineDate(visible?.startsAt) || dayLabel}
         </Text>
+        {/* Bottom hairline divider so the card-area has a clear floor */}
       </View>
 
-      <View style={styles.stage} onLayout={onStage}>
+      {/* The stage measures its own height so we can give the deck an exact
+          pixel budget that ends above the floating tab bar. */}
+      <View style={[styles.stage, { paddingBottom: bottomPadding }]} onLayout={onStage}>
         {showtimes.isLoading ? (
           <View style={styles.centre}>
             <ActivityIndicator size="large" color="#FFFFFF" />
@@ -187,50 +291,67 @@ export default function CinemaScreen() {
           <PosterDeck
             entries={entries}
             width={stage.width - Spacing.lg * 2}
-            height={stage.height}
+            // The card sizes itself off its own 2:3 poster aspect ratio; this
+            // just keeps it from overflowing a short screen.
+            maxHeight={stage.height}
             onIndexChange={setCard}
-            // The cinema goes along so the film page can seed itself from the
-            // programme already in cache instead of waiting on its own fetch.
             onOpen={(entry) =>
               router.push({
                 pathname: '/movie/[id]',
-                params: { id: entry.movie._id, cinemaId: chosen._id },
+                params: { id: entry.movie._id, cinemaId: chosen._id, date: selectedDate ?? '' },
               })
             }
           />
         ) : null}
       </View>
 
-      {visible ? (
-        <View style={[styles.foot, { paddingBottom: bottomPadding }]}>
-          <Ionicons name="time-outline" size={15} color="rgba(255,255,255,0.75)" />
-          <Text variant="small" style={styles.footText} numberOfLines={1}>
-            {timesLabel(visible.showtimes.map((s) => s.startsAt))}
-          </Text>
-        </View>
-      ) : null}
+      {/* Showtime list is now overlaid on the poster card itself via chips */}
+
+      <ComingSoonSheet
+        visible={laterSheetVisible}
+        onClose={() => setLaterSheetVisible(false)}
+        days={schedule.laterDays}
+        selectedDate={laterDate}
+        onSelect={pickLaterDate}
+      />
     </View>
   );
 }
 
-/** The page's ground: the poster if there is one, a flat dark field if not. */
+/**
+ * Full-bleed blurred poster wash behind all content.
+ *
+ * The gradient has a light touch in the middle of the screen so the poster's
+ * own colours show through clearly — exactly the effect in the reference image.
+ * The top and bottom fade darker so the chrome and stage floor stay legible.
+ */
 function Backdrop({ poster }: { poster?: string | null }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* Near-black ground — visible before the image loads and at the edges */}
       <View style={styles.ground} />
       {poster ? (
         <Image
           source={{ uri: poster }}
           style={[StyleSheet.absoluteFill, styles.wash]}
           contentFit="cover"
-          blurRadius={60}
-          transition={320}
+          blurRadius={30}
+          transition={400}
           cachePolicy="memory-disk"
         />
       ) : null}
+      {/* Single gradient: dark at the very top (status bar legibility) →
+          nearly transparent in the mid section (poster colour shows through) →
+          solid dark at the very bottom (stage floor). */}
       <LinearGradient
-        colors={['rgba(8,8,10,0.35)', 'rgba(8,8,10,0.82)', '#08080A']}
-        locations={[0, 0.5, 1]}
+        colors={[
+          'rgba(8,8,10,0.70)',  // top — status bar
+          'rgba(8,8,10,0.10)',  // upper-mid — poster shows
+          'rgba(8,8,10,0.10)',  // lower-mid — poster shows
+          'rgba(8,8,10,0.88)',  // bottom — blends into stage
+          '#08080A',            // floor
+        ]}
+        locations={[0, 0.22, 0.6, 0.82, 1]}
         style={StyleSheet.absoluteFill}
       />
     </View>
@@ -238,31 +359,21 @@ function Backdrop({ poster }: { poster?: string | null }) {
 }
 
 function emptyTitle(day: DayKey): string {
-  if (day === 'now') return 'Nothing on today';
+  if (day === 'today') return 'Nothing on today';
   if (day === 'tomorrow') return 'Nothing on tomorrow';
   return 'Nothing announced yet';
 }
 
-/** "20:00 · 22:30" — every screening of the visible film, in order. */
-function timesLabel(isos: string[]): string {
-  const times = isos
-    .map((iso) => new Date(iso))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .map((d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
-  return times.length ? times.join('  ·  ') : 'Times at the cinema';
-}
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   ground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#08080A',
   },
-  wash: { opacity: 0.9 },
+  // The blurred poster image — full screen, slightly dimmed.
+  // Lower opacity means the poster colour bleeds through more vibrantly.
+  wash: { opacity: 0.85 },
 
   chrome: { gap: Spacing.md, paddingBottom: Spacing.md },
   bar: {
@@ -277,25 +388,29 @@ const styles = StyleSheet.create({
   // poster for attention, which is why it is a date and nothing else.
   headline: {
     color: '#FFFFFF',
-    fontSize: 40,
-    lineHeight: 44,
-    letterSpacing: -1.4,
+    fontSize: 44,
+    lineHeight: 48,
+    letterSpacing: -1.6,
     paddingHorizontal: Spacing.lg,
+    textAlign: 'center',
+    fontWeight: '800',
   },
 
-  stage: { flex: 1, paddingHorizontal: Spacing.lg },
+  // Horizontal padding shrinks the stage on both sides so the deck floats
+  // off the screen edges. Centered rather than stretched: the deck sizes
+  // itself off the poster's own aspect ratio, so this is what gives it the
+  // generous dark space above and below that a stretched card wouldn't have.
+  stage: { flex: 1, paddingHorizontal: Spacing.lg, justifyContent: 'center', alignItems: 'center' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  foot: {
+  list: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
+  pickerHead: { paddingBottom: Spacing.md },
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingTop: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    height: 42,
   },
-  footText: { color: 'rgba(255,255,255,0.85)' },
-
-  list: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-  pickerHead: { gap: 2, paddingBottom: Spacing.md },
+  searchInput: { flex: 1, fontSize: 15, padding: 0, color: '#FFFFFF' },
 });

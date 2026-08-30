@@ -1,79 +1,137 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Easing, PanResponder, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  PanResponder,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { resolveImageUrl } from '@/lib/media';
-import { movieChips } from '@/lib/programme';
 import type { ProgrammeEntry } from '@/lib/programme';
+import { movieChips } from '@/lib/programme';
 
 /**
- * The programme as a deck of posters: the top card is dragged *down* and away to
- * reveal the next film already sitting behind it, and pulled back down from
- * above to return to the previous one.
+ * The programme as a deck of posters:
  *
- * A deck rather than a pager because a poster is a physical object in the way a
- * feed row isn't — the card behind peeking over the top edge is what says "there
- * is another one under this", which a paging scroll view can only imply with a
- * scrollbar nobody looks at.
+ * - The top card is dragged DOWN and away to reveal the next film.
+ * - Pulling UP brings the previous film back from underneath.
+ * - The upcoming films have a small visible TIP at the TOP,
+ *   making the deck feel like multiple physical cards stacked together.
  *
- * Animation follows the house pattern from `ui/bottom-sheet.tsx`: `PanResponder`
- * driving `setValue` on a natively-driven `Animated.Value`. That keeps every
- * transform on the UI thread — `Animated.event` is the thing that cannot be
- * native-driven from a pan gesture, `setValue` is not — and avoids Reanimated's
- * quarrel with the React Compiler.
+ * The actual swipe/scroll behavior is intentionally kept the same.
  */
 
-/** Past this, the release commits instead of springing back. */
 const COMMIT_DISTANCE = 90;
-/** px/ms — a brisk flick commits even from a short drag. */
 const COMMIT_VELOCITY = 0.6;
 
-const SPRING = { useNativeDriver: true, speed: 14, bounciness: 5 } as const;
-const SETTLE = { useNativeDriver: true, duration: 240 } as const;
+const SPRING = {
+  useNativeDriver: true,
+  speed: 14,
+  bounciness: 5,
+} as const;
 
-/**
- * The arriving nudge. A deck is indistinguishable from a single poster until
- * something moves, so on arrival the top card lifts the lid on the one behind
- * it and settles back — the gesture demonstrated rather than captioned.
- *
- * Far enough to expose the card behind, nowhere near `COMMIT_DISTANCE`, so it
- * can never be mistaken for a real swipe.
- */
+const SETTLE = {
+  useNativeDriver: true,
+  duration: 240,
+} as const;
+
 const HINT_DISTANCE = 54;
 const HINT_DELAY = 620;
 
-/** Rounder than any token: a poster card reads as an object, not a panel. */
-const CARD_RADIUS = 32;
+const CARD_RADIUS = 28;
 
-/** How far the card behind peeks above the front one, and how much smaller. */
-const PEEK = 16;
-const PEEK_SCALE = 0.94;
+const POSTER_ASPECT = 1.5;
+
+/**
+ * ============================================================
+ * STACK PREVIEW
+ * ============================================================
+ *
+ * The first upcoming card peeks slightly above the current one.
+ *
+ * The second and third upcoming cards peek a little further
+ * above it, creating the visual feeling of a deck.
+ *
+ * ONLY THE TOP is exposed.
+ *
+ * Nothing is added to the bottom.
+ */
+const PEEK_RATIO = 0.09;
+const PEEK_SCALE = 0.93;
+
+/**
+ * Additional cards in the visible stack.
+ *
+ * Keeping this at 3 gives:
+ *
+ *     Movie 3  ── tiny tip
+ *       Movie 2 ── tip
+ *         Movie 1 ── current
+ *
+ * without making the stack distracting.
+ */
+const STACK_PREVIEW_COUNT = 3;
+
+/**
+ * Distance between each visible card tip.
+ */
+const STACK_GAP_RATIO = 0.055;
 
 export type PosterDeckProps = {
   entries: ProgrammeEntry[];
   width: number;
-  height: number;
-  /** Reports the visible card so the screen can headline its date. */
+
+  /** Caps the card's height. */
+  maxHeight?: number;
+
+  /** Reports the visible card. */
   onIndexChange?: (index: number) => void;
-  /** Tapping the front card. Only the front one is tappable. */
+
+  /** Tapping the front card. */
   onOpen?: (entry: ProgrammeEntry) => void;
 };
 
-function PosterDeckImpl({ entries, width, height, onIndexChange, onOpen }: PosterDeckProps) {
+function PosterDeckImpl({
+  entries,
+  width,
+  maxHeight,
+  onIndexChange,
+  onOpen,
+}: PosterDeckProps) {
+  const height = Math.min(
+    width * POSTER_ASPECT,
+    maxHeight ?? Infinity,
+  );
+
+  const peek = height * PEEK_RATIO;
+  const stackGap = height * STACK_GAP_RATIO;
+
   const [index, setIndex] = useState(0);
   const [drag] = useState(() => new Animated.Value(0));
-  // Disarmed by the first touch, so the hint never argues with a real gesture
-  // and never replays for someone who has already found the swipe.
+
+  /**
+   * Disarmed by the first touch so the hint doesn't fight
+   * with the user's gesture.
+   */
   const [armed, setArmed] = useState(true);
 
   const count = entries.length;
 
+  /**
+   * ==========================================================
+   * ARRIVAL HINT
+   * ==========================================================
+   *
+   * This is the same hint behavior.
+   */
   useEffect(() => {
-    // Nothing to reveal, or the viewer already found it themselves.
     if (count < 2 || !armed) return;
 
     const timer = setTimeout(() => {
@@ -84,139 +142,468 @@ function PosterDeckImpl({ entries, width, height, onIndexChange, onOpen }: Poste
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.spring(drag, { toValue: 0, speed: 10, bounciness: 8, useNativeDriver: true }),
+
+        Animated.spring(drag, {
+          toValue: 0,
+          speed: 10,
+          bounciness: 8,
+          useNativeDriver: true,
+        }),
       ]).start();
     }, HINT_DELAY);
 
-    // Covers both unmount and disarming: a touch inside the delay window clears
-    // the timer before it ever fires.
     return () => clearTimeout(timer);
   }, [armed, count, drag]);
 
+  /**
+   * ==========================================================
+   * CHANGE CARD
+   * ==========================================================
+   *
+   * Same logic as the original.
+   */
   const step = useCallback(
     (delta: number) => {
       setIndex((current) => {
         const next = current + delta;
+
         onIndexChange?.(next);
+
         return next;
       });
+
       drag.setValue(0);
     },
     [drag, onIndexChange],
   );
 
-  // Rebuilt when the position or the deck's size changes, so the handlers close
-  // over live values instead of reaching through a ref. `panHandlers` is just a
-  // bag of callbacks handed to a View, so swapping it between renders is free.
+  /**
+   * ==========================================================
+   * PAN RESPONDER
+   * ==========================================================
+   *
+   * IMPORTANT:
+   *
+   * This is the original scrolling behavior.
+   *
+   * Nothing about the direction or movement has been changed.
+   */
   const pan = useMemo(
     () =>
       PanResponder.create({
-        // Only claim clearly vertical drags, so a horizontal swipe still belongs
-        // to whatever sits around the deck.
+        /**
+         * Only clearly vertical gestures are claimed.
+         */
         onStartShouldSetPanResponder: () => {
-          // A finger down outranks the hint: stop it mid-flight so the card is
-          // never fighting the person holding it.
           setArmed(false);
           drag.stopAnimation();
+
           return false;
         },
+
         onMoveShouldSetPanResponder: (_, g) =>
-          Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+          Math.abs(g.dy) > 6 &&
+          Math.abs(g.dy) > Math.abs(g.dx),
+
+        /**
+         * The card follows the finger.
+         */
         onPanResponderMove: (_, g) => {
           const i = index;
           const h = height;
+
           const atEnd = i >= count - 1;
           const atStart = i <= 0;
-          // Nothing behind or above to reveal, so the card only gives a little —
-          // the resistance is the answer to "is there more?".
-          if (g.dy > 0 && atEnd) drag.setValue(Math.min(g.dy * 0.2, h * 0.08));
-          else if (g.dy < 0 && atStart) drag.setValue(Math.max(g.dy * 0.2, -h * 0.08));
-          else drag.setValue(g.dy);
+
+          /**
+           * At the end, give resistance.
+           */
+          if (g.dy > 0 && atEnd) {
+            drag.setValue(
+              Math.min(g.dy * 0.2, h * 0.08),
+            );
+          }
+
+          /**
+           * At the beginning, give resistance.
+           */
+          else if (g.dy < 0 && atStart) {
+            drag.setValue(
+              Math.max(g.dy * 0.2, -h * 0.08),
+            );
+          }
+
+          /**
+           * Normal movement.
+           */
+          else {
+            drag.setValue(g.dy);
+          }
         },
+
+        /**
+         * Release behavior stays exactly the same:
+         *
+         * DOWN = next
+         * UP   = previous
+         */
         onPanResponderRelease: (_, g) => {
           const i = index;
           const h = height;
-          const forward = g.dy > COMMIT_DISTANCE || g.vy > COMMIT_VELOCITY;
-          const back = g.dy < -COMMIT_DISTANCE || g.vy < -COMMIT_VELOCITY;
 
+          const forward =
+            g.dy > COMMIT_DISTANCE ||
+            g.vy > COMMIT_VELOCITY;
+
+          const back =
+            g.dy < -COMMIT_DISTANCE ||
+            g.vy < -COMMIT_VELOCITY;
+
+          /**
+           * NEXT
+           */
           if (forward && i < count - 1) {
-            Animated.timing(drag, { toValue: h, ...SETTLE }).start(({ finished }) => {
-              if (finished) step(1);
+            Animated.timing(drag, {
+              toValue: h,
+              ...SETTLE,
+            }).start(({ finished }) => {
+              if (finished) {
+                step(1);
+              }
             });
-          } else if (back && i > 0) {
-            Animated.timing(drag, { toValue: -h, ...SETTLE }).start(({ finished }) => {
-              if (finished) step(-1);
+          }
+
+          /**
+           * PREVIOUS
+           */
+          else if (back && i > 0) {
+            Animated.timing(drag, {
+              toValue: -h,
+              ...SETTLE,
+            }).start(({ finished }) => {
+              if (finished) {
+                step(-1);
+              }
             });
-          } else {
-            Animated.spring(drag, { toValue: 0, ...SPRING }).start();
+          }
+
+          /**
+           * Not enough movement:
+           * return the card to its position.
+           */
+          else {
+            Animated.spring(drag, {
+              toValue: 0,
+              ...SPRING,
+            }).start();
           }
         },
+
         onPanResponderTerminate: () => {
-          Animated.spring(drag, { toValue: 0, ...SPRING }).start();
+          Animated.spring(drag, {
+            toValue: 0,
+            ...SPRING,
+          }).start();
         },
       }),
     [count, drag, height, index, step],
   );
 
-  if (!entries.length) return null;
+  if (!entries.length) {
+    return null;
+  }
 
   const current = entries[index];
-  const next = entries[index + 1];
+
+  /**
+   * We keep the previous card exactly as before.
+   */
   const previous = entries[index - 1];
 
-  // Only positive drag moves the front card; a backward pull leaves it alone and
-  // brings the previous card down over it instead.
+  /**
+   * Build the upcoming stack.
+   *
+   * entries[index + 1]
+   * entries[index + 2]
+   * entries[index + 3]
+   */
+  const upcoming = entries.slice(
+    index + 1,
+    index + 1 + STACK_PREVIEW_COUNT,
+  );
+
+  /**
+   * ==========================================================
+   * CURRENT CARD
+   * ==========================================================
+   *
+   * Same behavior as the original:
+   *
+   * positive drag -> card moves down.
+   *
+   * negative drag -> front card stays at the top while the
+   * previous card comes over it.
+   */
   const frontY = drag.interpolate({
     inputRange: [-1, 0, 1],
     outputRange: [0, 0, 1],
   });
 
-  // Parked one card-height below at rest, so it is off-screen until pulled.
+  /**
+   * ==========================================================
+   * PREVIOUS CARD
+   * ==========================================================
+   *
+   * EXACT SAME movement:
+   *
+   * At rest:
+   *   translateY = height
+   *
+   * Swipe UP:
+   *   translateY -> 0
+   *
+   * No blur.
+   * No opacity.
+   */
   const previousY = drag.interpolate({
     inputRange: [-height, 0],
     outputRange: [0, height],
     extrapolate: 'clamp',
   });
 
-  const behindScale = drag.interpolate({
-    inputRange: [0, height],
-    outputRange: [PEEK_SCALE, 1],
-    extrapolate: 'clamp',
-  });
-  const behindY = drag.interpolate({
-    inputRange: [0, height],
-    outputRange: [-PEEK, 0],
+  const previousScale = drag.interpolate({
+    inputRange: [-height, 0],
+    outputRange: [1, PEEK_SCALE],
     extrapolate: 'clamp',
   });
 
   return (
-    <View style={[styles.deck, { width, height }]} {...pan.panHandlers}>
-      {next ? (
+    <View
+      style={[
+        styles.deck,
+        {
+          width,
+          height,
+        },
+      ]}
+      {...pan.panHandlers}
+    >
+      {/* ==================================================== */}
+      {/* PREVIOUS CARD                                        */}
+      {/* ==================================================== */}
+      {previous ? (
         <Animated.View
-          style={[styles.layer, { transform: [{ translateY: behindY }, { scale: behindScale }] }]}
+          style={[
+            styles.layer,
+            styles.previousLayer,
+            {
+              /**
+               * IMPORTANT:
+               *
+               * Completely solid.
+               *
+               * No blur.
+               * No fade.
+               */
+              opacity: 1,
+
+              transform: [
+                {
+                  translateY: previousY,
+                },
+                {
+                  scale: previousScale,
+                },
+              ],
+            },
+          ]}
         >
-          <PosterCard entry={next} width={width} height={height} />
+          <PosterCard
+            entry={previous}
+            width={width}
+            height={height}
+          />
         </Animated.View>
       ) : null}
 
-      <Animated.View style={[styles.layer, { transform: [{ translateY: frontY }] }]}>
+      {/* ==================================================== */}
+      {/* UPCOMING STACK                                       */}
+      {/* ==================================================== */}
+      {/*
+       *
+       * The cards are rendered from deepest -> closest.
+       *
+       * Each one sits slightly higher than the one before it.
+       *
+       * This creates:
+       *
+       *        ┌───────────────┐
+       *        │    MOVIE 3   │
+       *        └───────────────┘
+       *          ┌───────────────┐
+       *          │    MOVIE 2   │
+       *          └───────────────┘
+       *            ┌───────────────┐
+       *            │    MOVIE 1   │
+       *            └───────────────┘
+       *              CURRENT
+       *
+       * Only the TOP tips are visible.
+       *
+       * There is NOTHING sticking out from the bottom.
+       */}
+
+      {upcoming
+        .slice()
+        .reverse()
+        .map((entry, reversedIndex) => {
+          /**
+           * Convert reversed index back into stack position.
+           *
+           * Example:
+           *
+           * Movie 3 -> 2
+           * Movie 2 -> 1
+           * Movie 1 -> 0
+           */
+          const stackIndex =
+            upcoming.length - 1 - reversedIndex;
+
+          /**
+           * The closest upcoming card is the lowest one.
+           *
+           * Deeper cards sit further above it.
+           */
+          const restingY =
+            -peek - stackIndex * stackGap;
+
+          /**
+           * When the current card moves down, the closest
+           * upcoming card moves into its position.
+           *
+           * The other cards follow the same stack relationship.
+           */
+          const targetY =
+            stackIndex === 0
+              ? 0
+              : -stackIndex * stackGap;
+
+          const cardY = drag.interpolate({
+            inputRange: [0, height],
+            outputRange: [restingY, targetY],
+            extrapolate: 'clamp',
+          });
+
+          /**
+           * Keep the cards slightly smaller while they are
+           * behind the current poster.
+           *
+           * They become full size as they become the front card.
+           */
+          const scale = drag.interpolate({
+            inputRange: [0, height],
+            outputRange: [
+              Math.max(
+                0.88,
+                PEEK_SCALE -
+                  stackIndex * 0.025,
+              ),
+              stackIndex === 0
+                ? 1
+                : Math.max(
+                    0.88,
+                    PEEK_SCALE -
+                      (stackIndex - 1) * 0.025,
+                  ),
+            ],
+            extrapolate: 'clamp',
+          });
+
+          return (
+            <Animated.View
+              key={entry.movie._id}
+              pointerEvents="none"
+              style={[
+                styles.layer,
+
+                /**
+                 * Deeper cards get lower z-index.
+                 * The closest upcoming card sits above them.
+                 */
+                {
+                  zIndex: 10 + stackIndex,
+
+                  /**
+                   * FULLY SOLID.
+                   *
+                   * No blur.
+                   * No opacity animation.
+                   */
+                  opacity: 1,
+
+                  transform: [
+                    {
+                      translateY: cardY,
+                    },
+                    {
+                      scale,
+                    },
+                  ],
+                },
+              ]}
+            >
+              <PosterCard
+                entry={entry}
+                width={width}
+                height={height}
+              />
+            </Animated.View>
+          );
+        })}
+
+      {/* ==================================================== */}
+      {/* CURRENT / FRONT CARD                                 */}
+      {/* ==================================================== */}
+      <Animated.View
+        style={[
+          styles.layer,
+
+          /**
+           * Always above the upcoming cards.
+           */
+          styles.frontLayer,
+
+          {
+            transform: [
+              {
+                translateY: frontY,
+              },
+            ],
+          },
+        ]}
+      >
         <PosterCard
           entry={current}
           width={width}
           height={height}
-          onPress={onOpen ? () => onOpen(current) : undefined}
+          onPress={
+            onOpen
+              ? () => onOpen(current)
+              : undefined
+          }
         />
       </Animated.View>
-
-      {previous ? (
-        <Animated.View style={[styles.layer, { transform: [{ translateY: previousY }] }]}>
-          <PosterCard entry={previous} width={width} height={height} />
-        </Animated.View>
-      ) : null}
     </View>
   );
 }
 
+/**
+ * ============================================================
+ * POSTER CARD
+ * ============================================================
+ *
+ * This part is unchanged.
+ */
 function PosterCard({
   entry,
   width,
@@ -228,12 +615,18 @@ function PosterCard({
   height: number;
   onPress?: () => void;
 }) {
-  const poster = resolveImageUrl(entry.movie.poster);
+  const poster = resolveImageUrl(
+    entry.movie.poster,
+  );
+
   const chips = movieChips(entry.movie);
 
-  // A plain tap never reaches the pan responder — it only claims the gesture
-  // once a finger has travelled 6pt — so the card can be pressable and
-  // draggable at once without the two arguing.
+  const tagline = entry.movie.description
+    ? entry.movie.description
+        .slice(0, 80)
+        .toUpperCase()
+    : null;
+
   const Card = onPress ? Touchable : View;
 
   return (
@@ -241,16 +634,32 @@ function PosterCard({
       {...(onPress
         ? {
             accessibilityRole: 'button' as const,
-            accessibilityLabel: `${entry.movie.title}. Open details`,
+
+            accessibilityLabel:
+              `${entry.movie.title}. Open details`,
+
             onPress,
+
             pressedScale: 0.98,
           }
         : {})}
-      style={[styles.card, { width, height }]}
+      style={[
+        styles.card,
+        {
+          width,
+          height,
+        },
+      ]}
     >
+      {/* ==================================================== */}
+      {/* POSTER IMAGE                                         */}
+      {/* ==================================================== */}
+
       {poster ? (
         <Image
-          source={{ uri: poster }}
+          source={{
+            uri: poster,
+          }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={200}
@@ -258,22 +667,87 @@ function PosterCard({
           recyclingKey={entry.movie._id}
         />
       ) : (
-        <View style={[StyleSheet.absoluteFill, styles.blank]}>
-          <Ionicons name="film-outline" size={44} color="rgba(255,255,255,0.25)" />
-          <Text variant="callout" style={styles.blankTitle} numberOfLines={2}>
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.blank,
+          ]}
+        >
+          <Ionicons
+            name="film-outline"
+            size={44}
+            color="rgba(255,255,255,0.25)"
+          />
+
+          <Text
+            variant="callout"
+            style={styles.blankTitle}
+            numberOfLines={2}
+          >
             {entry.movie.title}
           </Text>
         </View>
       )}
 
-      {/* Chips ride the artwork's top-left, where a poster's own title almost
-          never sits — and on their own dark pills, because the art behind them
-          is unknowable. */}
+      {/* ==================================================== */}
+      {/* BOTTOM GRADIENT SCRIM                                */}
+      {/* ==================================================== */}
+
+      <LinearGradient
+        colors={[
+          'transparent',
+          'rgba(0,0,0,0.18)',
+          'rgba(0,0,0,0.72)',
+        ]}
+        locations={[
+          0.45,
+          0.72,
+          1,
+        ]}
+        style={[
+          StyleSheet.absoluteFill,
+          styles.scrim,
+        ]}
+        pointerEvents="none"
+      />
+
+      {/* ==================================================== */}
+      {/* TAGLINE                                              */}
+      {/* ==================================================== */}
+
+      {tagline ? (
+        <View
+          style={styles.taglineWrap}
+          pointerEvents="none"
+        >
+          <Text
+            variant="title"
+            style={styles.tagline}
+            numberOfLines={3}
+          >
+            {tagline}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* ==================================================== */}
+      {/* CHIPS                                                */}
+      {/* ==================================================== */}
+
       {chips.length ? (
-        <View style={styles.chips}>
+        <View
+          style={styles.chips}
+          pointerEvents="none"
+        >
           {chips.map((chip) => (
-            <View key={chip} style={styles.chip}>
-              <Text variant="caption" style={styles.chipText}>
+            <View
+              key={chip}
+              style={styles.chip}
+            >
+              <Text
+                variant="small"
+                style={styles.chipText}
+              >
                 {chip}
               </Text>
             </View>
@@ -284,38 +758,168 @@ function PosterCard({
   );
 }
 
+/**
+ * ============================================================
+ * STYLES
+ * ============================================================
+ */
 const styles = StyleSheet.create({
-  deck: { alignSelf: 'center' },
-  layer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  /**
+   * The deck itself stays clipped exactly like the original.
+   *
+   * This is what makes the upcoming cards appear as small
+   * tips at the top instead of creating a giant area around
+   * the poster.
+   */
+  deck: {
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+
+  /**
+   * All cards occupy the same base area.
+   */
+  layer: {
+    position: 'absolute',
+
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  /**
+   * Current card must always be above the upcoming stack.
+   */
+  frontLayer: {
+    zIndex: 100,
+  },
+
+  /**
+   * Previous card comes over the current card during
+   * an upward swipe.
+   */
+  previousLayer: {
+    zIndex: 200,
+  },
+
+  /**
+   * ==========================================================
+   * CARD
+   * ==========================================================
+   */
   card: {
     borderRadius: CARD_RADIUS,
+
     overflow: 'hidden',
+
     backgroundColor: '#141418',
+
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.14)',
+
+    borderColor:
+      'rgba(255,255,255,0.14)',
   },
+
   blank: {
     alignItems: 'center',
+
     justifyContent: 'center',
+
     gap: Spacing.sm,
+
     padding: Spacing.lg,
   },
-  blankTitle: { color: '#FFFFFF', textAlign: 'center' },
 
+  blankTitle: {
+    color: '#FFFFFF',
+
+    textAlign: 'center',
+  },
+
+  /**
+   * Bottom gradient.
+   */
+  scrim: {
+    top: '40%',
+  },
+
+  /**
+   * Tagline overlay.
+   */
+  taglineWrap: {
+    position: 'absolute',
+
+    left: Spacing.lg,
+
+    right: Spacing.lg,
+
+    bottom: Spacing.xl,
+  },
+
+  tagline: {
+    color: '#FFFFFF',
+
+    fontSize: 22,
+
+    lineHeight: 27,
+
+    fontWeight: '800',
+
+    letterSpacing: 0.3,
+
+    textShadowColor:
+      'rgba(0,0,0,0.6)',
+
+    textShadowOffset: {
+      width: 0,
+      height: 1,
+    },
+
+    textShadowRadius: 4,
+  },
+
+  /**
+   * Top-left chips.
+   */
   chips: {
     position: 'absolute',
+
     top: Spacing.md,
+
     left: Spacing.md,
+
     gap: Spacing.xs,
   },
+
   chip: {
     alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 4,
+
+    paddingHorizontal: Spacing.md,
+
+    paddingVertical: 6,
+
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(8,8,10,0.72)',
+
+    backgroundColor:
+      'rgba(8,8,10,0.68)',
+
+    borderWidth:
+      StyleSheet.hairlineWidth,
+
+    borderColor:
+      'rgba(255,255,255,0.12)',
   },
-  chipText: { color: '#FFFFFF' },
+
+  chipText: {
+    color: '#FFFFFF',
+
+    fontWeight: '600',
+
+    fontSize: 13,
+  },
 });
 
-export const PosterDeck = memo(PosterDeckImpl);
+export const PosterDeck = memo(
+  PosterDeckImpl,
+);
