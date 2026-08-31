@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useDeferredValue, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   type ListRenderItem,
@@ -11,6 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { CinemaRow } from '@/components/cinema/cinema-picker';
+import { MovieResultCard } from '@/components/cinema/movie-result-card';
 import { FilterSheet } from '@/components/discover/filter-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { EventCard } from '@/components/event/event-card';
@@ -26,17 +28,37 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
+import { useCinemas, useMoviesCatalogue } from '@/queries/cinema';
 import { DEFAULT_FILTERS, activeFilterCount, useDiscover } from '@/queries/discover';
-import type { PazimoEvent } from '@/types/api';
+import type { Cinema, CinemaMovie, PazimoEvent } from '@/types/api';
 
 const keyExtractor = (event: PazimoEvent) => event._id;
+const movieKeyExtractor = (movie: CinemaMovie) => movie._id;
+const cinemaKeyExtractor = (cinema: Cinema) => cinema._id;
+
+type DiscoverTab = 'events' | 'movies' | 'cinemas';
+
+const TABS: { key: DiscoverTab; label: string }[] = [
+  { key: 'events', label: 'Events' },
+  { key: 'movies', label: 'Movies' },
+  { key: 'cinemas', label: 'Cinemas' },
+];
+
+const TAB_PLACEHOLDER: Record<DiscoverTab, string> = {
+  events: 'Search events, venues, cities',
+  movies: 'Search movies',
+  cinemas: 'Search cinemas, cities',
+};
 
 /**
  * The floating search row, measured from its own paddings: `sm` top, a 42pt
- * search bar, `sm` bottom. The list pads itself past this and the refresh
- * spinner drops just below it.
+ * search bar, a tab row, `sm` bottom. The list pads itself past this and the
+ * refresh spinner drops just below it.
  */
-const HEADER_BLOCK_HEIGHT = 58;
+const SEARCH_ROW_HEIGHT = 42;
+const TABS_ROW_HEIGHT = 34;
+const HEADER_BLOCK_HEIGHT =
+  Spacing.sm * 3 + SEARCH_ROW_HEIGHT + TABS_ROW_HEIGHT;
 
 /**
  * The field sits on glass now, not on an opaque fill, so its own furniture has
@@ -45,14 +67,23 @@ const HEADER_BLOCK_HEIGHT = 58;
  */
 const PLACEHOLDER = 'rgba(255,255,255,0.55)';
 
+/** Mirrors the web's search surface: title and genre. */
+function matchesMovieQuery(movie: CinemaMovie, needle: string): boolean {
+  if (!needle) return true;
+  const genre = Array.isArray(movie.genre) ? movie.genre.join(' ') : (movie.genre ?? '');
+  return `${movie.title} ${genre}`.toLowerCase().includes(needle);
+}
+
 export default function DiscoverScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ category?: string }>();
 
   // What the floating controls sample on Android — the static ambient backdrop.
   const backdropRef = useRef<View>(null);
 
+  const [tab, setTab] = useState<DiscoverTab>('events');
   const [query, setQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({
@@ -72,8 +103,9 @@ export default function DiscoverScreen() {
     setFilters((current) => ({ ...current, categoryId: params.category ?? null }));
   }
 
-  // Keeps typing smooth: the list re-filters at a lower priority than the input.
+  // Keeps typing smooth: the lists re-filter at a lower priority than the input.
   const deferredQuery = useDeferredValue(query);
+  const needle = deferredQuery.trim().toLowerCase();
 
   const categories = useCategories();
   const { results, isLoading, isError, error, refetch } = useDiscover({
@@ -81,6 +113,18 @@ export default function DiscoverScreen() {
     query: deferredQuery,
   });
   const activeCount = activeFilterCount(filters);
+
+  // Fetched (and searched) lazily — only once someone actually opens the tab —
+  // so switching to "Movies" or "Cinemas" never costs a request nobody asked for.
+  const movieCatalogue = useMoviesCatalogue(tab === 'movies');
+  const movieResults = useMemo(
+    () => movieCatalogue.movies.filter((movie) => matchesMovieQuery(movie, needle)),
+    [movieCatalogue.movies, needle],
+  );
+
+  // Cinemas already accept a server-side `search` term, so this is a real
+  // query rather than a client-side filter over a fully-fetched list.
+  const cinemaCatalogue = useCinemas(tab === 'cinemas' ? { search: deferredQuery } : undefined);
 
   const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
     ({ item }) => (
@@ -91,9 +135,45 @@ export default function DiscoverScreen() {
     [],
   );
 
-  // The catalogue is one bounded fetch, so a pull re-pulls the whole thing —
-  // filtering and search run over it client-side and need no refetch of their own.
-  const { refreshing, onRefresh } = useRefresh(refetch, categories.refetch);
+  const renderMovie = useCallback<ListRenderItem<CinemaMovie>>(
+    ({ item }) => (
+      <View style={styles.movieItem}>
+        <MovieResultCard movie={item} />
+      </View>
+    ),
+    [],
+  );
+
+  const openCinema = useCallback(
+    (cinema: Cinema) => {
+      router.push({ pathname: '/(tabs)/cinema', params: { cinemaId: cinema._id } });
+    },
+    [router],
+  );
+
+  const renderCinemaResult = useCallback<ListRenderItem<Cinema>>(
+    ({ item }) => (
+      <View style={styles.item}>
+        <CinemaRow cinema={item} onPress={openCinema} />
+      </View>
+    ),
+    [openCinema],
+  );
+
+  // The events catalogue is one bounded fetch, so a pull re-pulls the whole
+  // thing — filtering and search run over it client-side and need no refetch
+  // of their own. Movies and cinemas each get their own binding since they
+  // refetch a different query.
+  const eventsRefresh = useRefresh(refetch, categories.refetch);
+  const moviesRefresh = useRefresh(movieCatalogue.refetch);
+  const cinemasRefresh = useRefresh(cinemaCatalogue.refetch);
+
+  const selectTab = useCallback((next: DiscoverTab) => {
+    setTab(next);
+    setFiltersOpen(false);
+  }, []);
+
+  const topPadding = insets.top + HEADER_BLOCK_HEIGHT + Spacing.lg;
 
   return (
     <View style={styles.screen}>
@@ -102,60 +182,84 @@ export default function DiscoverScreen() {
           bar rather than the page and flattens into a grey disc — the chips and
           the field below only read as glass because nothing sits behind them. */}
       <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-        <Glass
-          variant="clear"
-          intensity={28}
-          tint={GLASS_TINT}
-          radius={Radius.pill}
-          blurTarget={backdropRef}
-          style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={PLACEHOLDER} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search events, venues, cities"
-            placeholderTextColor={PLACEHOLDER}
-            style={styles.input}
-            returnKeyType="search"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
-          {query.length > 0 ? (
-            <Touchable
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              onPress={() => setQuery('')}
-              pressedScale={0.9}>
-              <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
-            </Touchable>
-          ) : null}
-        </Glass>
-
-        {/* The badge is what replaces the chip row's visibility: with the
-            controls behind a sheet, this is the only thing telling you a filter
-            is narrowing the results. */}
-        <View>
-          <GlassIconButton
-            icon="options-outline"
-            accessibilityLabel={
-              activeCount ? `Filters, ${activeCount} applied` : 'Filters'
-            }
-            size={42}
-            onPress={() => setFiltersOpen(true)}
+        <View style={styles.searchRow}>
+          <Glass
+            variant="clear"
+            intensity={28}
+            tint={GLASS_TINT}
+            radius={Radius.pill}
             blurTarget={backdropRef}
-          />
-          {activeCount > 0 ? (
-            <View
-              style={[
-                styles.filterBadge,
-                { backgroundColor: theme.brand, borderColor: theme.background },
-              ]}
-              pointerEvents="none">
-              <Text variant="caption" style={{ color: theme.onBrand }}>
-                {activeCount}
-              </Text>
+            style={styles.searchBar}>
+            <Ionicons name="search" size={18} color={PLACEHOLDER} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={TAB_PLACEHOLDER[tab]}
+              placeholderTextColor={PLACEHOLDER}
+              style={styles.input}
+              returnKeyType="search"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+            {query.length > 0 ? (
+              <Touchable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                onPress={() => setQuery('')}
+                pressedScale={0.9}>
+                <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
+              </Touchable>
+            ) : null}
+          </Glass>
+
+          {/* The badge is what replaces the chip row's visibility: with the
+              controls behind a sheet, this is the only thing telling you a filter
+              is narrowing the results. Events-only — nothing else in this screen
+              has filters of its own. */}
+          {tab === 'events' ? (
+            <View>
+              <GlassIconButton
+                icon="options-outline"
+                accessibilityLabel={
+                  activeCount ? `Filters, ${activeCount} applied` : 'Filters'
+                }
+                size={42}
+                onPress={() => setFiltersOpen(true)}
+                blurTarget={backdropRef}
+              />
+              {activeCount > 0 ? (
+                <View
+                  style={[
+                    styles.filterBadge,
+                    { backgroundColor: theme.brand, borderColor: theme.background },
+                  ]}
+                  pointerEvents="none">
+                  <Text variant="caption" style={{ color: theme.onBrand }}>
+                    {activeCount}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.tabsRow}>
+          {TABS.map((t) => (
+            <Touchable
+              key={t.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === t.key }}
+              accessibilityLabel={t.label}
+              onPress={() => selectTab(t.key)}
+              pressedScale={0.96}
+              style={[styles.tabPill, tab === t.key && styles.tabPillActive]}>
+              <Text
+                variant="small"
+                style={[styles.tabLabel, tab === t.key && styles.tabLabelActive]}>
+                {t.label}
+              </Text>
+            </Touchable>
+          ))}
         </View>
       </View>
 
@@ -169,57 +273,148 @@ export default function DiscoverScreen() {
         resultCount={results.length}
       />
 
-      <FlatList
-        data={results}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        contentContainerStyle={{
-          paddingTop: insets.top + HEADER_BLOCK_HEIGHT + Spacing.lg,
-          paddingBottom: tabBarClearance(insets.bottom),
-        }}
-        refreshControl={
-          <PageRefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
-          />
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.skeletonList}>
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} height={220} radius={Radius.lg} />
-              ))}
-            </View>
-          ) : isError ? (
-            <ErrorState
-              message={error instanceof ApiError ? error.message : undefined}
-              onRetry={() => refetch()}
+      {tab === 'events' ? (
+        <FlatList
+          key="events"
+          data={results}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            paddingTop: topPadding,
+            paddingBottom: tabBarClearance(insets.bottom),
+          }}
+          refreshControl={
+            <PageRefreshControl
+              refreshing={eventsRefresh.refreshing}
+              onRefresh={eventsRefresh.onRefresh}
+              progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
             />
-          ) : (
-            <EmptyState
-              icon="search-outline"
-              title="No events found"
-              message={
-                query
-                  ? `Nothing matches "${query}". Try a different search.`
-                  : activeCount
-                    ? // The filters live behind a sheet now, so an empty list has
-                      // to say why — otherwise it reads as "the app has nothing".
-                      'No events match these filters. Try widening them.'
-                    : 'There are no published events to show yet.'
-              }
+          }
+          ListEmptyComponent={
+            isLoading ? (
+              <View style={styles.skeletonList}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} height={220} radius={Radius.lg} />
+                ))}
+              </View>
+            ) : isError ? (
+              <ErrorState
+                message={error instanceof ApiError ? error.message : undefined}
+                onRetry={() => refetch()}
+              />
+            ) : (
+              <EmptyState
+                icon="search-outline"
+                title="No events found"
+                message={
+                  query
+                    ? `Nothing matches "${query}". Try a different search.`
+                    : activeCount
+                      ? // The filters live behind a sheet now, so an empty list has
+                        // to say why — otherwise it reads as "the app has nothing".
+                        'No events match these filters. Try widening them.'
+                      : 'There are no published events to show yet.'
+                }
+              />
+            )
+          }
+          initialNumToRender={4}
+          maxToRenderPerBatch={6}
+          windowSize={7}
+          removeClippedSubviews
+        />
+      ) : tab === 'movies' ? (
+        <FlatList
+          key="movies"
+          data={movieResults}
+          keyExtractor={movieKeyExtractor}
+          renderItem={renderMovie}
+          numColumns={2}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          columnWrapperStyle={styles.movieRow}
+          contentContainerStyle={{
+            paddingHorizontal: Spacing.lg,
+            paddingTop: topPadding,
+            paddingBottom: tabBarClearance(insets.bottom),
+            gap: Spacing.md,
+          }}
+          refreshControl={
+            <PageRefreshControl
+              refreshing={moviesRefresh.refreshing}
+              onRefresh={moviesRefresh.onRefresh}
+              progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
             />
-          )
-        }
-        initialNumToRender={4}
-        maxToRenderPerBatch={6}
-        windowSize={7}
-        removeClippedSubviews
-      />
+          }
+          ListEmptyComponent={
+            movieCatalogue.isLoading ? (
+              <View style={styles.movieSkeletonGrid}>
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} height={210} radius={Radius.lg} style={styles.movieSkeleton} />
+                ))}
+              </View>
+            ) : movieCatalogue.isError ? (
+              <ErrorState onRetry={() => movieCatalogue.refetch()} />
+            ) : (
+              <EmptyState
+                icon="film-outline"
+                title="No movies found"
+                message={
+                  query
+                    ? `Nothing matches "${query}". Try a different search.`
+                    : 'Nothing is currently programmed at any cinema.'
+                }
+              />
+            )
+          }
+        />
+      ) : (
+        <FlatList
+          key="cinemas"
+          data={cinemaCatalogue.cinemas}
+          keyExtractor={cinemaKeyExtractor}
+          renderItem={renderCinemaResult}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            paddingTop: topPadding,
+            paddingBottom: tabBarClearance(insets.bottom),
+          }}
+          refreshControl={
+            <PageRefreshControl
+              refreshing={cinemasRefresh.refreshing}
+              onRefresh={cinemasRefresh.onRefresh}
+              progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
+            />
+          }
+          ListEmptyComponent={
+            cinemaCatalogue.isLoading ? (
+              <View style={styles.skeletonList}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} height={132} radius={Radius.lg} />
+                ))}
+              </View>
+            ) : cinemaCatalogue.isError ? (
+              <ErrorState message={cinemaCatalogue.error?.message} onRetry={() => cinemaCatalogue.refetch()} />
+            ) : (
+              <EmptyState
+                icon="business-outline"
+                title="No cinemas found"
+                message={
+                  query
+                    ? `Nothing matches "${query}". Try a different search.`
+                    : 'No cinemas are listing screenings yet.'
+                }
+              />
+            )
+          }
+        />
+      )}
     </View>
   );
 }
@@ -232,19 +427,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.md,
-    height: 42,
+    height: SEARCH_ROW_HEIGHT,
   },
   input: { flex: 1, fontSize: 15, padding: 0, color: '#FFFFFF' },
   filterBadge: {
@@ -260,6 +454,27 @@ const styles = StyleSheet.create({
     // The ring is what separates the badge from the glass behind it.
     borderWidth: 1.5,
   },
+
+  tabsRow: { flexDirection: 'row', gap: Spacing.sm },
+  tabPill: {
+    flex: 1,
+    height: TABS_ROW_HEIGHT,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  tabPillActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  tabLabel: { color: 'rgba(255,255,255,0.75)', fontWeight: '600' },
+  tabLabelActive: { color: '#0A0A0C' },
+
   item: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
   skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
+
+  movieRow: { gap: Spacing.md },
+  movieItem: { flex: 1 },
+  movieSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
+  movieSkeleton: { width: '47%' },
 });

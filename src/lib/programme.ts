@@ -9,14 +9,7 @@ import type { CinemaMovie, CinemaShowtime } from '@/types/api';
  * thinks of as tonight.
  */
 
-export type DayKey = 'now' | 'tomorrow' | 'soon';
-
-export type DaySegment = {
-  key: DayKey;
-  label: string;
-  /** Distinct films playing in this window, soonest first. */
-  entries: ProgrammeEntry[];
-};
+export type DayKey = 'today' | 'tomorrow' | 'later';
 
 export type ProgrammeEntry = {
   movie: CinemaMovie;
@@ -24,6 +17,27 @@ export type ProgrammeEntry = {
   startsAt: string;
   /** Every screening of it in the window, soonest first. */
   showtimes: CinemaShowtime[];
+};
+
+/** One calendar date beyond tomorrow that the cinema actually has something on. */
+export type ComingSoonDay = {
+  /** `YYYY-MM-DD`, matching the key the movie-detail endpoint groups by. */
+  date: string;
+  /** "FRI 29 AUG" — short enough for a rail tab or a picker row. */
+  label: string;
+  entries: ProgrammeEntry[];
+};
+
+export type ProgrammeSchedule = {
+  today: ProgrammeEntry[];
+  tomorrow: ProgrammeEntry[];
+  /**
+   * Day-after-tomorrow onward, one bucket per calendar date the cinema has
+   * actually published, soonest first. Not a fixed week: a cinema's plan is
+   * often shorter than that (and sometimes longer), so this is exactly
+   * whichever dates are present in `showtimes` — nothing synthesized.
+   */
+  laterDays: ComingSoonDay[];
 };
 
 function startOfDay(d: Date): Date {
@@ -40,34 +54,85 @@ function addDays(d: Date, days: number): Date {
   return copy;
 }
 
+/** `YYYY-MM-DD` in local time — matches `CinemaMovieDay.date` from the API. */
+function dateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** The `YYYY-MM-DD` key an ISO timestamp's calendar day falls on. */
+export function dayKeyOf(iso: string): string {
+  return dateKey(new Date(iso));
+}
+
+/** Today's date key, for matching a picked "Today" tab against a movie's `days`. */
+export function todayKey(now: Date = new Date()): string {
+  return dateKey(now);
+}
+
+/** Tomorrow's date key, for matching a picked "Tomorrow" tab against a movie's `days`. */
+export function tomorrowKey(now: Date = new Date()): string {
+  return dateKey(addDays(now, 1));
+}
+
+/** "FRI 29 AUG" for a rail tab or a coming-soon picker row. */
+export function shortDayLabel(key: string): string {
+  const when = new Date(`${key}T00:00:00`);
+  if (Number.isNaN(when.getTime())) return '';
+  const weekday = when.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+  const day = when.getDate();
+  const month = when.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+  return `${weekday} ${day} ${month}`;
+}
+
 /**
- * Buckets screenings by calendar day relative to `now`.
+ * Buckets screenings into today, tomorrow, and one bucket per later date.
  *
  * A screening already under way is dropped: the server only returns
  * `startsAt >= now`, so anything in the today bucket is still joinable, and
- * that is what makes "Now Playing" honest rather than a list of films that
- * started an hour ago.
+ * that is what makes "Today" honest rather than a list of films that started
+ * an hour ago. The same guarantee is what keeps a passed day (yesterday, or an
+ * earlier date this week) from ever appearing at all — there is nothing to
+ * filter here because it never arrives.
  */
-export function groupByDay(showtimes: CinemaShowtime[], now: Date = new Date()): DaySegment[] {
+export function buildSchedule(showtimes: CinemaShowtime[], now: Date = new Date()): ProgrammeSchedule {
   const todayStart = startOfDay(now);
   const tomorrowStart = addDays(todayStart, 1);
   const dayAfterStart = addDays(todayStart, 2);
 
-  const buckets: Record<DayKey, CinemaShowtime[]> = { now: [], tomorrow: [], soon: [] };
+  const today: CinemaShowtime[] = [];
+  const tomorrow: CinemaShowtime[] = [];
+  const laterByKey = new Map<string, CinemaShowtime[]>();
+  const laterOrder: string[] = [];
 
   for (const showtime of showtimes) {
     const at = new Date(showtime.startsAt);
     if (Number.isNaN(at.getTime())) continue;
-    if (at < tomorrowStart) buckets.now.push(showtime);
-    else if (at < dayAfterStart) buckets.tomorrow.push(showtime);
-    else buckets.soon.push(showtime);
+    if (at < tomorrowStart) {
+      today.push(showtime);
+    } else if (at < dayAfterStart) {
+      tomorrow.push(showtime);
+    } else {
+      const key = dateKey(at);
+      if (!laterByKey.has(key)) {
+        laterByKey.set(key, []);
+        laterOrder.push(key);
+      }
+      laterByKey.get(key)!.push(showtime);
+    }
   }
 
-  return [
-    { key: 'now', label: 'Now Playing', entries: collapseToMovies(buckets.now) },
-    { key: 'tomorrow', label: 'Tomorrow', entries: collapseToMovies(buckets.tomorrow) },
-    { key: 'soon', label: 'Coming Soon', entries: collapseToMovies(buckets.soon) },
-  ];
+  return {
+    today: collapseToMovies(today),
+    tomorrow: collapseToMovies(tomorrow),
+    laterDays: laterOrder.map((key) => ({
+      date: key,
+      label: shortDayLabel(key),
+      entries: collapseToMovies(laterByKey.get(key)!),
+    })),
+  };
 }
 
 /**
