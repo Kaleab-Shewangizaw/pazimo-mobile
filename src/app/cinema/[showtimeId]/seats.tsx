@@ -308,7 +308,16 @@ const styles = StyleSheet.create({
   titleBlock: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xs, gap: 2 },
 
   body: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.xxxl, gap: Spacing.lg },
-  seatArea: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.xs, gap: Spacing.xs },
+  // `overflow: 'hidden'` here too — same reasoning as `SeatMap`'s `viewport`/
+  // `container`: without it, `SeatMap`'s unscaled seat grid can inflate this
+  // `flex: 1` box past the actual screen height on web.
+  seatArea: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
+    gap: Spacing.xs,
+    overflow: 'hidden',
+  },
   notice: { textAlign: 'center' },
 
   bar: {

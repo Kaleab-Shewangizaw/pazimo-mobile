@@ -19,7 +19,7 @@ import type { Cinema } from '@/types/api';
  * to spot at a glance than the picture it already gave us.
  */
 
-const ROW_HEIGHT = 132;
+const ROW_HEIGHT = 116;
 
 export type CinemaRowProps = {
   cinema: Cinema;
@@ -54,10 +54,12 @@ function CinemaRowImpl({ cinema, selected = false, onPress }: CinemaRowProps) {
       )}
 
       {/* Two passes: a flat wash for a contrast floor over any photo, then a
-          left-heavy ramp so the text column is darkest where the words are. */}
+          left-heavy ramp so the text column is darkest where the words are.
+          Kept light on purpose — just enough contrast for the title, not a
+          near-opaque plate over the cinema's own photo. */}
       <View style={[StyleSheet.absoluteFill, styles.wash]} />
       <LinearGradient
-        colors={['rgba(6,6,8,0.92)', 'rgba(6,6,8,0.62)', 'rgba(6,6,8,0.86)']}
+        colors={['rgba(6,6,8,0.78)', 'rgba(6,6,8,0.40)', 'rgba(6,6,8,0.68)']}
         locations={[0, 0.55, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
@@ -97,7 +99,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
   },
-  wash: { backgroundColor: 'rgba(6,6,8,0.35)' },
+  wash: { backgroundColor: 'rgba(6,6,8,0.20)' },
 
   body: {
     paddingLeft: Spacing.lg,

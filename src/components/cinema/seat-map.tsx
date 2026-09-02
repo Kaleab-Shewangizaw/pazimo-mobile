@@ -104,15 +104,27 @@ function CategoryLegend({ categories }: { categories: CinemaSeatCategory[] }) {
   );
 }
 
-/** The running receipt of what's been picked so far, grouped by seat category. */
+/**
+ * The running receipt of what's been picked so far.
+ *
+ * Always rendered, and capped to one line of picks — its height must never
+ * change with the selection. It used to only mount once something was
+ * picked, which shrank the grid's *own* available space at that exact
+ * moment: `ZoomableGrid` re-fits to whatever height it's actually given, so
+ * that shrink re-scaled it and clipped rows that no longer fit — the seats
+ * a buyer had just picked would appear to vanish under where this card now
+ * sat. A constant footprint from the very first layout keeps the grid's
+ * size independent of anything picked here.
+ */
 function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
-  if (!groups.length) return null;
-
   const totalCount = groups.reduce((sum, g) => sum + g.seats.length, 0);
   const totalPrice = groups.reduce(
     (sum, g) => sum + (g.category.price ?? 0) * g.seats.length,
     0,
   );
+  const picksLine = groups
+    .map((g) => `${g.category.label} ${g.seats.map((s) => `${s.rowLabel}${s.number}`).join(',')}`)
+    .join('   ·   ');
 
   return (
     <View style={styles.summary}>
@@ -121,22 +133,14 @@ function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
           YOUR SEATS
         </Text>
         <Text variant="small" style={styles.summaryHeaderCount}>
-          {totalCount} {totalCount === 1 ? 'seat' : 'seats'} · {formatPrice(totalPrice, 'ETB')}
+          {totalCount > 0
+            ? `${totalCount} ${totalCount === 1 ? 'seat' : 'seats'} · ${formatPrice(totalPrice, 'ETB')}`
+            : 'None yet'}
         </Text>
       </View>
-      {groups.map((group) => (
-        <View key={group.category.key} style={styles.summaryRow}>
-          <View style={[styles.summaryDot, { backgroundColor: group.category.color }]} />
-          <Text variant="small" style={styles.summaryLabel} numberOfLines={1}>
-            {group.category.label} — {group.seats.map((s) => `${s.rowLabel}${s.number}`).join(', ')}
-          </Text>
-          {group.category.price != null ? (
-            <Text variant="small" style={styles.summaryPrice}>
-              {formatPrice(group.category.price * group.seats.length, 'ETB')}
-            </Text>
-          ) : null}
-        </View>
-      ))}
+      <Text variant="small" style={styles.summaryLine} numberOfLines={1}>
+        {totalCount > 0 ? picksLine : 'Tap a seat below to select it'}
+      </Text>
     </View>
   );
 }
@@ -390,10 +394,19 @@ function SeatGlyph({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, gap: 0 },
+  container: { flex: 1, gap: 0, overflow: 'hidden' },
 
   viewport: {
     flex: 1,
+    // Load-bearing on web: the grid inside is shrunk purely with a CSS
+    // `transform: scale()` (see `fitScale`/`animatedStyle`), which never
+    // changes its actual layout box — the unscaled seat grid can be far
+    // taller than the viewport. Without `overflow: hidden` here,
+    // react-native-web's flexbox refuses to shrink this `flex: 1` box below
+    // that content's natural size (a `min-height: auto` default), which
+    // inflates every ancestor up to the screen and left a blank gap at the
+    // bottom once the page grew taller than the viewport.
+    overflow: 'hidden',
     borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -433,10 +446,7 @@ const styles = StyleSheet.create({
   },
   summaryHeaderLabel: { color: 'rgba(255,255,255,0.5)' },
   summaryHeaderCount: { color: '#FFFFFF', fontWeight: '700' },
-  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  summaryDot: { width: 8, height: 8, borderRadius: 4 },
-  summaryLabel: { flex: 1, color: 'rgba(255,255,255,0.85)' },
-  summaryPrice: { color: 'rgba(255,255,255,0.6)' },
+  summaryLine: { color: 'rgba(255,255,255,0.75)', marginTop: 4 },
 
   cell: {
     width: SEAT_SIZE,
