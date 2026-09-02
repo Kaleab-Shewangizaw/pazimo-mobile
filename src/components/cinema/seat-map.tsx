@@ -10,6 +10,7 @@ import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
+import { formatPrice } from '@/lib/pricing';
 import type { CinemaSeat, CinemaSeatCategory, CinemaSeatRow } from '@/types/api';
 
 /** Pure white accent for selected seats — matching the reference design and Continue button. */
@@ -36,11 +37,106 @@ export type SeatMapProps = {
 function SeatMapImpl({ categories, rows, selectedKeys, onToggle, screenPreview }: SeatMapProps) {
   const categoryByKey = new Map(categories.map((c) => [c.key, c]));
   const selected = new Set(selectedKeys);
+  const pickedGroups = useMemo(
+    () => groupPicks(rows, categoryByKey, selected),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `categoryByKey`/`selected` are rebuilt fresh every render from `categories`/`selectedKeys`, so depending on the latter is equivalent and is what actually lets this skip recomputing when neither has changed.
+    [rows, categories, selectedKeys],
+  );
 
   return (
     <View style={styles.container}>
       <ScreenPanel source={screenPreview} />
+      {/* Established up front, before anyone starts tapping — the seat dots
+          alone don't explain themselves. */}
+      <CategoryLegend categories={categories} />
       <ZoomableGrid rows={rows} categoryByKey={categoryByKey} selected={selected} onToggle={onToggle} />
+      {/* Below the whole chart, never layered over it — a floating per-row
+          label here used to sit on top of the seats themselves. */}
+      <SelectionSummary groups={pickedGroups} />
+    </View>
+  );
+}
+
+/** One category's seats the buyer has picked, e.g. every VIP seat together. */
+type PickedGroup = {
+  category: CinemaSeatCategory;
+  seats: { rowLabel: string; number: string }[];
+};
+
+function groupPicks(
+  rows: CinemaSeatRow[],
+  categoryByKey: Map<string, CinemaSeatCategory>,
+  selected: Set<string>,
+): PickedGroup[] {
+  const byCategory = new Map<string, PickedGroup>();
+  for (const row of rows) {
+    for (const seat of row.seats) {
+      // Same allowlist reasoning as `syncSeatAvailability` in the seats
+      // screen: a gap can carry a stale seatKey that coincides with a real
+      // seat's, so `seat.exists` is what actually gates membership here.
+      if (!seat.exists || !selected.has(seat.seatKey)) continue;
+      const category = categoryByKey.get(seat.categoryKey);
+      if (!category) continue;
+      const group = byCategory.get(category.key) ?? { category, seats: [] };
+      group.seats.push({ rowLabel: row.label, number: seat.number });
+      byCategory.set(category.key, group);
+    }
+  }
+  return [...byCategory.values()];
+}
+
+/** What each seat colour means — shown once, not per selection. */
+function CategoryLegend({ categories }: { categories: CinemaSeatCategory[] }) {
+  const priced = categories.filter((c) => c.ticketTypeId && c.price != null);
+  if (!priced.length) return null;
+
+  return (
+    <View style={styles.legend}>
+      {priced.map((category) => (
+        <View key={category.key} style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: category.color }]} />
+          <Text variant="caption" style={styles.legendText}>
+            {category.label} · {formatPrice(category.price!, 'ETB')}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** The running receipt of what's been picked so far, grouped by seat category. */
+function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
+  if (!groups.length) return null;
+
+  const totalCount = groups.reduce((sum, g) => sum + g.seats.length, 0);
+  const totalPrice = groups.reduce(
+    (sum, g) => sum + (g.category.price ?? 0) * g.seats.length,
+    0,
+  );
+
+  return (
+    <View style={styles.summary}>
+      <View style={styles.summaryHeader}>
+        <Text variant="label" style={styles.summaryHeaderLabel}>
+          YOUR SEATS
+        </Text>
+        <Text variant="small" style={styles.summaryHeaderCount}>
+          {totalCount} {totalCount === 1 ? 'seat' : 'seats'} · {formatPrice(totalPrice, 'ETB')}
+        </Text>
+      </View>
+      {groups.map((group) => (
+        <View key={group.category.key} style={styles.summaryRow}>
+          <View style={[styles.summaryDot, { backgroundColor: group.category.color }]} />
+          <Text variant="small" style={styles.summaryLabel} numberOfLines={1}>
+            {group.category.label} — {group.seats.map((s) => `${s.rowLabel}${s.number}`).join(', ')}
+          </Text>
+          {group.category.price != null ? (
+            <Text variant="small" style={styles.summaryPrice}>
+              {formatPrice(group.category.price * group.seats.length, 'ETB')}
+            </Text>
+          ) : null}
+        </View>
+      ))}
     </View>
   );
 }
@@ -190,29 +286,9 @@ function SeatRow({
 }) {
   const count = row.seats.length;
   const center = (count - 1) / 2;
-  // A gap is never selectable and must never count as picked, even though its
-  // seatKey can coincide with the real seat right after it — a gap keeps the
-  // stale number it had before that seat was renumbered into its old spot.
-  const pickedSeats = row.seats.filter((s) => s.exists && selected.has(s.seatKey));
-  const pickedHere = pickedSeats.length;
-
-  const firstPickedCategory = pickedSeats.length > 0 ? categoryByKey.get(pickedSeats[0].categoryKey) : null;
-  const categoryLabel = firstPickedCategory?.label;
-  const categoryColor = firstPickedCategory?.color;
 
   return (
     <View style={[styles.row, { marginLeft: row.offset * OFFSET_SCALE }]}>
-      {pickedHere > 0 ? (
-        <View style={styles.rowTooltip}>
-          {categoryColor ? (
-            <View style={[styles.rowTooltipDot, { backgroundColor: categoryColor }]} />
-          ) : null}
-          <Text variant="caption" style={styles.rowTooltipText}>
-            Row {row.label} · {pickedHere} {pickedHere === 1 ? 'Seat' : 'Seats'}
-            {categoryLabel ? ` (${categoryLabel})` : ''}
-          </Text>
-        </View>
-      ) : null}
       {row.seats.map((seat, i) => {
         const t = center === 0 ? 0 : (i - center) / center;
         const translateY = -row.curve * CURVE_SCALE * (1 - t * t);
@@ -326,33 +402,41 @@ const styles = StyleSheet.create({
   },
   grid: { gap: SEAT_GAP, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: SEAT_GAP, position: 'relative' },
-  rowTooltip: {
-    position: 'absolute',
-    top: -30,
-    zIndex: 20,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(28,28,34,0.95)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  rowTooltipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  rowTooltipText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
 
   resetButton: { position: 'absolute', right: Spacing.sm, bottom: Spacing.sm },
+
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 9, height: 9, borderRadius: 4.5 },
+  legendText: { color: 'rgba(255,255,255,0.68)' },
+
+  summary: {
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryHeaderLabel: { color: 'rgba(255,255,255,0.5)' },
+  summaryHeaderCount: { color: '#FFFFFF', fontWeight: '700' },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  summaryDot: { width: 8, height: 8, borderRadius: 4 },
+  summaryLabel: { flex: 1, color: 'rgba(255,255,255,0.85)' },
+  summaryPrice: { color: 'rgba(255,255,255,0.6)' },
 
   cell: {
     width: SEAT_SIZE,

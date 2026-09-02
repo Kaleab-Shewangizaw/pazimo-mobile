@@ -285,15 +285,23 @@ export type RsvpForm = {
   endTime: string;
   location: string;
   venue: string;
+  /** Stored but never enforced server-side — do not gate submission on it. */
+  rsvpLimit?: number;
   approvalMode: 'auto' | 'manual';
   collectAttendeeInfo: boolean;
   anonymous: boolean;
+  isPublic: boolean;
+  isClosed: boolean;
+  bannerStatus: boolean;
   sections: { id: string; title: string; order: number }[];
   questions: RsvpQuestion[];
   responseCount: number;
+  viewCount: number;
   isFeatured: boolean;
   isTrending: boolean;
   shareUrl?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type RsvpAnswer = string | number | boolean | string[] | null;
@@ -301,12 +309,16 @@ export type RsvpAnswer = string | number | boolean | string[] | null;
 export type RsvpResponse = {
   _id: string;
   responseId: string;
+  formId: string;
+  formPublicId: string;
   answers: Record<string, RsvpAnswer>;
   attendee: { fullName: string; email: string; phone: string };
   status: 'pending' | 'approved' | 'paid' | 'unpaid' | 'rejected';
   tag: 'VIP' | 'Guest' | 'Press';
   qrCodePayload: string;
   qrCodeDataUrl: string;
+  checkedIn: boolean;
+  checkedInAt?: string;
   submittedAt: string;
 };
 
@@ -346,6 +358,10 @@ export type CinemaMovie = {
   upcomingCount?: number;
   /** Cheapest seat across those screenings, or null when none is priced. */
   fromPrice?: number | null;
+  /** Populated (`{_id,name,city,image}`) only on the featured/trending/banner rows, which span every cinema. */
+  cinema?: Cinema;
+  /** Only on the featured/trending/banner rows. */
+  coverImage?: string | null;
 };
 
 export type CinemaHall = {

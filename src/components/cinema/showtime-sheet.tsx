@@ -61,7 +61,11 @@ function ShowtimeSheetImpl({ visible, onClose, days, onSelect }: ShowtimeSheetPr
       <View style={styles.days}>
         {days.map((day) => (
           <View key={day.date} style={styles.day}>
-            {day.date ? (
+            {/* A single day means it was already chosen upstream (the
+                "nearest date" flow, or the cinema screen's own day rail) —
+                labelling it again is redundant, so this only shows once
+                there's more than one day to actually distinguish. */}
+            {days.length > 1 && day.date ? (
               <Text variant="small" color="textSecondary">
                 {prettyDate(day.date)}
               </Text>

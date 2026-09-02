@@ -5,9 +5,12 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { ActivitiesRail, type ActivityItem } from '@/components/home/activities-rail';
 import { CategoryRail } from '@/components/home/category-rail';
 import { CategoryTabs } from '@/components/home/category-tabs';
 import { EventRail } from '@/components/home/event-rail';
+import { FeaturedRail, type FeaturedItem } from '@/components/home/featured-rail';
+import { RsvpRail } from '@/components/home/rsvp-rail';
 // Parked with the "Upcoming" block below.
 // import { UpcomingRail } from '@/components/home/upcoming-rail';
 import { AmbientBackground } from '@/components/ui/ambient-background';
@@ -24,8 +27,10 @@ import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useActivityEvents } from '@/queries/activities';
 import { useCategories } from '@/queries/categories';
+import { useFeaturedCinemaMovies } from '@/queries/cinema';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
+import { useRsvpFeed } from '@/queries/rsvp';
 
 /** Small glance strip under the main rail — the first page's worth is plenty. */
 // const UPCOMING_COUNT = 10;
@@ -47,6 +52,8 @@ export default function HomeScreen() {
   const categories = useCategories();
   const feed = useEventFeed();
   const activities = useActivityEvents();
+  const rsvp = useRsvpFeed();
+  const featuredMovies = useFeaturedCinemaMovies();
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -62,8 +69,39 @@ export default function HomeScreen() {
   }, [feed.data, activeCategory]);
   // const upcoming = (feed.data ?? []).slice(0, UPCOMING_COUNT);
 
-  // Activities ride the same two caches, so refetching them covers the whole page.
-  const { refreshing, onRefresh } = useRefresh(categories.refetch, feed.refetch);
+  // The Featured shelf blends in featured RSVP forms too — they have no
+  // category to filter by, so they only ever appear in this unfiltered case.
+  // Events keep their existing order and lead the shelf; the admin-featured
+  // RSVP forms are appended after, same order the web app's own blended feed
+  // uses (`featuredEvents.concat(featuredRsvps)`).
+  const featuredItems = useMemo<FeaturedItem[]>(
+    () => [
+      ...filteredEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...rsvp.forms.filter((form) => form.isFeatured).map((form) => ({ kind: 'rsvp', form }) as const),
+    ],
+    [filteredEvents, rsvp.forms],
+  );
+
+  // Activities: the category-matched events, then any admin-featured cinema
+  // movies appended after — a movie is an activity too, so it joins the same
+  // row rather than getting a rail of its own.
+  const activityItems = useMemo<ActivityItem[]>(
+    () => [
+      ...activities.events.map((event) => ({ kind: 'event', event }) as const),
+      ...featuredMovies.movies.map((movie) => ({ kind: 'movie', movie }) as const),
+    ],
+    [activities.events, featuredMovies.movies],
+  );
+
+  // Activities ride the same two caches, so refetching them covers the whole
+  // page — RSVP forms and featured movies are their own caches and need their
+  // own refetch.
+  const { refreshing, onRefresh } = useRefresh(
+    categories.refetch,
+    feed.refetch,
+    rsvp.refetch,
+    featuredMovies.refetch,
+  );
 
   const onEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) {
@@ -158,6 +196,22 @@ export default function HomeScreen() {
               onRetry={() => feed.refetch()}
             />
           </View>
+        ) : activeCategory === null ? (
+          featuredItems.length ? (
+            <FeaturedRail
+              items={featuredItems}
+              onEndReached={onEndReached}
+              loadingMore={feed.isFetchingNextPage}
+            />
+          ) : (
+            <View style={styles.stateBlock}>
+              <EmptyState
+                icon="calendar-outline"
+                title="No events here"
+                message="Nothing is featured right now — try a category."
+              />
+            </View>
+          )
         ) : filteredEvents.length ? (
           <EventRail
             events={filteredEvents}
@@ -166,15 +220,7 @@ export default function HomeScreen() {
           />
         ) : (
           <View style={styles.stateBlock}>
-            <EmptyState
-              icon="calendar-outline"
-              title="No events here"
-              message={
-                activeCategory
-                  ? 'Try a different category.'
-                  : 'Nothing is featured right now — try a category.'
-              }
-            />
+            <EmptyState icon="calendar-outline" title="No events here" message="Try a different category." />
           </View>
         )}
 
@@ -194,10 +240,20 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {activities.isLoading || activities.events.length ? (
+        {activities.isLoading || featuredMovies.isLoading || activityItems.length ? (
           <View style={styles.section}>
             <SectionHeader title="Activities" />
-            <EventRail events={activities.events} loading={activities.isLoading} />
+            <ActivitiesRail items={activityItems} loading={activities.isLoading || featuredMovies.isLoading} />
+          </View>
+        ) : null}
+
+        {/* No RSVP form is tied to an event page — it's a fully separate
+            model on the backend — so this rail is the only in-app discovery
+            surface for them, alongside the `/rsvp/[publicId]` deep link. */}
+        {rsvp.isLoading || rsvp.forms.length ? (
+          <View style={styles.section}>
+            <SectionHeader title="RSVP" />
+            <RsvpRail forms={rsvp.forms} loading={rsvp.isLoading} />
           </View>
         ) : null}
       </ScrollView>
