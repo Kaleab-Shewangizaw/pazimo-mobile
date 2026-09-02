@@ -5,12 +5,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
-import { ActivitiesRail, type ActivityItem } from '@/components/home/activities-rail';
 import { CategoryRail } from '@/components/home/category-rail';
 import { CategoryTabs } from '@/components/home/category-tabs';
 import { EventRail } from '@/components/home/event-rail';
 import { FeaturedRail, type FeaturedItem } from '@/components/home/featured-rail';
-import { RsvpRail } from '@/components/home/rsvp-rail';
 // Parked with the "Upcoming" block below.
 // import { UpcomingRail } from '@/components/home/upcoming-rail';
 import { AmbientBackground } from '@/components/ui/ambient-background';
@@ -25,9 +23,8 @@ import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
-import { useActivityEvents } from '@/queries/activities';
+import { isSoldOut } from '@/lib/pricing';
 import { useCategories } from '@/queries/categories';
-import { useFeaturedCinemaMovies } from '@/queries/cinema';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
 import { useRsvpFeed } from '@/queries/rsvp';
@@ -51,9 +48,7 @@ export default function HomeScreen() {
 
   const categories = useCategories();
   const feed = useEventFeed();
-  const activities = useActivityEvents();
   const rsvp = useRsvpFeed();
-  const featuredMovies = useFeaturedCinemaMovies();
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -82,26 +77,33 @@ export default function HomeScreen() {
     [filteredEvents, rsvp.forms],
   );
 
-  // Activities: the category-matched events, then any admin-featured cinema
-  // movies appended after — a movie is an activity too, so it joins the same
-  // row rather than getting a rail of its own.
-  const activityItems = useMemo<ActivityItem[]>(
-    () => [
-      ...activities.events.map((event) => ({ kind: 'event', event }) as const),
-      ...featuredMovies.movies.map((movie) => ({ kind: 'movie', movie }) as const),
-    ],
-    [activities.events, featuredMovies.movies],
-  );
+  // Everything else: events and RSVP forms, one row's worth, with "Show all"
+  // handing off to the full Discover list. Not-featured-and-not-sold-out
+  // items lead the row; featured or sold-out ones only fill the remaining
+  // slots if there isn't enough else to show. Movies don't belong here.
+  const MORE_COUNT = 7;
+  const moreItems = useMemo<FeaturedItem[]>(() => {
+    const events = feed.data ?? [];
+    const forms = rsvp.forms;
 
-  // Activities ride the same two caches, so refetching them covers the whole
-  // page — RSVP forms and featured movies are their own caches and need their
-  // own refetch.
-  const { refreshing, onRefresh } = useRefresh(
-    categories.refetch,
-    feed.refetch,
-    rsvp.refetch,
-    featuredMovies.refetch,
-  );
+    const leadEvents = events.filter((event) => !event.isFeatured && !isSoldOut(event));
+    const restEvents = events.filter((event) => event.isFeatured || isSoldOut(event));
+    const leadForms = forms.filter((form) => !form.isFeatured);
+    const restForms = forms.filter((form) => form.isFeatured);
+
+    const lead = [
+      ...leadEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...leadForms.map((form) => ({ kind: 'rsvp', form }) as const),
+    ];
+    const rest = [
+      ...restEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...restForms.map((form) => ({ kind: 'rsvp', form }) as const),
+    ];
+
+    return [...lead, ...rest].slice(0, MORE_COUNT);
+  }, [feed.data, rsvp.forms]);
+
+  const { refreshing, onRefresh } = useRefresh(categories.refetch, feed.refetch, rsvp.refetch);
 
   const onEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) {
@@ -138,13 +140,14 @@ export default function HomeScreen() {
                 pointerEvents="none"
               />
             </View>
-            {/* A glyph, not a photo: the app is guest-first and there is no
-                auth phase yet, so there is no avatar to show. */}
             <GlassIconButton
-              icon="person"
-              accessibilityLabel="Your profile"
+              icon="chatbubble-outline"
+              accessibilityLabel="Chat"
               blurTarget={backdropRef}
-              onPress={() => router.push('/profile')}
+              // Presentational for now — there is no chat feature yet (same
+              // caveat as notifications above). Profile is still reachable
+              // from its own tab, so this slot was free to repurpose.
+              onPress={() => {}}
             />
           </View>
         }
@@ -240,20 +243,14 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {activities.isLoading || featuredMovies.isLoading || activityItems.length ? (
+        {feed.isLoading || rsvp.isLoading || moreItems.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Activities" />
-            <ActivitiesRail items={activityItems} loading={activities.isLoading || featuredMovies.isLoading} />
-          </View>
-        ) : null}
-
-        {/* No RSVP form is tied to an event page — it's a fully separate
-            model on the backend — so this rail is the only in-app discovery
-            surface for them, alongside the `/rsvp/[publicId]` deep link. */}
-        {rsvp.isLoading || rsvp.forms.length ? (
-          <View style={styles.section}>
-            <SectionHeader title="RSVP" />
-            <RsvpRail forms={rsvp.forms} loading={rsvp.isLoading} />
+            <SectionHeader
+              title="More to explore"
+              actionLabel="Show all"
+              onAction={() => router.push('/discover')}
+            />
+            <FeaturedRail items={moreItems} loading={feed.isLoading || rsvp.isLoading} />
           </View>
         ) : null}
       </ScrollView>
