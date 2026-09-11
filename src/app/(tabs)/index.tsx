@@ -28,6 +28,7 @@ import { useCategories } from '@/queries/categories';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
 import { useRsvpFeed } from '@/queries/rsvp';
+import { useTicketShares } from '@/queries/ticket-shares';
 
 /** Small glance strip under the main rail — the first page's worth is plenty. */
 // const UPCOMING_COUNT = 10;
@@ -49,6 +50,8 @@ export default function HomeScreen() {
   const categories = useCategories();
   const feed = useEventFeed();
   const rsvp = useRsvpFeed();
+  // Query itself no-ops for a guest — no session, nothing to poll.
+  const { shares: incomingShares } = useTicketShares({ direction: 'received', status: 'pending' });
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -140,15 +143,25 @@ export default function HomeScreen() {
                 pointerEvents="none"
               />
             </View>
-            <GlassIconButton
-              icon="chatbubble-outline"
-              accessibilityLabel="Chat"
-              blurTarget={backdropRef}
-              // Presentational for now — there is no chat feature yet (same
-              // caveat as notifications above). Profile is still reachable
-              // from its own tab, so this slot was free to repurpose.
-              onPress={() => {}}
-            />
+            <View>
+              <GlassIconButton
+                icon="chatbubble-outline"
+                accessibilityLabel={
+                  incomingShares.length ? 'Chats, new tickets waiting' : 'Chats'
+                }
+                blurTarget={backdropRef}
+                onPress={() => router.push('/shares')}
+              />
+              {incomingShares.length ? (
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: theme.danger, borderColor: theme.background },
+                  ]}
+                  pointerEvents="none"
+                />
+              ) : null}
+            </View>
           </View>
         }
       />

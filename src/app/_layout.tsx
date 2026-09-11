@@ -14,6 +14,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
+import { TicketTransferSocketBridge } from '@/hooks/use-ticket-transfer-socket';
 import { queryClient } from '@/lib/query-client';
 import { useAuthStore } from '@/stores/use-auth-store';
 
@@ -73,6 +74,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider value={navigationTheme}>
           <StatusBar style="light" />
+          <TicketTransferSocketBridge />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -82,6 +84,8 @@ export default function RootLayout() {
             <Stack.Screen name="event/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="shares" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="conversation/[userId]" options={{ animation: 'slide_from_right' }} />
             {/* Fades rather than slides, and cannot be swiped away: the poll
                 running on this screen is what issues the ticket, so leaving it
                 by accident mid-payment has a real cost. */}

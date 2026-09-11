@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ShareTicketSheet } from '@/components/shares/share-ticket-sheet';
 import { TicketPoster, posterHostStyle } from '@/components/ticket/ticket-poster';
 import { TicketView } from '@/components/ticket/ticket-view';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useTicketDownload } from '@/hooks/use-ticket-download';
 import { formatTicketDate } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
+import { useRespondToShare, useTicketShares } from '@/queries/ticket-shares';
 import type { Ticket } from '@/types/api';
 
 /**
@@ -93,6 +95,17 @@ export function TicketScreen({
       // Dismissed; nothing to recover from.
     });
   }, [active]);
+
+  // No token, no query — a guest opening a shared/deep-linked ticket can't
+  // have an outgoing transfer of their own to check for.
+  const { shares: pendingOutgoing } = useTicketShares({ direction: 'sent', status: 'pending' });
+  const pendingShare = active
+    ? pendingOutgoing.find((share) => share.items.some((item) => item.ticket._id === active._id))
+    : undefined;
+  const { cancel: cancelShare, submitting: cancelling, error: cancelError } = useRespondToShare();
+
+  const [shareSheetVisible, setShareSheetVisible] = useState(false);
+  const shareDisabled = Boolean(pendingShare) || active?.checkedIn || active?.status === 'cancelled';
 
   const onPage = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -182,15 +195,53 @@ export function TicketScreen({
             </Text>
           ) : null}
         </View>
-        <Touchable
-          accessibilityRole="button"
-          accessibilityLabel="Share this ticket"
-          onPress={onShare}
-          pressedScale={0.9}
-          style={styles.headerButton}>
-          <Ionicons name="share-outline" size={21} color="#FFFFFF" />
-        </Touchable>
+        <View style={styles.headerActions}>
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Share this ticket"
+            onPress={onShare}
+            pressedScale={0.9}
+            style={styles.headerButton}>
+            <Ionicons name="share-outline" size={21} color="#FFFFFF" />
+          </Touchable>
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Send to a friend"
+            accessibilityState={{ disabled: shareDisabled }}
+            disabled={shareDisabled}
+            onPress={() => setShareSheetVisible(true)}
+            pressedScale={0.9}
+            style={[styles.headerButton, shareDisabled ? styles.headerButtonDisabled : null]}>
+            <Ionicons name="paper-plane-outline" size={20} color="#FFFFFF" />
+          </Touchable>
+        </View>
       </View>
+
+      {pendingShare ? (
+        <View style={[styles.pendingBanner, { borderColor: theme.hairline, backgroundColor: theme.surfaceMuted }]}>
+          <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
+          <View style={styles.pendingText}>
+            <Text variant="small" color="textSecondary">
+              Pending transfer to {pendingShare.toUser.firstName} — waiting for them to accept
+            </Text>
+            {cancelError ? (
+              <Text variant="caption" color="danger">
+                {cancelError}
+              </Text>
+            ) : null}
+          </View>
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel transfer"
+            disabled={cancelling}
+            onPress={() => cancelShare(pendingShare._id)}
+            pressedScale={0.94}>
+            <Text variant="small" color="danger">
+              {cancelling ? 'Cancelling…' : 'Cancel'}
+            </Text>
+          </Touchable>
+        </View>
+      ) : null}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -234,6 +285,13 @@ export function TicketScreen({
       <View style={posterHostStyle} pointerEvents="none" aria-hidden>
         <TicketPoster ref={posterRef} ticket={active} />
       </View>
+
+      <ShareTicketSheet
+        visible={shareSheetVisible}
+        onClose={() => setShareSheetVisible(false)}
+        eventId={active.event._id}
+        initialTicketId={active._id}
+      />
     </View>
   );
 }
@@ -256,8 +314,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerButtonDisabled: { opacity: 0.4 },
+  headerActions: { flexDirection: 'row', gap: Spacing.xs },
   headerTitles: { flex: 1 },
   headerTitle: { textAlign: 'center' },
+
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pendingText: { flex: 1, gap: 2 },
 
   content: { paddingTop: Spacing.sm, gap: Spacing.lg },
   // The pager spans the full screen so each page snaps edge to edge, which is

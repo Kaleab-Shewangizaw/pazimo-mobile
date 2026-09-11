@@ -62,6 +62,28 @@ export function isPast(value?: string | null): boolean {
   return date ? date.getTime() < Date.now() : false;
 }
 
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = MS_PER_MINUTE * 60;
+
+/**
+ * "Just now" / "2h ago" / "3d ago" for a chat-style feed — coarse enough that
+ * it never needs to tick while the screen is open. Falls back to the short
+ * date past a week, same as everything else in this file returning `null`
+ * rather than throwing on an unparseable value.
+ */
+export function relativeTimeLabel(value?: string | null): string | null {
+  const date = parse(value);
+  if (!date) return null;
+
+  const diff = Date.now() - date.getTime();
+  if (diff < MS_PER_MINUTE) return 'Just now';
+  if (diff < MS_PER_HOUR) return `${Math.floor(diff / MS_PER_MINUTE)}m ago`;
+  if (diff < MS_PER_DAY) return `${Math.floor(diff / MS_PER_HOUR)}h ago`;
+  const days = Math.floor(diff / MS_PER_DAY);
+  if (days < 7) return `${days}d ago`;
+  return formatShortDate(value);
+}
+
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }

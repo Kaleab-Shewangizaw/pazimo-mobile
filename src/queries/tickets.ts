@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { ApiError } from '@/api/client';
 import { fetchEvent } from '@/api/events';
-import { fetchMyTickets, fetchPublicTickets } from '@/api/tickets';
+import { fetchMyTickets, fetchPublicTickets, fetchTransferableTickets } from '@/api/tickets';
 import { loadDeviceTicketIds } from '@/lib/device-tickets';
 import { eventCoverUrl } from '@/lib/media';
 import { queryKeys } from '@/queries/keys';
@@ -130,6 +130,24 @@ export function useTicketCovers(tickets: Ticket[]): Record<string, string | null
     if (result.data) covers[result.data._id] = eventCoverUrl(result.data.coverImages);
   }
   return covers;
+}
+
+/**
+ * The ticket-attach picker's data source — capacity and per-ticket
+ * transferable-admission counts live only on this endpoint, not on the
+ * regular ticket list.
+ */
+export function useTransferableTickets() {
+  const token = useAuthStore((s) => s.token);
+  const hydrated = useAuthStore((s) => s.hydrated);
+
+  const query = useQuery({
+    queryKey: queryKeys.tickets.transferable(),
+    queryFn: fetchTransferableTickets,
+    enabled: hydrated && Boolean(token),
+  });
+
+  return { ...query, tickets: query.data ?? [] };
 }
 
 /**

@@ -31,9 +31,11 @@ export type TicketStubProps = {
   /** Downloads the newest ticket in the group; the rest are a swipe away. */
   onDownload: (ticket: Ticket) => void;
   downloading?: boolean;
+  /** True when any ticket in the group has an outgoing transfer awaiting acceptance. */
+  pending?: boolean;
 };
 
-function TicketStubImpl({ group, onDownload, downloading = false }: TicketStubProps) {
+function TicketStubImpl({ group, onDownload, downloading = false, pending = false }: TicketStubProps) {
   const theme = useTheme();
   const router = useRouter();
 
@@ -119,7 +121,14 @@ function TicketStubImpl({ group, onDownload, downloading = false }: TicketStubPr
           )}
         </Touchable>
 
-        {count > 1 ? (
+        {pending ? (
+          <View style={styles.badge}>
+            <Ionicons name="paper-plane-outline" size={11} color="#FFFFFF" />
+            <Text variant="caption" style={styles.badgeText}>
+              PENDING
+            </Text>
+          </View>
+        ) : count > 1 ? (
           <View style={styles.badge}>
             <Ionicons name="albums-outline" size={11} color="#FFFFFF" />
             <Text variant="caption" style={styles.badgeText}>

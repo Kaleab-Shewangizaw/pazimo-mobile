@@ -166,6 +166,15 @@ export async function postData<T>(
   return res.data.data;
 }
 
+export async function putData<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  const res = await api.put<{ data: T }>(url, body, config);
+  return res.data.data;
+}
+
 /** Endpoints that return the payload under a bespoke key, e.g. `{ tickets: [] }`. */
 export async function getKeyed<T>(
   url: string,

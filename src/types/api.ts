@@ -72,6 +72,8 @@ export type PazimoEvent = {
   eventImages?: { url: string; caption?: string }[];
   ticketTypes: TicketTier[];
   status: EventStatus;
+  /** Manual organizer/admin override — exists on the model but no controller currently writes it. */
+  isSoldOut?: boolean;
   capacity?: number;
   tags?: string[];
   ageRestriction?: { hasRestriction: boolean; minAge?: number; maxAge?: number };
@@ -103,6 +105,8 @@ export type User = {
   firstName: string;
   lastName?: string;
   phoneNumber: string;
+  /** Lowercased, `^[a-z0-9_]{3,20}$`, globally unique. Absent until set via `PUT /auth/update-username`. */
+  username?: string;
   role: UserRole;
   isActive?: boolean;
   tickets?: string[];
@@ -165,6 +169,91 @@ export type Ticket = {
   createdAt: string;
   /** Only on `GET /api/tickets/public/details/:id` — stock left in this tier. */
   ticketsRemaining?: number | null;
+};
+
+/* ------------------------- ticket shares ---------------------------- */
+
+/** `pending` is the only non-terminal state; every other one is final. */
+export type ShareStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired';
+
+/**
+ * Search results carry no phone/email — exact-match search only resolves an
+ * identity, never a contact detail. `username` is the handle people search by.
+ */
+export type ShareUser = Pick<User, '_id' | 'firstName' | 'lastName' | 'username'>;
+
+/** A row from `/ticket-shares/contacts` — derived from share history, not a separate address book. */
+export type ShareContact = {
+  userId: string;
+  firstName: string;
+  lastName?: string;
+  phoneNumber: string;
+  username?: string;
+  lastSharedAt: string;
+  shareCount: number;
+};
+
+/** The reduced ticket shape a share carries, not the full `Ticket`. */
+export type ShareTicket = {
+  _id: string;
+  ticketId: string;
+  ticketType: string;
+  price: number;
+  currency: Currency;
+  status: TicketStatus;
+  checkedIn: boolean;
+  /** Only present on `resultingTicket` — how many admissions the recipient's new ticket carries. */
+  ticketCount?: number;
+  event: Pick<PazimoEvent, '_id' | 'title' | 'startDate'> & { location?: EventLocation };
+};
+
+/**
+ * One ticket + quantity within a share. `resultingTicket` is null until the
+ * share is accepted — for a `FULL` transfer it ends up being the same ticket
+ * (ownership just moved); for `PARTIAL` it's a brand-new child ticket minted
+ * for the recipient, with its own id and QR.
+ */
+export type ShareItem = {
+  ticket: ShareTicket;
+  quantity: number;
+  transferType: 'FULL' | 'PARTIAL';
+  resultingTicket: ShareTicket | null;
+};
+
+export type TicketShare = {
+  _id: string;
+  status: ShareStatus;
+  message?: string;
+  createdAt: string;
+  expiresAt: string;
+  respondedAt: string | null;
+  fromUser: ShareUser;
+  toUser: ShareUser;
+  items: ShareItem[];
+};
+
+/**
+ * A row from `GET /tickets/transferable` — the ticket-attach picker's data
+ * source.
+ *
+ * Field-naming trap: here `ticketId` is the Mongo `_id` (what `POST
+ * /ticket-shares`'s `items[].ticketId` expects) — the *opposite* of `Ticket`
+ * and `ShareTicket` above, where `ticketId` is the short human-readable code
+ * and `_id` is the Mongo id. This endpoint's own contract, not a typo.
+ */
+export type TransferableTicket = {
+  ticketId: string;
+  /** The short QR-facing code — `Ticket.ticketId` elsewhere in this file. Display only. */
+  publicTicketId: string;
+  eventId: string;
+  eventName: string;
+  eventDate: string;
+  eventLocation?: string;
+  ticketType: string;
+  currency: Currency;
+  price: number;
+  capacity: number;
+  transferableCapacity: number;
 };
 
 /* ---------------------------- payments ---------------------------- */
