@@ -134,6 +134,7 @@ function LiquidTabBarImpl({
   // `components/ui/pressable.tsx` about the React Compiler.
   const [slide] = useState(() => new Animated.Value(Math.max(activeIndex, 0)));
   const [stretch] = useState(() => new Animated.Value(0));
+  const [pillOpacity] = useState(() => new Animated.Value(pillVisible ? 1 : 0));
   const hasMounted = useRef(false);
 
   useEffect(() => {
@@ -144,7 +145,8 @@ function LiquidTabBarImpl({
       return;
     }
     if (activeIndex < 0) return;
-    Animated.parallel([
+
+    const animations = [
       Animated.spring(slide, { toValue: activeIndex, ...SLIDE_SPRING }),
       Animated.sequence([
         Animated.timing(stretch, {
@@ -160,8 +162,30 @@ function LiquidTabBarImpl({
           useNativeDriver: true,
         }),
       ]),
-    ]).start();
-  }, [activeIndex, slide, stretch]);
+    ];
+
+    if (pillVisible) {
+      // Arriving at a flat slot: show the pill immediately so it's visibly
+      // sitting at the old (possibly centre) position before the spring
+      // carries it over — this is what already reads as "sliding".
+      pillOpacity.setValue(1);
+    } else {
+      // Leaving for the raised centre button: let the pill travel most of
+      // the way there before it dissolves, instead of vanishing the instant
+      // the raised button takes over the selection.
+      animations.push(
+        Animated.timing(pillOpacity, {
+          toValue: 0,
+          duration: 140,
+          delay: 100,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      );
+    }
+
+    Animated.parallel(animations).start();
+  }, [activeIndex, pillVisible, slide, stretch, pillOpacity]);
 
   // `slide` carries the tab index; the pixel offset is interpolated at render so
   // a width change re-derives it for free.
@@ -218,7 +242,7 @@ function LiquidTabBarImpl({
               styles.pill,
               {
                 width: pillWidth,
-                opacity: pillVisible ? 1 : 0,
+                opacity: pillOpacity,
                 transform: [{ translateX }, { scaleX }, { scaleY }],
               },
             ]}
