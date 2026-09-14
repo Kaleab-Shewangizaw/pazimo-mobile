@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTicketDownloadQueue } from '@/hooks/use-ticket-download';
 import { type TicketGroup, useTicketGroups } from '@/queries/tickets';
+import { useTicketShares } from '@/queries/ticket-shares';
 
 /**
  * Every event this person holds tickets to, newest first.
@@ -36,15 +37,22 @@ export default function TicketsScreen() {
   const { refreshing, onRefresh } = useRefresh(refetch);
   const { posterRef, pending, request, busyTicketId } = useTicketDownloadQueue();
 
+  const { shares: pendingOutgoing } = useTicketShares({ direction: 'sent', status: 'pending' });
+  const pendingTicketIds = useMemo(
+    () => new Set(pendingOutgoing.flatMap((share) => share.items.map((item) => item.ticket._id))),
+    [pendingOutgoing],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: TicketGroup }) => (
       <TicketStub
         group={item}
         onDownload={request}
         downloading={item.tickets.some((ticket) => ticket._id === busyTicketId)}
+        pending={item.tickets.some((ticket) => pendingTicketIds.has(ticket._id))}
       />
     ),
-    [request, busyTicketId],
+    [request, busyTicketId, pendingTicketIds],
   );
 
   const topPadding = insets.top + HEADER_CONTENT_HEIGHT + Spacing.lg;

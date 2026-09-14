@@ -1,5 +1,5 @@
 import { getData, getKeyed } from '@/api/client';
-import type { Ticket } from '@/types/api';
+import type { Ticket, TransferableTicket } from '@/types/api';
 
 /**
  * `event` is a Mongo populate on both ticket reads, and a populate whose target
@@ -46,4 +46,9 @@ export async function fetchMyTickets(): Promise<Ticket[]> {
  */
 export async function fetchPublicTickets(id: string): Promise<Ticket[]> {
   return usable(await getData<Ticket[]>(`/tickets/public/details/${id}`));
+}
+
+/** Tickets this account currently holds that are eligible to transfer — the ticket-attach picker's source. */
+export function fetchTransferableTickets(): Promise<TransferableTicket[]> {
+  return getData<TransferableTicket[]>('/tickets/transferable');
 }

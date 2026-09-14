@@ -11,6 +11,7 @@ export const queryKeys = {
     all: ['tickets'] as const,
     mine: () => [...queryKeys.tickets.all, 'mine'] as const,
     public: (id: string) => [...queryKeys.tickets.all, 'public', id] as const,
+    transferable: () => [...queryKeys.tickets.all, 'transferable'] as const,
   },
   rsvp: {
     all: ['rsvp'] as const,
@@ -23,10 +24,18 @@ export const queryKeys = {
       [...queryKeys.cinemas.all, 'list', city ?? '', search ?? ''] as const,
     showtimes: (cinemaId: string) => [...queryKeys.cinemas.all, 'showtimes', cinemaId] as const,
     movie: (movieId: string) => [...queryKeys.cinemas.all, 'movie', movieId] as const,
+    featuredMovies: () => [...queryKeys.cinemas.all, 'featured-movies'] as const,
   },
   cinemaCheckout: {
     seats: (showtimeId: string) => ['cinema-checkout', 'seats', showtimeId] as const,
     concessions: (cinemaId: string) => ['cinema-checkout', 'concessions', cinemaId] as const,
   },
   paymentConfig: ['payment-config'] as const,
+  shares: {
+    all: ['shares'] as const,
+    list: (direction?: string, status?: string) =>
+      [...queryKeys.shares.all, 'list', direction ?? 'all', status ?? 'all'] as const,
+    contacts: () => [...queryKeys.shares.all, 'contacts'] as const,
+    search: (q: string) => [...queryKeys.shares.all, 'search', q] as const,
+  },
 } as const;

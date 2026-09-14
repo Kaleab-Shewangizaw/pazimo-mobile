@@ -6,6 +6,7 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SignInSheet } from '@/components/account/sign-in-sheet';
+import { UsernameSheet } from '@/components/account/username-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Button } from '@/components/ui/button';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const { tickets } = useMyTickets();
 
   const [signInVisible, setSignInVisible] = useState(false);
+  const [usernameVisible, setUsernameVisible] = useState(false);
 
   const confirmSignOut = useCallback(() => {
     Alert.alert('Sign out?', 'Your tickets stay on your account and come back when you sign in.', [
@@ -102,6 +104,13 @@ export default function ProfileScreen() {
                 // field; showing it would read as a mistake we made.
                 value={user.email?.includes('customerpazimo') ? 'Not set' : (user.email ?? '—')}
               />
+              <View style={[styles.divider, { backgroundColor: theme.hairline }]} />
+              <Row
+                icon="at-outline"
+                label="Username"
+                value={user.username ? `@${user.username}` : 'Set up'}
+                onPress={() => setUsernameVisible(true)}
+              />
             </View>
 
             <Button label="Sign out" variant="secondary" onPress={confirmSignOut} />
@@ -127,6 +136,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <SignInSheet visible={signInVisible} onClose={() => setSignInVisible(false)} />
+      <UsernameSheet visible={usernameVisible} onClose={() => setUsernameVisible(false)} />
     </View>
   );
 }

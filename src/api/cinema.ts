@@ -1,5 +1,5 @@
 import { getData } from '@/api/client';
-import type { Cinema, CinemaConcessionItem, CinemaMoviePage, CinemaShowtime } from '@/types/api';
+import type { Cinema, CinemaConcessionItem, CinemaMovie, CinemaMoviePage, CinemaShowtime } from '@/types/api';
 
 /**
  * Cinema browsing. Mounted at `/api/cinemas`, so every path here starts
@@ -37,4 +37,13 @@ export async function fetchCinemaMovie(movieId: string) {
 /** What a customer can buy at this cinema's counter — already filtered to in-stock, active items. */
 export async function fetchCinemaConcessions(cinemaId: string) {
   return getData<CinemaConcessionItem[]>(`/cinemas/public/${cinemaId}/concessions`);
+}
+
+/**
+ * The admin-curated featured row — spans every cinema (unlike the rest of this
+ * file), so each entry carries its own populated `cinema` rather than being
+ * scoped to one the caller already picked.
+ */
+export async function fetchFeaturedCinemaMovies(limit = 12) {
+  return getData<CinemaMovie[]>('/cinemas/public/featured-movies', { params: { limit } });
 }

@@ -10,6 +10,7 @@ import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
+import { formatPrice } from '@/lib/pricing';
 import type { CinemaSeat, CinemaSeatCategory, CinemaSeatRow } from '@/types/api';
 
 /** Pure white accent for selected seats — matching the reference design and Continue button. */
@@ -36,11 +37,110 @@ export type SeatMapProps = {
 function SeatMapImpl({ categories, rows, selectedKeys, onToggle, screenPreview }: SeatMapProps) {
   const categoryByKey = new Map(categories.map((c) => [c.key, c]));
   const selected = new Set(selectedKeys);
+  const pickedGroups = useMemo(
+    () => groupPicks(rows, categoryByKey, selected),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `categoryByKey`/`selected` are rebuilt fresh every render from `categories`/`selectedKeys`, so depending on the latter is equivalent and is what actually lets this skip recomputing when neither has changed.
+    [rows, categories, selectedKeys],
+  );
 
   return (
     <View style={styles.container}>
       <ScreenPanel source={screenPreview} />
+      {/* Established up front, before anyone starts tapping — the seat dots
+          alone don't explain themselves. */}
+      <CategoryLegend categories={categories} />
       <ZoomableGrid rows={rows} categoryByKey={categoryByKey} selected={selected} onToggle={onToggle} />
+      {/* Below the whole chart, never layered over it — a floating per-row
+          label here used to sit on top of the seats themselves. */}
+      <SelectionSummary groups={pickedGroups} />
+    </View>
+  );
+}
+
+/** One category's seats the buyer has picked, e.g. every VIP seat together. */
+type PickedGroup = {
+  category: CinemaSeatCategory;
+  seats: { rowLabel: string; number: string }[];
+};
+
+function groupPicks(
+  rows: CinemaSeatRow[],
+  categoryByKey: Map<string, CinemaSeatCategory>,
+  selected: Set<string>,
+): PickedGroup[] {
+  const byCategory = new Map<string, PickedGroup>();
+  for (const row of rows) {
+    for (const seat of row.seats) {
+      // Same allowlist reasoning as `syncSeatAvailability` in the seats
+      // screen: a gap can carry a stale seatKey that coincides with a real
+      // seat's, so `seat.exists` is what actually gates membership here.
+      if (!seat.exists || !selected.has(seat.seatKey)) continue;
+      const category = categoryByKey.get(seat.categoryKey);
+      if (!category) continue;
+      const group = byCategory.get(category.key) ?? { category, seats: [] };
+      group.seats.push({ rowLabel: row.label, number: seat.number });
+      byCategory.set(category.key, group);
+    }
+  }
+  return [...byCategory.values()];
+}
+
+/** What each seat colour means — shown once, not per selection. */
+function CategoryLegend({ categories }: { categories: CinemaSeatCategory[] }) {
+  const priced = categories.filter((c) => c.ticketTypeId && c.price != null);
+  if (!priced.length) return null;
+
+  return (
+    <View style={styles.legend}>
+      {priced.map((category) => (
+        <View key={category.key} style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: category.color }]} />
+          <Text variant="caption" style={styles.legendText}>
+            {category.label} · {formatPrice(category.price!, 'ETB')}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The running receipt of what's been picked so far.
+ *
+ * Always rendered, and capped to one line of picks — its height must never
+ * change with the selection. It used to only mount once something was
+ * picked, which shrank the grid's *own* available space at that exact
+ * moment: `ZoomableGrid` re-fits to whatever height it's actually given, so
+ * that shrink re-scaled it and clipped rows that no longer fit — the seats
+ * a buyer had just picked would appear to vanish under where this card now
+ * sat. A constant footprint from the very first layout keeps the grid's
+ * size independent of anything picked here.
+ */
+function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
+  const totalCount = groups.reduce((sum, g) => sum + g.seats.length, 0);
+  const totalPrice = groups.reduce(
+    (sum, g) => sum + (g.category.price ?? 0) * g.seats.length,
+    0,
+  );
+  const picksLine = groups
+    .map((g) => `${g.category.label} ${g.seats.map((s) => `${s.rowLabel}${s.number}`).join(',')}`)
+    .join('   ·   ');
+
+  return (
+    <View style={styles.summary}>
+      <View style={styles.summaryHeader}>
+        <Text variant="label" style={styles.summaryHeaderLabel}>
+          YOUR SEATS
+        </Text>
+        <Text variant="small" style={styles.summaryHeaderCount}>
+          {totalCount > 0
+            ? `${totalCount} ${totalCount === 1 ? 'seat' : 'seats'} · ${formatPrice(totalPrice, 'ETB')}`
+            : 'None yet'}
+        </Text>
+      </View>
+      <Text variant="small" style={styles.summaryLine} numberOfLines={1}>
+        {totalCount > 0 ? picksLine : 'Tap a seat below to select it'}
+      </Text>
     </View>
   );
 }
@@ -190,29 +290,9 @@ function SeatRow({
 }) {
   const count = row.seats.length;
   const center = (count - 1) / 2;
-  // A gap is never selectable and must never count as picked, even though its
-  // seatKey can coincide with the real seat right after it — a gap keeps the
-  // stale number it had before that seat was renumbered into its old spot.
-  const pickedSeats = row.seats.filter((s) => s.exists && selected.has(s.seatKey));
-  const pickedHere = pickedSeats.length;
-
-  const firstPickedCategory = pickedSeats.length > 0 ? categoryByKey.get(pickedSeats[0].categoryKey) : null;
-  const categoryLabel = firstPickedCategory?.label;
-  const categoryColor = firstPickedCategory?.color;
 
   return (
     <View style={[styles.row, { marginLeft: row.offset * OFFSET_SCALE }]}>
-      {pickedHere > 0 ? (
-        <View style={styles.rowTooltip}>
-          {categoryColor ? (
-            <View style={[styles.rowTooltipDot, { backgroundColor: categoryColor }]} />
-          ) : null}
-          <Text variant="caption" style={styles.rowTooltipText}>
-            Row {row.label} · {pickedHere} {pickedHere === 1 ? 'Seat' : 'Seats'}
-            {categoryLabel ? ` (${categoryLabel})` : ''}
-          </Text>
-        </View>
-      ) : null}
       {row.seats.map((seat, i) => {
         const t = center === 0 ? 0 : (i - center) / center;
         const translateY = -row.curve * CURVE_SCALE * (1 - t * t);
@@ -314,10 +394,19 @@ function SeatGlyph({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, gap: 0 },
+  container: { flex: 1, gap: 0, overflow: 'hidden' },
 
   viewport: {
     flex: 1,
+    // Load-bearing on web: the grid inside is shrunk purely with a CSS
+    // `transform: scale()` (see `fitScale`/`animatedStyle`), which never
+    // changes its actual layout box — the unscaled seat grid can be far
+    // taller than the viewport. Without `overflow: hidden` here,
+    // react-native-web's flexbox refuses to shrink this `flex: 1` box below
+    // that content's natural size (a `min-height: auto` default), which
+    // inflates every ancestor up to the screen and left a blank gap at the
+    // bottom once the page grew taller than the viewport.
+    overflow: 'hidden',
     borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -326,33 +415,38 @@ const styles = StyleSheet.create({
   },
   grid: { gap: SEAT_GAP, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: SEAT_GAP, position: 'relative' },
-  rowTooltip: {
-    position: 'absolute',
-    top: -30,
-    zIndex: 20,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(28,28,34,0.95)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  rowTooltipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  rowTooltipText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
 
   resetButton: { position: 'absolute', right: Spacing.sm, bottom: Spacing.sm },
+
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 9, height: 9, borderRadius: 4.5 },
+  legendText: { color: 'rgba(255,255,255,0.68)' },
+
+  summary: {
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryHeaderLabel: { color: 'rgba(255,255,255,0.5)' },
+  summaryHeaderCount: { color: '#FFFFFF', fontWeight: '700' },
+  summaryLine: { color: 'rgba(255,255,255,0.75)', marginTop: 4 },
 
   cell: {
     width: SEAT_SIZE,

@@ -1,4 +1,4 @@
-import { getData, postData } from '@/api/client';
+import { getData, postData, putData } from '@/api/client';
 import type { AuthPayload, User } from '@/types/api';
 
 /**
@@ -29,4 +29,13 @@ export function login(email: string, password: string): Promise<AuthPayload> {
 /** Revalidates a rehydrated token and refreshes the cached profile. */
 export function fetchMe(): Promise<User> {
   return getData<User>('/auth/me');
+}
+
+/**
+ * Sets or changes the account's handle. Lowercased and uniqueness-checked
+ * server-side; this is what lets other people find the account by exact
+ * search instead of a name/phone directory listing.
+ */
+export function updateUsername(username: string): Promise<User> {
+  return putData<User>('/auth/update-username', { username });
 }

@@ -331,7 +331,9 @@ function Showtimes({
       </Text>
       {groups.map((group) => (
         <View key={group.date || 'all'} style={styles.day}>
-          {group.date ? (
+          {/* Redundant once a single day was already chosen upstream (see
+              `ShowtimeSheet`'s identical guard). */}
+          {groups.length > 1 && group.date ? (
             <Text variant="small" color="textSecondary">
               {prettyDate(group.date)}
             </Text>

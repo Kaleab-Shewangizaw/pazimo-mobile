@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   type LayoutChangeEvent,
   StyleSheet,
@@ -19,7 +20,7 @@ import { DayRail } from '@/components/cinema/day-rail';
 import { PosterDeck } from '@/components/cinema/poster-deck';
 import { Surface } from '@/components/ui/glass';
 import { GlassIconButton } from '@/components/ui/glass-button';
-import { GlassHeader } from '@/components/ui/glass-header';
+import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
@@ -61,6 +62,11 @@ export default function CinemaScreen() {
   const [card, setCard] = useState(0);
   const [stage, setStage] = useState({ width: 0, height: 0 });
   const [cinemaQuery, setCinemaQuery] = useState('');
+  // The search field starts hidden behind a button in the header — a picker
+  // that's mostly "recognise the poster/photo and tap it" doesn't need a
+  // field taking up space before anyone's asked to search.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchAnim] = useState(() => new Animated.Value(0));
   // Which `cinemaId` param this screen has already acted on, so re-tapping the
   // same Discover result (or the param simply persisting across renders)
   // doesn't fight someone who has since picked a different cinema by hand.
@@ -68,6 +74,22 @@ export default function CinemaScreen() {
 
   // Keeps typing smooth: the list re-searches at a lower priority than the input.
   const deferredCinemaQuery = useDeferredValue(cinemaQuery);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchAnim.setValue(0);
+    Animated.timing(searchAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+  }, [searchOpen, searchAnim]);
+
+  // Closing clears the query too — same "Cancel" semantics as a standard
+  // search reveal, so a hidden field never leaves the list invisibly filtered.
+  const toggleSearch = useCallback(() => {
+    setSearchOpen((open) => {
+      const next = !open;
+      if (!next) setCinemaQuery('');
+      return next;
+    });
+  }, []);
 
   const cinemas = useCinemas({ search: deferredCinemaQuery });
   const showtimes = useCinemaShowtimes(chosen?._id);
@@ -156,15 +178,29 @@ export default function CinemaScreen() {
 
   const topPadding = insets.top + Spacing.sm;
   const bottomPadding = tabBarClearance(insets.bottom);
+  // The picker's `GlassHeader` floats over the list (see its own
+  // `position: absolute`), so content here has to clear its full height —
+  // `topPadding` alone left the search bar and the first row rendering
+  // underneath it.
+  const pickerContentTop = insets.top + HEADER_CONTENT_HEIGHT + Spacing.md;
 
   // ── cinema picker ────────────────────────────────────────────────────────
   if (!chosen) {
     return (
       <View style={styles.screen}>
         <Backdrop />
-        <GlassHeader title="Cinema" />
+        <GlassHeader
+          title="Cinema"
+          right={
+            <GlassIconButton
+              icon={searchOpen ? 'close' : 'search'}
+              accessibilityLabel={searchOpen ? 'Close search' : 'Search cinemas'}
+              onPress={toggleSearch}
+            />
+          }
+        />
         {cinemas.isLoading ? (
-          <View style={[styles.centre, { paddingTop: topPadding }]}>
+          <View style={[styles.centre, { paddingTop: pickerContentTop }]}>
             <ActivityIndicator size="large" color="#FFFFFF" />
           </View>
         ) : (
@@ -174,35 +210,39 @@ export default function CinemaScreen() {
             renderItem={renderCinema}
             contentContainerStyle={[
               styles.list,
-              { paddingTop: topPadding + Spacing.xl, paddingBottom: bottomPadding },
+              { paddingTop: pickerContentTop, paddingBottom: bottomPadding },
             ]}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             refreshControl={<PageRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ListHeaderComponent={
-              <View style={styles.pickerHead}>
-                <Surface radius={Radius.pill} tone="muted" style={styles.searchBar}>
-                  <Ionicons name="search" size={18} color={PLACEHOLDER} />
-                  <TextInput
-                    value={cinemaQuery}
-                    onChangeText={setCinemaQuery}
-                    placeholder="Search cinemas, cities"
-                    placeholderTextColor={PLACEHOLDER}
-                    style={styles.searchInput}
-                    returnKeyType="search"
-                    autoCorrect={false}
-                    clearButtonMode="while-editing"
-                  />
-                  {cinemaQuery.length > 0 ? (
-                    <Touchable
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear search"
-                      onPress={() => setCinemaQuery('')}
-                      pressedScale={0.9}>
-                      <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
-                    </Touchable>
-                  ) : null}
-                </Surface>
-              </View>
+              searchOpen ? (
+                <Animated.View style={[styles.pickerHead, { opacity: searchAnim }]}>
+                  <Surface radius={Radius.pill} tone="muted" style={styles.searchBar}>
+                    <Ionicons name="search" size={18} color={PLACEHOLDER} />
+                    <TextInput
+                      autoFocus
+                      value={cinemaQuery}
+                      onChangeText={setCinemaQuery}
+                      placeholder="Search cinemas, cities"
+                      placeholderTextColor={PLACEHOLDER}
+                      style={styles.searchInput}
+                      returnKeyType="search"
+                      autoCorrect={false}
+                      clearButtonMode="while-editing"
+                    />
+                    {cinemaQuery.length > 0 ? (
+                      <Touchable
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear search"
+                        onPress={() => setCinemaQuery('')}
+                        pressedScale={0.9}>
+                        <Ionicons name="close-circle" size={18} color={PLACEHOLDER} />
+                      </Touchable>
+                    ) : null}
+                  </Surface>
+                </Animated.View>
+              ) : null
             }
             ListEmptyComponent={
               cinemas.isError ? (

@@ -8,6 +8,7 @@ import { ApiError } from '@/api/client';
 import { CategoryRail } from '@/components/home/category-rail';
 import { CategoryTabs } from '@/components/home/category-tabs';
 import { EventRail } from '@/components/home/event-rail';
+import { FeaturedRail, type FeaturedItem } from '@/components/home/featured-rail';
 // Parked with the "Upcoming" block below.
 // import { UpcomingRail } from '@/components/home/upcoming-rail';
 import { AmbientBackground } from '@/components/ui/ambient-background';
@@ -22,10 +23,12 @@ import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
-import { useActivityEvents } from '@/queries/activities';
+import { isSoldOut } from '@/lib/pricing';
 import { useCategories } from '@/queries/categories';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
+import { useRsvpFeed } from '@/queries/rsvp';
+import { useTicketShares } from '@/queries/ticket-shares';
 
 /** Small glance strip under the main rail — the first page's worth is plenty. */
 // const UPCOMING_COUNT = 10;
@@ -46,7 +49,9 @@ export default function HomeScreen() {
 
   const categories = useCategories();
   const feed = useEventFeed();
-  const activities = useActivityEvents();
+  const rsvp = useRsvpFeed();
+  // Query itself no-ops for a guest — no session, nothing to poll.
+  const { shares: incomingShares } = useTicketShares({ direction: 'received', status: 'pending' });
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -62,8 +67,46 @@ export default function HomeScreen() {
   }, [feed.data, activeCategory]);
   // const upcoming = (feed.data ?? []).slice(0, UPCOMING_COUNT);
 
-  // Activities ride the same two caches, so refetching them covers the whole page.
-  const { refreshing, onRefresh } = useRefresh(categories.refetch, feed.refetch);
+  // The Featured shelf blends in featured RSVP forms too — they have no
+  // category to filter by, so they only ever appear in this unfiltered case.
+  // Events keep their existing order and lead the shelf; the admin-featured
+  // RSVP forms are appended after, same order the web app's own blended feed
+  // uses (`featuredEvents.concat(featuredRsvps)`).
+  const featuredItems = useMemo<FeaturedItem[]>(
+    () => [
+      ...filteredEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...rsvp.forms.filter((form) => form.isFeatured).map((form) => ({ kind: 'rsvp', form }) as const),
+    ],
+    [filteredEvents, rsvp.forms],
+  );
+
+  // Everything else: events and RSVP forms, one row's worth, with "Show all"
+  // handing off to the full Discover list. Not-featured-and-not-sold-out
+  // items lead the row; featured or sold-out ones only fill the remaining
+  // slots if there isn't enough else to show. Movies don't belong here.
+  const MORE_COUNT = 7;
+  const moreItems = useMemo<FeaturedItem[]>(() => {
+    const events = feed.data ?? [];
+    const forms = rsvp.forms;
+
+    const leadEvents = events.filter((event) => !event.isFeatured && !isSoldOut(event));
+    const restEvents = events.filter((event) => event.isFeatured || isSoldOut(event));
+    const leadForms = forms.filter((form) => !form.isFeatured);
+    const restForms = forms.filter((form) => form.isFeatured);
+
+    const lead = [
+      ...leadEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...leadForms.map((form) => ({ kind: 'rsvp', form }) as const),
+    ];
+    const rest = [
+      ...restEvents.map((event) => ({ kind: 'event', event }) as const),
+      ...restForms.map((form) => ({ kind: 'rsvp', form }) as const),
+    ];
+
+    return [...lead, ...rest].slice(0, MORE_COUNT);
+  }, [feed.data, rsvp.forms]);
+
+  const { refreshing, onRefresh } = useRefresh(categories.refetch, feed.refetch, rsvp.refetch);
 
   const onEndReached = useCallback(() => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) {
@@ -100,14 +143,25 @@ export default function HomeScreen() {
                 pointerEvents="none"
               />
             </View>
-            {/* A glyph, not a photo: the app is guest-first and there is no
-                auth phase yet, so there is no avatar to show. */}
-            <GlassIconButton
-              icon="person"
-              accessibilityLabel="Your profile"
-              blurTarget={backdropRef}
-              onPress={() => router.push('/profile')}
-            />
+            <View>
+              <GlassIconButton
+                icon="chatbubble-outline"
+                accessibilityLabel={
+                  incomingShares.length ? 'Chats, new tickets waiting' : 'Chats'
+                }
+                blurTarget={backdropRef}
+                onPress={() => router.push('/shares')}
+              />
+              {incomingShares.length ? (
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: theme.danger, borderColor: theme.background },
+                  ]}
+                  pointerEvents="none"
+                />
+              ) : null}
+            </View>
           </View>
         }
       />
@@ -158,6 +212,22 @@ export default function HomeScreen() {
               onRetry={() => feed.refetch()}
             />
           </View>
+        ) : activeCategory === null ? (
+          featuredItems.length ? (
+            <FeaturedRail
+              items={featuredItems}
+              onEndReached={onEndReached}
+              loadingMore={feed.isFetchingNextPage}
+            />
+          ) : (
+            <View style={styles.stateBlock}>
+              <EmptyState
+                icon="calendar-outline"
+                title="No events here"
+                message="Nothing is featured right now — try a category."
+              />
+            </View>
+          )
         ) : filteredEvents.length ? (
           <EventRail
             events={filteredEvents}
@@ -166,15 +236,7 @@ export default function HomeScreen() {
           />
         ) : (
           <View style={styles.stateBlock}>
-            <EmptyState
-              icon="calendar-outline"
-              title="No events here"
-              message={
-                activeCategory
-                  ? 'Try a different category.'
-                  : 'Nothing is featured right now — try a category.'
-              }
-            />
+            <EmptyState icon="calendar-outline" title="No events here" message="Try a different category." />
           </View>
         )}
 
@@ -194,10 +256,14 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {activities.isLoading || activities.events.length ? (
+        {feed.isLoading || rsvp.isLoading || moreItems.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Activities" />
-            <EventRail events={activities.events} loading={activities.isLoading} />
+            <SectionHeader
+              title="More to explore"
+              actionLabel="Show all"
+              onAction={() => router.push('/discover')}
+            />
+            <FeaturedRail items={moreItems} loading={feed.isLoading || rsvp.isLoading} />
           </View>
         ) : null}
       </ScrollView>

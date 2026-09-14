@@ -1,7 +1,7 @@
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { fetchCinemaMovie, fetchCinemaShowtimes, fetchCinemas } from '@/api/cinema';
+import { fetchCinemaMovie, fetchCinemaShowtimes, fetchCinemas, fetchFeaturedCinemaMovies } from '@/api/cinema';
 import { queryKeys } from '@/queries/keys';
 import type { CinemaMovie } from '@/types/api';
 
@@ -59,6 +59,17 @@ export function useCinemaMovie(movieId: string | undefined) {
   });
 
   return { ...query, page: query.data };
+}
+
+/** The admin-curated featured row — spans every cinema, each entry carrying its own populated `cinema`. */
+export function useFeaturedCinemaMovies() {
+  const query = useQuery({
+    queryKey: queryKeys.cinemas.featuredMovies(),
+    queryFn: () => fetchFeaturedCinemaMovies(),
+    staleTime: CINEMA_STALE_TIME,
+  });
+
+  return { ...query, movies: query.data ?? [] };
 }
 
 /**
