@@ -57,6 +57,11 @@ export function fetchCinemaOrder(transactionId: string): Promise<CinemaOrder> {
   return getData<CinemaOrder>(`/cinemas/public/orders/${transactionId}`);
 }
 
+/** Every cinema order this account has paid for — the Tickets tab's Movies list. */
+export function fetchMyCinemaOrders(): Promise<CinemaOrder[]> {
+  return getData<CinemaOrder[]>('/cinemas/my-orders');
+}
+
 /** Rendered server-side on demand — nothing to fetch, just an image URL. */
 export function cinemaTicketQrUrl(ticketId: string): string {
   return `${Env.apiUrl}/api/cinemas/public/tickets/${ticketId}/qr.png`;
