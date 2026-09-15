@@ -4,9 +4,12 @@ import {
   type ReactNode,
   type RefObject,
   memo,
+  useEffect,
   useState,
 } from 'react';
 import {
+  Animated,
+  Easing,
   type LayoutChangeEvent,
   Platform,
   StyleSheet,
@@ -31,6 +34,8 @@ import { Glass } from '@/components/ui/glass';
 import { GLASS_SHADOW, GLASS_TINT } from '@/components/ui/glass-button';
 import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 /* -------------------------------------------------------------------------- */
 /*                                   MASKING                                  */
@@ -197,6 +202,7 @@ function TicketFrameImpl({
   stub,
   details,
   detailsBackground,
+  glowing = false,
   fill = false,
   glass = false,
   blurTarget,
@@ -209,6 +215,43 @@ function TicketFrameImpl({
   });
 
   const [stubHeight, setStubHeight] = useState(0);
+
+  /* ---------------------------------------------------------------------- */
+  /*                                  GLOW                                  */
+  /* ---------------------------------------------------------------------- */
+
+  // A slow breathing light along the inner edge of the glass — the visible
+  // sign that this ticket is live. Runs only while `glowing`, so an idle
+  // ticket screen never pays for an animation loop nobody is looking at.
+  //
+  // Animated.Value, not a Reanimated shared value — see the note in
+  // `components/ui/pressable.tsx` about the React Compiler. `useState` rather
+  // than `useRef` for the same reason: the compiler flags `.current` reads
+  // on a ref during render, which `AnimatedPath`'s `opacity` prop below does.
+  const [glow] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!glowing) return;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+        Animated.timing(glow, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowing, glow]);
 
   /* ---------------------------------------------------------------------- */
   /*                                LAYOUT                                  */
@@ -391,6 +434,47 @@ function TicketFrameImpl({
               />
             </View>
           </ShapeMask>
+        ) : null}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* EDGE LIGHT                                                        */}
+        {/* ---------------------------------------------------------------- */}
+
+        {/* Three stacked strokes on the same silhouette fake a soft glow —
+            react-native-svg has no cheap cross-platform blur filter, so width
+            does the softening instead of a real gaussian blur. Drawn on top
+            of the glass rather than behind it, so the light reads as coming
+            off the ticket's own edge instead of muffled under frosted glass. */}
+        {ready && glowing ? (
+          <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
+            <AnimatedPath
+              d={ticketPath(face)}
+              transform={faceTransform}
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth={8}
+              strokeLinejoin="round"
+              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.14] })}
+            />
+            <AnimatedPath
+              d={ticketPath(face)}
+              transform={faceTransform}
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth={3.5}
+              strokeLinejoin="round"
+              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.10, 0.32] })}
+            />
+            <AnimatedPath
+              d={ticketPath(face)}
+              transform={faceTransform}
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth={1.25}
+              strokeLinejoin="round"
+              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0.85] })}
+            />
+          </Svg>
         ) : null}
 
         {/* ---------------------------------------------------------------- */}

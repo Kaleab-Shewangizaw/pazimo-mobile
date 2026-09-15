@@ -4,7 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo, type RefObject, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { DetailRow } from '@/components/ticket/detail-row';
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
+import { QrPlate } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -60,11 +62,15 @@ function TicketViewImpl({
       .filter(Boolean)
       .join(', ') || 'Announced by the organizer';
   const cover = eventCoverUrl(ticket.event.coverImages);
+  // The edge light reads as "this admits you" — it goes quiet the moment the
+  // ticket stops being that, rather than glowing on a stub someone already used.
+  const alive = ticket.status === 'active' && !ticket.checkedIn;
 
   return (
     <TicketFrame
       fill={fill}
       glass={glass}
+      glowing={alive}
       blurTarget={blurTarget}
       detailsBackground={
         cover ? (
@@ -104,19 +110,26 @@ function TicketViewImpl({
       }
       stub={
         <View style={[styles.stub, fill && styles.stubFilled]}>
+          {ticket.ticketType ? (
+            <Text variant="label" color="textSecondary" style={styles.eyebrow}>
+              {ticket.ticketType}
+            </Text>
+          ) : null}
           <Text variant="heading" role="heading" style={styles.title}>
             {ticket.event.title}
           </Text>
           <Text variant="small" color="textSecondary" style={styles.centered}>
             Show this QR code at the event entrance
           </Text>
-          {/* <Text variant="caption" color="textMuted" style={styles.centered}>
-            Ticket: {ticket.ticketId}
-          </Text> */}
 
-          <View style={[styles.plate, { width: plate, height: plate }]}>
-            <PazimoQr value={payload} size={plate * QR_SHARE} />
+          <View style={styles.plateWrap}>
+            <QrPlate size={plate}>
+              <PazimoQr value={payload} size={plate * QR_SHARE} />
+            </QrPlate>
           </View>
+          <Text variant="caption" color="textMuted" style={[styles.centered, styles.serial]}>
+            {ticket.ticketId}
+          </Text>
 
           {ticket.purchaseQuantity > 1 ? (
             <Text variant="small" color="textSecondary" style={styles.centered}>
@@ -153,38 +166,12 @@ function TicketViewImpl({
           />
           <DetailRow
             icon="pricetag"
-            label={ticket.ticketType ? ticket.ticketType : 'Price'}
+            label="Price"
             value={formatPrice(ticket.price, ticket.currency)}
           />
         </View>
       }
     />
-  );
-}
-
-function DetailRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={15} color="#FFFFFF" />
-      </View>
-      <View style={styles.rowText}>
-        <Text variant="caption" color="textMuted">
-          {label}
-        </Text>
-        <Text variant="callout" numberOfLines={2}>
-          {value}
-        </Text>
-      </View>
-    </View>
   );
 }
 
@@ -201,6 +188,7 @@ const styles = StyleSheet.create({
   // otherwise the title and QR cluster at the top and leave a dead gap above
   // the tear line.
   stubFilled: { flex: 1, justifyContent: 'center' },
+  eyebrow: { textAlign: 'center', marginBottom: 2 },
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -210,14 +198,8 @@ const styles = StyleSheet.create({
   },
   centered: { textAlign: 'center' },
 
-  plate: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xs,
-    borderRadius: Radius.lg,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
+  serial: { letterSpacing: 1.5, marginTop: -Spacing.xs },
 
   stamp: {
     flexDirection: 'row',
@@ -244,18 +226,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  rowText: { flex: 1, gap: 1 },
 });
 
 export const TicketView = memo(TicketViewImpl);

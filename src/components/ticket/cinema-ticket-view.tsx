@@ -1,10 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { cinemaTicketQrUrl } from '@/api/cinema-checkout';
+import { DetailRow } from '@/components/ticket/detail-row';
+import { QrPlate } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -58,11 +59,15 @@ function CinemaTicketViewImpl({
     : `${lead.ticketType} × ${tickets.reduce((n, t) => n + t.quantity, 0)}`;
   const total = tickets.reduce((sum, t) => sum + t.totalAmount, 0);
   const plate = Math.min(available - Spacing.xl * 2, SINGLE_PLATE_MAX);
+  // Live as long as at least one seat on the order still admits — the same
+  // "this still gets you in" signal `TicketView` uses.
+  const alive = tickets.some((t) => t.status === 'active');
 
   return (
     <TicketFrame
       fill={fill}
       glass={glass}
+      glowing={alive}
       blurTarget={blurTarget}
       detailsBackground={
         poster ? (
@@ -93,6 +98,9 @@ function CinemaTicketViewImpl({
       }
       stub={
         <View style={[styles.stub, fill && styles.stubFilled]}>
+          <Text variant="label" color="textSecondary" style={styles.eyebrow}>
+            {lead.ticketType}
+          </Text>
           <Text variant="heading" role="heading" style={styles.title}>
             {lead.movieTitle}
           </Text>
@@ -103,12 +111,14 @@ function CinemaTicketViewImpl({
           </Text>
 
           {tickets.length === 1 ? (
-            <View style={[styles.plate, { width: plate, height: plate }]}>
-              <Image
-                source={{ uri: cinemaTicketQrUrl(lead.ticketId) }}
-                style={{ width: plate * 0.78, height: plate * 0.78 }}
-                contentFit="contain"
-              />
+            <View style={styles.plateWrap}>
+              <QrPlate size={plate}>
+                <Image
+                  source={{ uri: cinemaTicketQrUrl(lead.ticketId) }}
+                  style={{ width: plate * 0.78, height: plate * 0.78 }}
+                  contentFit="contain"
+                />
+              </QrPlate>
             </View>
           ) : (
             <View style={styles.qrGrid}>
@@ -132,6 +142,9 @@ function CinemaTicketViewImpl({
               ))}
             </View>
           )}
+          <Text variant="caption" color="textMuted" style={[styles.centered, styles.serial]}>
+            {order.transactionId}
+          </Text>
 
           <Text variant="small" color="textSecondary" style={styles.centered}>
             {admits}
@@ -169,32 +182,6 @@ function CinemaTicketViewImpl({
   );
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={15} color="#FFFFFF" />
-      </View>
-      <View style={styles.rowText}>
-        <Text variant="caption" color="textMuted">
-          {label}
-        </Text>
-        <Text variant="callout" numberOfLines={3}>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 function formatShowtime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return iso;
@@ -219,6 +206,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl,
   },
   stubFilled: { flex: 1, justifyContent: 'center' },
+  eyebrow: { textAlign: 'center', marginBottom: 2 },
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -228,14 +216,8 @@ const styles = StyleSheet.create({
   },
   centered: { textAlign: 'center' },
 
-  plate: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xs,
-    borderRadius: Radius.lg,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
+  serial: { letterSpacing: 1.5, marginTop: -Spacing.xs },
 
   qrGrid: {
     flexDirection: 'row',
@@ -270,18 +252,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  rowText: { flex: 1, gap: 1 },
 });
 
 export const CinemaTicketView = memo(CinemaTicketViewImpl);
