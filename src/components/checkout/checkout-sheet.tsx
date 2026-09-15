@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -28,8 +29,9 @@ import {
   methodsFor,
   phoneProblem,
 } from '@/lib/payment-methods';
-import { availableCurrencies, tierUnitPrice } from '@/lib/pricing';
+import { availableCurrencies, ticketsToDisplay, tierUnitPrice } from '@/lib/pricing';
 import { usePaymentConfig } from '@/queries/payments';
+import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { Currency, PaymentMethodId, PazimoEvent } from '@/types/api';
 
@@ -64,19 +66,32 @@ export type CheckoutSheetProps = {
 export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
   const theme = useTheme();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const { config } = usePaymentConfig();
   const user = useAuthStore((s) => s.user);
-  const signIn = useAuthStore((s) => s.signIn);
 
   const currencies = useMemo(() => availableCurrencies(event), [event]);
   const [currency, setCurrency] = useState<Currency | null>(null);
   const activeCurrency = currency ?? currencies[0];
 
-  const tiers = event.ticketTypes ?? [];
-  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
+  // Waves the server hasn't activated yet simply don't appear — there's no
+  // "coming soon" preview to build here (see `ticketsToDisplay`).
+  const visibleTiers = useMemo(
+    () => ticketsToDisplay(event.ticketTypes ?? [], activeCurrency),
+    [event.ticketTypes, activeCurrency],
+  );
+  // Tracks only what the buyer has explicitly chosen. The *effective*
+  // selection below lands on the first on-sale tier whenever that pick isn't
+  // (or is no longer) visible — a currency switch that strips its price, or a
+  // refetch that flips it inactive mid-browse — computed during render rather
+  // than synced back with an effect.
+  const [pickedTierId, setPickedTierId] = useState<string | null>(null);
+  const selectedTierId = visibleTiers.some((t) => t._id === pickedTierId)
+    ? pickedTierId
+    : (visibleTiers[0]?._id ?? null);
   const [quantity, setQuantity] = useState(1);
-  const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
+  const selectedTier = visibleTiers.find((t) => t._id === selectedTierId) ?? null;
   const total = selectedTier ? tierUnitPrice(selectedTier, activeCurrency) * quantity : 0;
 
   const provider = providerFor(activeCurrency, config.activeProvider);
@@ -199,14 +214,6 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
         provider,
       );
 
-      // Guest checkout creates the account server-side and hands back its
-      // session — persisting it here is what makes the ticket show up under
-      // "my tickets" from this moment on, without a sign-in step.
-      if (response.token && response.user && !user) {
-        const { id, ...rest } = response.user;
-        await signIn({ token: response.token, user: { ...rest, _id: id, id } });
-      }
-
       onClose();
       setTimeout(reset, 260);
       // Navigate *before* opening any browser, so the status poll — which is
@@ -227,6 +234,12 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
       setError(
         err instanceof ApiError ? err.message : 'We could not start that payment. Try again.',
       );
+      // The wave or stock this screen showed can have moved on while the
+      // buyer was picking a payment method — a failed purchase is the
+      // server's word on that, so refetch rather than trust what's on
+      // screen. `selectedTierId` re-derives itself once fresh tiers arrive,
+      // and the tier step is still one back-tap away.
+      queryClient.invalidateQueries({ queryKey: queryKeys.events.all });
     }
   }, [
     activeCurrency,
@@ -234,6 +247,7 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
     event,
     knownAs,
     method,
+    queryClient,
     methods,
     onClose,
     provider,
@@ -241,7 +255,6 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
     reset,
     router,
     selectedTier,
-    signIn,
     user,
   ]);
 
@@ -307,13 +320,13 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
           accessibilityElementsHidden={step !== 0}
           importantForAccessibility={step === 0 ? 'auto' : 'no-hide-descendants'}>
           <TierStep
-            tiers={tiers}
+            tiers={visibleTiers}
             currency={activeCurrency}
             currencies={currencies}
             onChangeCurrency={setCurrency}
             selectedTierId={selectedTierId}
             onSelectTier={(tierId) => {
-              setSelectedTierId(tierId);
+              setPickedTierId(tierId);
               setQuantity(1);
             }}
             quantity={quantity}

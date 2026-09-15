@@ -2,7 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Platform, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  BackHandler,
+  Easing,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaTicketScreen } from '@/components/ticket/cinema-ticket-screen';
@@ -11,7 +18,10 @@ import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/theme';
-import { abandonCinemaOrder, useCinemaOrderWatcher } from '@/hooks/use-cinema-order-watcher';
+import {
+  abandonCinemaOrder,
+  useCinemaOrderWatcher,
+} from '@/hooks/use-cinema-order-watcher';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -24,7 +34,10 @@ import { useTheme } from '@/hooks/use-theme';
 
 const REVEAL_DURATION = 900;
 
-const FAILURE_COPY: Record<string, { icon: keyof typeof Ionicons.glyphMap; title: string }> = {
+const FAILURE_COPY: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; title: string }
+> = {
   cancelled: { icon: 'close-circle-outline', title: 'Payment cancelled' },
   failed: { icon: 'alert-circle-outline', title: 'Payment failed' },
   timeout: { icon: 'time-outline', title: 'Still waiting' },
@@ -43,9 +56,11 @@ export default function CinemaOrderScreen() {
   useEffect(() => {
     if (phase !== 'issued' || !order) return;
     if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
-        // A device without a taptic engine must not throw.
-      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {
+          // A device without a taptic engine must not throw.
+        },
+      );
     }
     Animated.timing(reveal, {
       toValue: 1,
@@ -59,7 +74,10 @@ export default function CinemaOrderScreen() {
 
   useEffect(() => {
     if (phase !== 'waiting') return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
     return () => subscription.remove();
   }, [phase]);
 
@@ -82,7 +100,11 @@ export default function CinemaOrderScreen() {
           {(body) => (
             <Animated.View
               style={{
-                opacity: reveal.interpolate({ inputRange: [0.5, 0.62], outputRange: [0, 1] }),
+                flex: 1,
+                opacity: reveal.interpolate({
+                  inputRange: [0.5, 0.62],
+                  outputRange: [0, 1],
+                }),
                 transform: [
                   { perspective: 1200 },
                   {
@@ -93,7 +115,8 @@ export default function CinemaOrderScreen() {
                     }),
                   },
                 ],
-              }}>
+              }}
+            >
               {body}
             </Animated.View>
           )}
@@ -132,18 +155,30 @@ function WaitingOverlay({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const backdrop = useRef<View>(null);
-  const failure = phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
+  const failure =
+    phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
 
   return (
     <Animated.View
       style={[
         StyleSheet.absoluteFill,
-        { opacity: reveal.interpolate({ inputRange: [0, 0.45], outputRange: [1, 0] }) },
+        {
+          opacity: reveal.interpolate({
+            inputRange: [0, 0.45],
+            outputRange: [1, 0],
+          }),
+        },
       ]}
-      pointerEvents={phase === 'issued' ? 'none' : 'auto'}>
+      pointerEvents={phase === 'issued' ? 'none' : 'auto'}
+    >
       <AmbientBackground blurTarget={backdrop} />
 
-      <View style={[styles.stage, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.stage,
+          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom },
+        ]}
+      >
         <Animated.View
           style={[
             styles.card,
@@ -159,7 +194,8 @@ function WaitingOverlay({
                 },
               ],
             },
-          ]}>
+          ]}
+        >
           <TicketFrame
             fill
             glass
@@ -172,7 +208,11 @@ function WaitingOverlay({
                   <Text variant="title" style={styles.centered}>
                     {failure.title}
                   </Text>
-                  <Text variant="small" color="textSecondary" style={styles.centered}>
+                  <Text
+                    variant="small"
+                    color="textSecondary"
+                    style={styles.centered}
+                  >
                     {message ??
                       'We stopped waiting for this payment. If it went through, your ticket will be in your order history.'}
                   </Text>
@@ -188,11 +228,26 @@ function WaitingOverlay({
         <View style={styles.actions}>
           {failure ? (
             <>
-              <Button label="Back to the movie" size="lg" onPress={onLeave} style={styles.wide} />
-              <Button label="Browse cinema" variant="ghost" onPress={onDone} style={styles.wide} />
+              <Button
+                label="Back to the movie"
+                size="lg"
+                onPress={onLeave}
+                style={styles.wide}
+              />
+              <Button
+                label="Browse cinema"
+                variant="ghost"
+                onPress={onDone}
+                style={styles.wide}
+              />
             </>
           ) : (
-            <Button label="Cancel payment" variant="ghost" onPress={onCancel} style={styles.wide} />
+            <Button
+              label="Cancel payment"
+              variant="ghost"
+              onPress={onCancel}
+              style={styles.wide}
+            />
           )}
         </View>
       </View>
@@ -202,10 +257,21 @@ function WaitingOverlay({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  stage: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.lg, gap: Spacing.xl },
+  stage: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xl,
+  },
   card: { flex: 1, width: '100%' },
   blank: { flex: 1 },
-  cardBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, paddingHorizontal: Spacing.xl },
+  cardBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+  },
   cardFooter: { height: 152 },
   centered: { textAlign: 'center' },
   actions: { gap: Spacing.xs },

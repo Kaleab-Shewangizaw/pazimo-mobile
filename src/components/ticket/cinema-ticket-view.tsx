@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo } from 'react';
+import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { cinemaTicketQrUrl } from '@/api/cinema-checkout';
@@ -30,9 +30,20 @@ const GRID_QR_SIZE = 84;
 export type CinemaTicketViewProps = {
   order: CinemaOrder;
   width?: number;
+  /** Stretches the card to fill its parent — the same size the loading card was. */
+  fill?: boolean;
+  /** Real glass instead of a flat dark fill. Needs `blurTarget` to have anything to sample on Android. */
+  glass?: boolean;
+  blurTarget?: RefObject<View | null>;
 };
 
-function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
+function CinemaTicketViewImpl({
+  order,
+  width,
+  fill = false,
+  glass = false,
+  blurTarget,
+}: CinemaTicketViewProps) {
   const window = useWindowDimensions();
   const available = width ?? window.width - Spacing.lg * 2;
 
@@ -50,6 +61,9 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
 
   return (
     <TicketFrame
+      fill={fill}
+      glass={glass}
+      blurTarget={blurTarget}
       detailsBackground={
         poster ? (
           <>
@@ -57,13 +71,17 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
               source={{ uri: poster }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={18}
+              blurRadius={8}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={order.transactionId}
             />
             <LinearGradient
-              colors={['rgba(10,10,12,0.9)', 'rgba(10,10,12,0.7)', 'rgba(10,10,12,0.42)']}
+              colors={[
+                'rgba(10,10,12,0.78)',
+                'rgba(10,10,12,0.55)',
+                'rgba(10,10,12,0.3)',
+              ]}
               locations={[0, 0.6, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0.4 }}
@@ -74,7 +92,7 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
         ) : null
       }
       stub={
-        <View style={styles.stub}>
+        <View style={[styles.stub, fill && styles.stubFilled]}>
           <Text variant="heading" role="heading" style={styles.title}>
             {lead.movieTitle}
           </Text>
@@ -103,7 +121,11 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
                       contentFit="contain"
                     />
                   </View>
-                  <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                  <Text
+                    variant="caption"
+                    color="textSecondary"
+                    numberOfLines={1}
+                  >
                     {t.seat ? `${t.seat.row}${t.seat.number}` : t.ticketType}
                   </Text>
                 </View>
@@ -119,16 +141,28 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
       details={
         <View style={styles.details}>
           <DetailRow icon="business" label="Cinema" value={lead.cinema.name} />
-          <DetailRow icon="calendar-clear" label="Showtime" value={formatShowtime(lead.showtimeStartsAt)} />
-          {lead.hallName ? <DetailRow icon="film-outline" label="Hall" value={lead.hallName} /> : null}
+          <DetailRow
+            icon="calendar-clear"
+            label="Showtime"
+            value={formatShowtime(lead.showtimeStartsAt)}
+          />
+          {lead.hallName ? (
+            <DetailRow icon="film-outline" label="Hall" value={lead.hallName} />
+          ) : null}
           {order.concessions.length ? (
             <DetailRow
               icon="fast-food-outline"
               label="Snacks"
-              value={order.concessions.map((c) => `${c.name} ×${c.quantity}`).join(', ')}
+              value={order.concessions
+                .map((c) => `${c.beverageName} ×${c.quantity}`)
+                .join(', ')}
             />
           ) : null}
-          <DetailRow icon="pricetag" label="Total" value={formatPrice(total, lead.currency)} />
+          <DetailRow
+            icon="pricetag"
+            label="Total"
+            value={formatPrice(total, lead.currency)}
+          />
         </View>
       }
     />
@@ -164,8 +198,15 @@ function DetailRow({
 function formatShowtime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return iso;
-  const date = when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const date = when.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const time = when.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   return `${date} · ${time}`;
 }
 
@@ -177,7 +218,14 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xl,
     paddingBottom: Spacing.xl,
   },
-  title: { color: '#FFFFFF', textAlign: 'center', lineHeight: 31, letterSpacing: -0.6, marginBottom: 2 },
+  stubFilled: { flex: 1, justifyContent: 'center' },
+  title: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 31,
+    letterSpacing: -0.6,
+    marginBottom: 2,
+  },
   centered: { textAlign: 'center' },
 
   plate: {
@@ -217,7 +265,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
 
-  details: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
+  details: {
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   rowIcon: {
     width: 32,

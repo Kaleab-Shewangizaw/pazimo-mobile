@@ -1,8 +1,24 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
-import { type ReactNode, type RefObject, memo, useEffect, useState } from 'react';
-import { Animated, Easing, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import {
+  type ReactNode,
+  type RefObject,
+  memo,
+  useState,
+} from 'react';
+import {
+  type LayoutChangeEvent,
+  Platform,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native';
+import Svg, {
+  Defs,
+  Path,
+  Stop,
+  LinearGradient as SvgGradient,
+} from 'react-native-svg';
 
 import {
   type TicketGeometry,
@@ -12,101 +28,206 @@ import {
   ticketPath,
 } from '@/components/ticket/ticket-path';
 import { Glass } from '@/components/ui/glass';
-import { GLASS_TINT } from '@/components/ui/glass-button';
+import { GLASS_SHADOW, GLASS_TINT } from '@/components/ui/glass-button';
 import { Radius } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+
+/* -------------------------------------------------------------------------- */
+/*                                   MASKING                                  */
+/* -------------------------------------------------------------------------- */
 
 /**
- * The card everything a ticket *is* gets drawn on: a real ticket silhouette,
- * torn between the stub that carries the QR and the details below it.
- *
- * The same frame serves the wait and the ticket, which is the point — the light
- * that runs its edge while a payment clears is running the outline of the thing
- * being bought, and the flip at the end turns one object over rather than
- * swapping two.
- *
- * The glow is not drawn along the path. It is an oversized gradient bar spun
- * behind the card and masked to the silhouette, with the card's own face laid
- * back on top so only a hairline escapes at the border. That keeps the whole
- * effect on one native-driver transform — no per-frame path maths — which
- * matters because this animates while a network poll is running.
+ * Web cannot use the native MaskedView implementation in the same way.
+ * We generate the exact same SVG silhouette and use it as a CSS mask.
  */
+function svgMaskUri(
+  d: string,
+  size: { width: number; height: number },
+  transform?: string,
+): string {
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg"`,
+    ` width="${size.width}"`,
+    ` height="${size.height}"`,
+    ` viewBox="0 0 ${size.width} ${size.height}">`,
+    `<path d="${d}"`,
+    transform ? ` transform="${transform}"` : '',
+    ` fill="#000"/>`,
+    `</svg>`,
+  ].join('');
 
-const SPIN_DURATION = 2600;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
 
-/** Thickness of the lit edge. */
-const RING = 2.5;
+type ShapeMaskProps = {
+  d: string;
+  transform?: string;
+  size: {
+    width: number;
+    height: number;
+  };
+  style?: ViewStyle | ViewStyle[];
+  children: ReactNode;
+};
 
-/** Radius of the bite out of each side at the tear. */
+function ShapeMask({ d, transform, size, style, children }: ShapeMaskProps) {
+  if (Platform.OS === 'web') {
+    const uri = svgMaskUri(d, size, transform);
+
+    return (
+      <View
+        pointerEvents="none"
+        style={[
+          style,
+          {
+            WebkitMaskImage: `url("${uri}")`,
+            maskImage: `url("${uri}")`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: '100% 100%',
+            maskSize: '100% 100%',
+          } as ViewStyle,
+        ]}
+      >
+        {children}
+      </View>
+    );
+  }
+
+  return (
+    <MaskedView
+      style={style}
+      pointerEvents="none"
+      maskElement={
+        <Svg
+          width={size.width}
+          height={size.height}
+          style={StyleSheet.absoluteFill}
+        >
+          <Path d={d} transform={transform} fill="#000000" />
+        </Svg>
+      }
+    >
+      {children}
+    </MaskedView>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  GEOMETRY                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The face sits above this lower shell, creating a visible acrylic edge. */
+const DEPTH = 4;
+
+/** Small inset that leaves the ticket silhouette visible around the face. */
+const GLASS_INSET = 5;
+
+/**
+ * Radius of each side notch.
+ */
 const NOTCH = 15;
 
-/** Angular thickness of the spoke, as a fraction of the sweep's diameter. */
-const SPOKE_WIDTH = 0.34;
+const OUTER_EDGE_WIDTH = 1;
 
-/** White core falling off to nothing either side, so the light has soft ends. */
-const BEAM = [
-  'rgba(255,255,255,0)',
-  'rgba(255,255,255,0.28)',
-  '#FFFFFF',
-  'rgba(255,255,255,0.28)',
-  'rgba(255,255,255,0)',
-] as const;
+/* -------------------------------------------------------------------------- */
+/*                                    GLASS                                   */
+/* -------------------------------------------------------------------------- */
+
+/** The event page's glass language: white translucency over the dark surface. */
+const GLASS_TOP = 'rgba(255,255,255,0.07)';
+const GLASS_BOTTOM = 'rgba(0,0,0,0.14)';
+
+/**
+ * Perforation.
+ */
+const TEAR_COLOR = 'rgba(255,255,255,0.16)';
+
+/* -------------------------------------------------------------------------- */
+/*                                    PROPS                                   */
+/* -------------------------------------------------------------------------- */
 
 export type TicketFrameProps = {
-  /** The upper half — title and QR. Its height places the tear. */
-  stub: ReactNode;
-  /** The lower half, below the perforation. */
-  details?: ReactNode;
   /**
-   * Artwork for the lower half, masked to the torn edge so it fills the foot
-   * without paving over the notches.
+   * Upper ticket section.
+   */
+  stub: ReactNode;
+
+  /**
+   * Lower ticket section.
+   */
+  details?: ReactNode;
+
+  /**
+   * Optional artwork/background for the lower section.
    */
   detailsBackground?: ReactNode;
-  /** Runs the light around the edge. */
-  glowing?: boolean;
-  /** Stretches the card to its parent, and the stub to whatever is left over. */
-  fill?: boolean;
+
   /**
-   * Frost the face instead of filling it. Real backdrop blur, so on Android it
-   * needs a `blurTarget` to have anything to sample.
+   * Runs the physical light around the ticket edge.
+   */
+  glowing?: boolean;
+
+  /**
+   * Makes the ticket fill its available vertical space.
+   */
+  fill?: boolean;
+
+  /**
+   * Enables liquid-glass material.
    */
   glass?: boolean;
+
+  /**
+   * Android/iOS blur source.
+   */
   blurTarget?: RefObject<View | null>;
+
+  /**
+   * Non-glass fallback color.
+   */
   faceColor?: string;
-  /** Resting border, and what the beam travels over. */
-  idleColor?: string;
 };
+
+/* -------------------------------------------------------------------------- */
+/*                                COMPONENT                                   */
+/* -------------------------------------------------------------------------- */
 
 function TicketFrameImpl({
   stub,
   details,
   detailsBackground,
-  glowing = false,
   fill = false,
   glass = false,
   blurTarget,
-  faceColor = 'rgba(16,16,20,0.94)',
-  idleColor = 'rgba(255,255,255,0.12)',
+  faceColor = 'rgba(12,15,22,0.94)',
 }: TicketFrameProps) {
-  const [box, setBox] = useState({ width: 0, height: 0 });
+  const theme = useTheme();
+  const [box, setBox] = useState({
+    width: 0,
+    height: 0,
+  });
+
   const [stubHeight, setStubHeight] = useState(0);
-  const [spin] = useState(() => new Animated.Value(0));
 
-  useEffect(() => {
-    if (!glowing) return;
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: SPIN_DURATION,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [glowing, spin]);
+  /* ---------------------------------------------------------------------- */
+  /*                                LAYOUT                                  */
+  /* ---------------------------------------------------------------------- */
 
-  const onBox = (e: LayoutChangeEvent) =>
-    setBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
+  const onBox = (event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+
+    const height = event.nativeEvent.layout.height;
+
+    setBox({
+      width,
+      height,
+    });
+  };
+
+  /* ---------------------------------------------------------------------- */
+  /*                               GEOMETRY                                 */
+  /* ---------------------------------------------------------------------- */
 
   const geometry: TicketGeometry = {
     width: box.width,
@@ -115,151 +236,228 @@ function TicketFrameImpl({
     tearY: stubHeight,
     notch: NOTCH,
   };
-  const face = insetGeometry(geometry, RING);
-  const shift = `translate(${RING}, ${RING})`;
 
-  // Nothing can be drawn until the content has told us how big it is; the frame
-  // is transparent for that one frame rather than flashing a wrong shape.
   const ready = box.width > 0 && box.height > 0;
-  // The bar has to cover the card's diagonal at every angle, or a corner falls
-  // dark as it sweeps past.
-  const beamSize = Math.hypot(box.width, box.height) * 1.2;
 
-  // Sizes are passed explicitly rather than left to `absoluteFill`: without a
-  // viewBox the path's numbers are already in points, and an SVG that has to
-  // infer its own box from layout is the one that renders empty on Android.
-  const svgSize = { width: box.width, height: box.height };
+  const face = insetGeometry(geometry, GLASS_INSET);
+
+  const faceTransform = `translate(${GLASS_INSET}, ${GLASS_INSET})`;
+
+  const svgSize = {
+    width: box.width,
+    height: box.height,
+  };
+
+  const sizing = [styles.frame, fill && styles.filled];
+
+  /* ---------------------------------------------------------------------- */
+  /*                                  RENDER                                */
+  /* ---------------------------------------------------------------------- */
 
   return (
-    <View style={[styles.frame, fill && styles.filled]} onLayout={onBox}>
-      {ready && glowing ? (
-        <MaskedView
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-          maskElement={
-            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
-              <Path d={ticketPath(geometry)} fill="#000000" />
-            </Svg>
-          }>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: idleColor }]} />
-          {/* A spoke, not a bar. A gradient spanning the whole card crosses it
-              and lights the rim in two places at once, which reads as two lamps
-              rather than one light going round. Anchoring the bright band at the
-              centre and letting it reach out in a single direction means it
-              leaves the shape at exactly one point — and because the spoke is
-              radial, that point tracks the outline whatever shape it is, tall
-              card and notches included. */}
-          <Animated.View
-            style={[
-              styles.sweep,
-              {
-                width: beamSize,
-                height: beamSize,
-                marginLeft: -beamSize / 2,
-                marginTop: -beamSize / 2,
-                transform: [
-                  {
-                    rotate: spin.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '360deg'],
-                    }),
-                  },
-                ],
-              },
-            ]}>
-            <LinearGradient
-              colors={BEAM}
-              locations={[0, 0.34, 0.5, 0.66, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[
-                styles.spoke,
-                {
-                  width: beamSize * SPOKE_WIDTH,
-                  height: beamSize / 2,
-                  marginLeft: (-beamSize * SPOKE_WIDTH) / 2,
-                },
-              ]}
-            />
-          </Animated.View>
-        </MaskedView>
-      ) : ready ? (
-        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Path d={ticketPath(geometry)} fill={idleColor} />
-        </Svg>
-      ) : null}
+    <View style={[sizing, glass && GLASS_SHADOW]}>
+      <View style={sizing} onLayout={onBox}>
+        {/* ---------------------------------------------------------------- */}
+        {/* OUTER TICKET SILHOUETTE                                          */}
+        {/* ---------------------------------------------------------------- */}
 
-      {ready && glass ? (
-        <MaskedView
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-          maskElement={
-            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
-              <Path d={ticketPath(face)} transform={shift} fill="#000000" />
-            </Svg>
-          }>
-          {/* The same material as the floating buttons — `clear` at 28 with
-              GLASS_TINT washed *into* the effect. The tint is what keeps it
-              reading as glass rather than as a dark panel: blur alone only
-              softens what is behind it. */}
-          <Glass
-            variant="clear"
-            intensity={28}
-            radius={0}
-            bordered={false}
-            blurTarget={blurTarget}
-            tint={GLASS_TINT}
+        {ready ? (
+          <Svg
+            {...svgSize}
             style={StyleSheet.absoluteFill}
-          />
-        </MaskedView>
-      ) : ready ? (
-        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Path d={ticketPath(face)} transform={shift} fill={faceColor} />
-        </Svg>
-      ) : null}
+            pointerEvents="none"
+          >
+            <Defs>
+              <SvgGradient id="ticketBody" x1="0" y1="0" x2="0.9" y2="1">
+                <Stop offset="0" stopColor="rgba(255,255,255,0.12)" />
+                <Stop offset="0.44" stopColor="rgba(255,255,255,0.055)" />
+                <Stop offset="1" stopColor="rgba(255,255,255,0.018)" />
+              </SvgGradient>
 
-      {ready && detailsBackground ? (
-        <MaskedView
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-          maskElement={
-            <Svg {...svgSize} style={StyleSheet.absoluteFill}>
-              <Path d={ticketFootPath(face)} transform={shift} fill="#000000" />
-            </Svg>
-          }>
-          {detailsBackground}
-        </MaskedView>
-      ) : null}
+            </Defs>
 
-      {ready && details ? (
-        <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Path
-            d={tearLinePath(geometry)}
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth={1.5}
-            strokeDasharray="5 6"
-            fill="none"
-          />
-        </Svg>
-      ) : null}
+            {/* Lower shell: the offset edge is what makes the ticket feel raised. */}
+            <Path
+              d={ticketPath(geometry)}
+              transform={`translate(0 ${DEPTH})`}
+              fill="rgba(0,0,0,0.58)"
+            />
+            <Path d={ticketPath(geometry)} fill="url(#ticketBody)" />
+            <Path
+              d={ticketPath(geometry)}
+              fill="none"
+              stroke={theme.glassBorder}
+              strokeWidth={OUTER_EDGE_WIDTH}
+              strokeLinejoin="round"
+            />
+          </Svg>
+        ) : null}
 
-      <View
-        style={fill ? styles.filled : undefined}
-        onLayout={(e) => setStubHeight(e.nativeEvent.layout.height)}>
-        {stub}
+        {/* ---------------------------------------------------------------- */}
+        {/* BASE TICKET FACE + ARTWORK                                       */}
+        {/* ---------------------------------------------------------------- */}
+
+        {ready ? (
+          <Svg
+            {...svgSize}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          >
+            <Path
+              d={ticketPath(face)}
+              transform={faceTransform}
+              fill={glass ? 'rgba(255,255,255,0.025)' : faceColor}
+            />
+          </Svg>
+        ) : null}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* LOWER ARTWORK                                                     */}
+        {/* ---------------------------------------------------------------- */}
+
+        {ready && detailsBackground ? (
+          <ShapeMask
+            d={ticketFootPath(face)}
+            transform={faceTransform}
+            size={svgSize}
+            style={StyleSheet.absoluteFill}
+          >
+            {detailsBackground}
+          </ShapeMask>
+        ) : null}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* LIQUID GLASS                                                      */}
+        {/* ---------------------------------------------------------------- */}
+
+        {ready && glass ? (
+          <ShapeMask
+            d={ticketPath(face)}
+            transform={faceTransform}
+            size={svgSize}
+            style={StyleSheet.absoluteFill}
+          >
+            <View style={StyleSheet.absoluteFill}>
+              {/* Backdrop blur */}
+              <Glass
+                variant="clear"
+                intensity={18}
+                radius={0}
+                bordered={false}
+                blurTarget={blurTarget}
+                tint={GLASS_TINT}
+                style={StyleSheet.absoluteFill}
+              />
+
+              {/* Quiet upper glass tint */}
+              <LinearGradient
+                colors={[
+                  GLASS_TOP,
+                  'rgba(255,255,255,0.015)',
+                  'rgba(255,255,255,0)',
+                ]}
+                locations={[0, 0.35, 0.72]}
+                start={{
+                  x: 0.15,
+                  y: 0,
+                }}
+                end={{
+                  x: 0.82,
+                  y: 1,
+                }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+
+              {/* Bottom depth */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.08)', GLASS_BOTTOM]}
+                locations={[0, 0.55, 1]}
+                start={{
+                  x: 0,
+                  y: 0,
+                }}
+                end={{
+                  x: 0,
+                  y: 1,
+                }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+
+              <View
+                pointerEvents="none"
+                style={[styles.faceHighlight, { backgroundColor: theme.glassBorder }]}
+              />
+            </View>
+          </ShapeMask>
+        ) : null}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* TEAR / PERFORATION                                               */}
+        {/* ---------------------------------------------------------------- */}
+
+        {ready && details ? (
+          <Svg
+            {...svgSize}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          >
+            <Path
+              d={tearLinePath(geometry)}
+              stroke={TEAR_COLOR}
+              strokeWidth={1}
+              strokeDasharray="4 5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </Svg>
+        ) : null}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* CONTENT                                                          */}
+        {/* ---------------------------------------------------------------- */}
+
+        <View
+          style={fill ? styles.filled : undefined}
+          onLayout={(event) => {
+            setStubHeight(event.nativeEvent.layout.height);
+          }}
+        >
+          {stub}
+        </View>
+
+        {details}
       </View>
-      {details}
     </View>
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/*                                   STYLES                                   */
+/* -------------------------------------------------------------------------- */
+
 const styles = StyleSheet.create({
-  frame: { width: '100%' },
-  filled: { flex: 1 },
-  sweep: { position: 'absolute', left: '50%', top: '50%' },
-  // Top half only: the spoke runs from the centre of the sweep to beyond the
-  // card's edge, so rotating it walks one lit point around the outline.
-  spoke: { position: 'absolute', left: '50%', top: 0 },
+  frame: {
+    width: '100%',
+  },
+
+  filled: {
+    flex: 1,
+  },
+
+  faceHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
 });
+
+/* -------------------------------------------------------------------------- */
+/*                                   EXPORT                                   */
+/* -------------------------------------------------------------------------- */
 
 export const TicketFrame = memo(TicketFrameImpl);

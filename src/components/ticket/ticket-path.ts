@@ -1,123 +1,245 @@
 /**
- * The ticket silhouette: a rounded card bitten by a semicircular notch on each
- * side, at the line where the stub tears off.
+ * ticket-path.ts
  *
- * Kept as a pure function of geometry — no React, no `react-native-svg` — so the
- * same outline can fill a card, mask the glow beam that runs around its edge,
- * and print into the downloadable PNG without three shapes drifting apart.
+ * The ticket silhouette is defined in ONE place.
+ *
+ * The frame, glass mask, tear line and artwork all use this geometry.
  */
 
 export type TicketGeometry = {
   width: number;
   height: number;
-  /** Corner radius of the card. */
   radius: number;
-  /** Distance from the top edge to the centre of the notches. */
   tearY: number;
-  /** Radius of the bite taken out of each side. */
   notch: number;
 };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
+const MIN_RADIUS = 1;
+const MIN_NOTCH = 1;
 
-/**
- * Traced clockwise from the top-left corner. Both notches use `sweep-flag 0`:
- * travelling down the right edge and up the left edge, that is the direction
- * that curves *into* the card, which is what makes the bite concave on both
- * sides rather than a bump on one.
- */
-export function ticketPath({ width, height, radius, tearY, notch }: TicketGeometry): string {
-  const w = r2(width);
-  const h = r2(height);
-  // A notch or corner larger than the space it sits in would fold the outline
-  // back on itself, so both are clamped to what the box can actually hold.
-  const c = r2(Math.max(0, Math.min(radius, w / 2, h / 2)));
-  const n = r2(Math.max(0, Math.min(notch, w / 2)));
-  const y = r2(Math.max(c + n, Math.min(tearY, h - c - n)));
-
-  return [
-    `M${c},0`,
-    `H${r2(w - c)}`,
-    `A${c},${c} 0 0 1 ${w},${c}`,
-    `V${r2(y - n)}`,
-    n > 0 ? `A${n},${n} 0 0 0 ${w},${r2(y + n)}` : '',
-    `V${r2(h - c)}`,
-    `A${c},${c} 0 0 1 ${r2(w - c)},${h}`,
-    `H${c}`,
-    `A${c},${c} 0 0 1 0,${r2(h - c)}`,
-    `V${r2(y + n)}`,
-    n > 0 ? `A${n},${n} 0 0 0 0,${r2(y - n)}` : '',
-    `V${c}`,
-    `A${c},${c} 0 0 1 ${c},0`,
-    'Z',
-  ]
-    .filter(Boolean)
-    .join(' ');
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 /**
- * The same outline pushed inward by `inset` all round — the face that sits on
- * top of the glow, leaving exactly `inset` of lit edge showing.
- *
- * Note the notch grows rather than shrinks: it is a hole, so moving the
- * boundary into the material moves that arc *away* from its own centre.
+ * Normalizes geometry so every consumer works from exactly the same values.
  */
-export function insetGeometry(geometry: TicketGeometry, inset: number): TicketGeometry {
+function normalizeGeometry(g: TicketGeometry): TicketGeometry {
+  const width = Math.max(0, g.width);
+  const height = Math.max(0, g.height);
+
+  if (width <= 0 || height <= 0) {
+    return {
+      width,
+      height,
+      radius: 0,
+      tearY: 0,
+      notch: 0,
+    };
+  }
+
+  const radius = clamp(g.radius, MIN_RADIUS, Math.min(width, height) / 2);
+
+  const notch = clamp(
+    g.notch,
+    MIN_NOTCH,
+    Math.min(width / 2, Math.max(1, height / 4)),
+  );
+
+  const minTearY = radius + notch;
+  const maxTearY = Math.max(minTearY, height - radius - notch);
+
+  const tearY = clamp(g.tearY, minTearY, maxTearY);
+
   return {
-    width: geometry.width - inset * 2,
-    height: geometry.height - inset * 2,
-    radius: geometry.radius - inset,
-    tearY: geometry.tearY - inset,
-    notch: geometry.notch + inset,
+    width,
+    height,
+    radius,
+    tearY,
+    notch,
   };
 }
 
-export function insetTicketPath(geometry: TicketGeometry, inset: number): string {
-  return ticketPath(insetGeometry(geometry, inset));
+/**
+ * Main ticket silhouette.
+ *
+ * The path starts at the top-left horizontal tangent and travels clockwise.
+ *
+ * The two side notches are true semicircular cut-outs.
+ *
+ * IMPORTANT:
+ * Do not recreate this shape anywhere else.
+ */
+export function ticketPath(input: TicketGeometry): string {
+  const g = normalizeGeometry(input);
+
+  const { width: w, height: h, radius: r, tearY: y, notch: n } = g;
+
+  if (w <= 0 || h <= 0) {
+    return '';
+  }
+
+  return [
+    // ─────────────────────────────────────────────────────────────
+    // TOP
+    // ─────────────────────────────────────────────────────────────
+
+    `M ${r} 0`,
+    `H ${w - r}`,
+
+    // Top-right corner
+    `A ${r} ${r} 0 0 1 ${w} ${r}`,
+
+    // Right side → notch
+    `V ${y - n}`,
+
+    // Right concave notch
+    `A ${n} ${n} 0 0 0 ${w} ${y + n}`,
+
+    // Right side → bottom
+    `V ${h - r}`,
+
+    // Bottom-right corner
+    `A ${r} ${r} 0 0 1 ${w - r} ${h}`,
+
+    // Bottom
+    `H ${r}`,
+
+    // Bottom-left corner
+    `A ${r} ${r} 0 0 1 0 ${h - r}`,
+
+    // Left side → notch
+    `V ${y + n}`,
+
+    // Left concave notch
+    `A ${n} ${n} 0 0 0 0 ${y - n}`,
+
+    // Left side → top
+    `V ${r}`,
+
+    // Top-left corner
+    `A ${r} ${r} 0 0 1 ${r} 0`,
+
+    'Z',
+  ].join(' ');
 }
 
 /**
- * Everything below the tear: the stub's counterfoil, cut off at the waist.
+ * Creates a mathematically smaller version of the ticket.
  *
- * Used to mask artwork into the lower half without it spilling into the notches
- * — the bite is only half-eaten at that height, and a plain rounded rectangle
- * would fill the other half back in and lose the shape.
+ * The returned geometry is meant to be translated by the same inset amount.
+ *
+ * This lets us create:
+ *
+ *   outer ticket
+ *   glass face
+ *   inner bevel
+ *
+ * without inventing slightly different silhouettes.
  */
-export function ticketFootPath({
-  width,
-  height,
-  radius,
-  tearY,
-  notch,
-}: TicketGeometry): string {
-  const w = r2(width);
-  const h = r2(height);
-  const c = r2(Math.max(0, Math.min(radius, w / 2, h / 2)));
-  const n = r2(Math.max(0, Math.min(notch, w / 2)));
-  const y = r2(Math.max(c + n, Math.min(tearY, h - c - n)));
+export function insetGeometry(
+  input: TicketGeometry,
+  inset: number,
+): TicketGeometry {
+  const g = normalizeGeometry(input);
+  const amount = Math.max(0, inset);
 
-  // The cut runs between the deepest points of the two notches, then follows the
-  // outline round — so these arcs are literally the lower halves of the same
-  // notches `ticketPath` traces, down to the sweep flag.
+  const width = Math.max(0, g.width - amount * 2);
+
+  const height = Math.max(0, g.height - amount * 2);
+
+  if (width <= 0 || height <= 0) {
+    return {
+      width,
+      height,
+      radius: 0,
+      tearY: 0,
+      notch: 0,
+    };
+  }
+
+  const radius = clamp(
+    Math.max(MIN_RADIUS, g.radius - amount),
+    MIN_RADIUS,
+    Math.min(width, height) / 2,
+  );
+
+  /**
+   * Increasing the notch slightly keeps the bite visually deep
+   * when the face moves inward.
+   */
+  const notch = clamp(
+    g.notch + amount,
+    MIN_NOTCH,
+    Math.min(width / 2, Math.max(1, height / 4)),
+  );
+
+  const tearY = g.tearY - amount;
+
+  return normalizeGeometry({
+    width,
+    height,
+    radius,
+    tearY,
+    notch,
+  });
+}
+
+/**
+ * Lower ticket section.
+ *
+ * This is used only for the artwork/background beneath the perforation.
+ *
+ * It intentionally follows the same bottom corners and right/left
+ * boundaries as ticketPath().
+ */
+export function ticketFootPath(input: TicketGeometry): string {
+  const g = normalizeGeometry(input);
+
+  const { width: w, height: h, radius: r, tearY: y, notch: n } = g;
+
+  if (w <= 0 || h <= 0) {
+    return '';
+  }
+
   return [
-    `M${n},${y}`,
-    `H${r2(w - n)}`,
-    n > 0 ? `A${n},${n} 0 0 0 ${w},${r2(y + n)}` : '',
-    `V${r2(h - c)}`,
-    `A${c},${c} 0 0 1 ${r2(w - c)},${h}`,
-    `H${c}`,
-    `A${c},${c} 0 0 1 0,${r2(h - c)}`,
-    `V${r2(y + n)}`,
-    n > 0 ? `A${n},${n} 0 0 0 ${n},${y}` : '',
+    // Start at the lower end of the left notch.
+    `M 0 ${y + n}`,
+
+    // Left edge down.
+    `V ${h - r}`,
+
+    // Bottom-left corner.
+    `A ${r} ${r} 0 0 0 ${r} ${h}`,
+
+    // Bottom edge.
+    `H ${w - r}`,
+
+    // Bottom-right corner.
+    `A ${r} ${r} 0 0 0 ${w} ${h - r}`,
+
+    // Right edge back to notch.
+    `V ${y + n}`,
+
+    // Close across the lower notch boundary.
+    `A ${n} ${n} 0 0 0 ${w} ${y + n}`,
+
     'Z',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  ].join(' ');
 }
 
-/** The perforation itself, drawn between the two notches. */
-export function tearLinePath({ width, tearY, notch }: TicketGeometry): string {
-  const start = r2(notch + 8);
-  const end = r2(width - notch - 8);
-  return end > start ? `M${start},${r2(tearY)} H${end}` : '';
+/**
+ * Perforation line.
+ *
+ * It stops exactly where the notches begin.
+ */
+export function tearLinePath(input: TicketGeometry): string {
+  const g = normalizeGeometry(input);
+
+  if (g.width <= 0) {
+    return '';
+  }
+
+  return [`M ${g.notch} ${g.tearY}`, `H ${g.width - g.notch}`].join(' ');
 }
+

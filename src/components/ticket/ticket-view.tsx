@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useMemo } from 'react';
+import { memo, type RefObject, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
@@ -34,9 +34,20 @@ export type TicketViewProps = {
   ticket: Ticket;
   /** Width available to the card, so the QR plate can be sized against it. */
   width?: number;
+  /** Stretches the card to fill its parent — the same size the loading card was. */
+  fill?: boolean;
+  /** Real glass instead of a flat dark fill. Needs `blurTarget` to have anything to sample on Android. */
+  glass?: boolean;
+  blurTarget?: RefObject<View | null>;
 };
 
-function TicketViewImpl({ ticket, width }: TicketViewProps) {
+function TicketViewImpl({
+  ticket,
+  width,
+  fill = false,
+  glass = false,
+  blurTarget,
+}: TicketViewProps) {
   const theme = useTheme();
   const window = useWindowDimensions();
 
@@ -45,24 +56,30 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
   const available = width ?? window.width - Spacing.lg * 2;
   const plate = Math.min(available - Spacing.xl * 2, MAX_PLATE);
   const venue =
-    [ticket.event.location?.address, ticket.event.location?.city].filter(Boolean).join(', ') ||
-    'Announced by the organizer';
+    [ticket.event.location?.address, ticket.event.location?.city]
+      .filter(Boolean)
+      .join(', ') || 'Announced by the organizer';
   const cover = eventCoverUrl(ticket.event.coverImages);
 
   return (
     <TicketFrame
+      fill={fill}
+      glass={glass}
+      blurTarget={blurTarget}
       detailsBackground={
         cover ? (
           <>
             {/* Frosted at decode rather than by a BlurView. The artwork never
                 moves, so there is nothing for a live backdrop blur to track —
                 and the pager mounts every ticket in the group at once, which is
-                exactly where real blur views start costing frames. */}
+                exactly where real blur views start costing frames. Lighter than
+                before: the point of `glass` is that the artwork still reads
+                through it, and a heavier blur just flattened it to mush. */}
             <Image
               source={{ uri: cover }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={18}
+              blurRadius={8}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={ticket._id}
@@ -70,7 +87,11 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
             {/* Darkest under the text column and clearing toward the right, so
                 the artwork stays legible as artwork where nothing is read over it. */}
             <LinearGradient
-              colors={['rgba(10,10,12,0.9)', 'rgba(10,10,12,0.7)', 'rgba(10,10,12,0.42)']}
+              colors={[
+                'rgba(10,10,12,0.78)',
+                'rgba(10,10,12,0.55)',
+                'rgba(10,10,12,0.3)',
+              ]}
               locations={[0, 0.6, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0.4 }}
@@ -82,7 +103,7 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
         ) : null
       }
       stub={
-        <View style={styles.stub}>
+        <View style={[styles.stub, fill && styles.stubFilled]}>
           <Text variant="heading" role="heading" style={styles.title}>
             {ticket.event.title}
           </Text>
@@ -105,7 +126,11 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
 
           {ticket.checkedIn ? (
             <View style={[styles.stamp, { borderColor: theme.danger }]}>
-              <Ionicons name="checkmark-circle" size={14} color={theme.danger} />
+              <Ionicons
+                name="checkmark-circle"
+                size={14}
+                color={theme.danger}
+              />
               <Text variant="caption" color="danger">
                 Already checked in
               </Text>
@@ -120,7 +145,10 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
             icon="calendar-clear"
             label="Date & Time"
             value={
-              formatTicketDate(ticket.event.startDate, ticket.event.startTime) || 'To be announced'
+              formatTicketDate(
+                ticket.event.startDate,
+                ticket.event.startTime,
+              ) || 'To be announced'
             }
           />
           <DetailRow
@@ -169,6 +197,10 @@ const styles = StyleSheet.create({
     // Clears the perforation, which is drawn on this block's bottom edge.
     paddingBottom: Spacing.xl,
   },
+  // When the card fills the screen, its content has to fill that space too —
+  // otherwise the title and QR cluster at the top and leave a dead gap above
+  // the tear line.
+  stubFilled: { flex: 1, justifyContent: 'center' },
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -207,7 +239,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
 
-  details: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
+  details: {
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   rowIcon: {
     width: 32,

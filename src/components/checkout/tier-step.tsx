@@ -38,6 +38,15 @@ function TierStepImpl({
   const theme = useTheme();
   const selectedTier = tiers.find((t) => t._id === selectedTierId) ?? null;
   const total = selectedTier ? tierUnitPrice(selectedTier, currency) * quantity : 0;
+  // A soft, client-side guard only — stock shown here can have moved since
+  // the event loaded, and the server re-validates for real at purchase time.
+  const notEnoughStock = selectedTier !== null && quantity > selectedTier.quantity;
+
+  const continueLabel = !selectedTier
+    ? 'Select a ticket'
+    : notEnoughStock
+      ? 'Not enough tickets available'
+      : `Continue - ${formatPrice(total, currency)}`;
 
   return (
     <View>
@@ -79,8 +88,8 @@ function TierStepImpl({
       </View>
 
       <Button
-        label={selectedTier ? `Continue - ${formatPrice(total, currency)}` : 'Select a ticket'}
-        disabled={!selectedTier}
+        label={continueLabel}
+        disabled={!selectedTier || notEnoughStock}
         size="lg"
         onPress={onContinue}
       />
@@ -104,6 +113,8 @@ function TierRow({
   onSelect: () => void;
 }) {
   const theme = useTheme();
+  // `tiers` arrives pre-filtered to `available !== false` (see `ticketsToDisplay`
+  // in checkout-sheet), so the only way this comes back false is `quantity < 1`.
   const buyable = isTierBuyable(tier);
   // `quantity` is remaining stock — there is no separate sold/remaining field.
   const scarce = buyable && tier.quantity <= 10;
@@ -137,7 +148,7 @@ function TierRow({
           ) : null}
           {!buyable ? (
             <Text variant="caption" color="danger">
-              Unavailable
+              Sold out
             </Text>
           ) : scarce ? (
             <Text variant="caption" color="warning">
