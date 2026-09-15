@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useRef, useState } from 'react';
 import {
   FlatList,
   type ListRenderItem,
@@ -12,10 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
 import { CinemaRow } from '@/components/cinema/cinema-picker';
-import { MovieResultCard } from '@/components/cinema/movie-result-card';
 import { FilterSheet } from '@/components/discover/filter-sheet';
-import { AmbientBackground } from '@/components/ui/ambient-background';
 import { EventCard } from '@/components/event/event-card';
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Glass } from '@/components/ui/glass';
 import { GLASS_TINT, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
@@ -23,30 +22,32 @@ import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
+import { VenueRow } from '@/components/venue/venue-row';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
-import { useCinemas, useMoviesCatalogue } from '@/queries/cinema';
+import { useCinemas } from '@/queries/cinema';
 import { DEFAULT_FILTERS, activeFilterCount, useDiscover } from '@/queries/discover';
-import type { Cinema, CinemaMovie, PazimoEvent } from '@/types/api';
+import { useEventVenues } from '@/queries/event-venues';
+import type { Cinema, EventVenue, PazimoEvent } from '@/types/api';
 
 const keyExtractor = (event: PazimoEvent) => event._id;
-const movieKeyExtractor = (movie: CinemaMovie) => movie._id;
 const cinemaKeyExtractor = (cinema: Cinema) => cinema._id;
+const venueKeyExtractor = (venue: EventVenue) => venue._id;
 
-type DiscoverTab = 'events' | 'movies' | 'cinemas';
+type DiscoverTab = 'events' | 'venues' | 'cinemas';
 
 const TABS: { key: DiscoverTab; label: string }[] = [
   { key: 'events', label: 'Events' },
-  { key: 'movies', label: 'Movies' },
+  { key: 'venues', label: 'Venues' },
   { key: 'cinemas', label: 'Cinemas' },
 ];
 
 const TAB_PLACEHOLDER: Record<DiscoverTab, string> = {
   events: 'Search events, venues, cities',
-  movies: 'Search movies',
+  venues: 'Search venues, cities',
   cinemas: 'Search cinemas, cities',
 };
 
@@ -66,13 +67,6 @@ const HEADER_BLOCK_HEIGHT =
  * that only worked against `surfaceMuted`.
  */
 const PLACEHOLDER = 'rgba(255,255,255,0.55)';
-
-/** Mirrors the web's search surface: title and genre. */
-function matchesMovieQuery(movie: CinemaMovie, needle: string): boolean {
-  if (!needle) return true;
-  const genre = Array.isArray(movie.genre) ? movie.genre.join(' ') : (movie.genre ?? '');
-  return `${movie.title} ${genre}`.toLowerCase().includes(needle);
-}
 
 export default function DiscoverScreen() {
   const theme = useTheme();
@@ -105,7 +99,6 @@ export default function DiscoverScreen() {
 
   // Keeps typing smooth: the lists re-filter at a lower priority than the input.
   const deferredQuery = useDeferredValue(query);
-  const needle = deferredQuery.trim().toLowerCase();
 
   const categories = useCategories();
   const { results, isLoading, isError, error, refetch } = useDiscover({
@@ -114,31 +107,17 @@ export default function DiscoverScreen() {
   });
   const activeCount = activeFilterCount(filters);
 
-  // Fetched (and searched) lazily — only once someone actually opens the tab —
-  // so switching to "Movies" or "Cinemas" never costs a request nobody asked for.
-  const movieCatalogue = useMoviesCatalogue(tab === 'movies');
-  const movieResults = useMemo(
-    () => movieCatalogue.movies.filter((movie) => matchesMovieQuery(movie, needle)),
-    [movieCatalogue.movies, needle],
-  );
-
-  // Cinemas already accept a server-side `search` term, so this is a real
-  // query rather than a client-side filter over a fully-fetched list.
+  // Venues and cinemas both accept a server-side `search` term, so these are
+  // real queries rather than a client-side filter over a fully-fetched list —
+  // and each is only enabled once its own tab is actually open, so switching
+  // to "Venues" or "Cinemas" never costs a request nobody asked for.
+  const venueCatalogue = useEventVenues(tab === 'venues' ? { search: deferredQuery } : undefined);
   const cinemaCatalogue = useCinemas(tab === 'cinemas' ? { search: deferredQuery } : undefined);
 
   const renderItem = useCallback<ListRenderItem<PazimoEvent>>(
     ({ item }) => (
       <View style={styles.item}>
         <EventCard event={item} />
-      </View>
-    ),
-    [],
-  );
-
-  const renderMovie = useCallback<ListRenderItem<CinemaMovie>>(
-    ({ item }) => (
-      <View style={styles.movieItem}>
-        <MovieResultCard movie={item} />
       </View>
     ),
     [],
@@ -160,12 +139,21 @@ export default function DiscoverScreen() {
     [openCinema],
   );
 
+  const renderVenue = useCallback<ListRenderItem<EventVenue>>(
+    ({ item }) => (
+      <View style={styles.item}>
+        <VenueRow venue={item} />
+      </View>
+    ),
+    [],
+  );
+
   // The events catalogue is one bounded fetch, so a pull re-pulls the whole
   // thing — filtering and search run over it client-side and need no refetch
-  // of their own. Movies and cinemas each get their own binding since they
+  // of their own. Venues and cinemas each get their own binding since they
   // refetch a different query.
   const eventsRefresh = useRefresh(refetch, categories.refetch);
-  const moviesRefresh = useRefresh(movieCatalogue.refetch);
+  const venuesRefresh = useRefresh(venueCatalogue.refetch);
   const cinemasRefresh = useRefresh(cinemaCatalogue.refetch);
 
   const selectTab = useCallback((next: DiscoverTab) => {
@@ -326,47 +314,46 @@ export default function DiscoverScreen() {
           windowSize={7}
           removeClippedSubviews
         />
-      ) : tab === 'movies' ? (
+      ) : tab === 'venues' ? (
         <FlatList
-          key="movies"
-          data={movieResults}
-          keyExtractor={movieKeyExtractor}
-          renderItem={renderMovie}
-          numColumns={2}
+          key="venues"
+          data={venueCatalogue.venues}
+          keyExtractor={venueKeyExtractor}
+          renderItem={renderVenue}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          columnWrapperStyle={styles.movieRow}
           contentContainerStyle={{
-            paddingHorizontal: Spacing.lg,
             paddingTop: topPadding,
             paddingBottom: tabBarClearance(insets.bottom),
-            gap: Spacing.md,
           }}
           refreshControl={
             <PageRefreshControl
-              refreshing={moviesRefresh.refreshing}
-              onRefresh={moviesRefresh.onRefresh}
+              refreshing={venuesRefresh.refreshing}
+              onRefresh={venuesRefresh.onRefresh}
               progressViewOffset={insets.top + HEADER_BLOCK_HEIGHT}
             />
           }
           ListEmptyComponent={
-            movieCatalogue.isLoading ? (
-              <View style={styles.movieSkeletonGrid}>
-                {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} height={210} radius={Radius.lg} style={styles.movieSkeleton} />
+            venueCatalogue.isLoading ? (
+              <View style={styles.skeletonList}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} height={132} radius={Radius.lg} />
                 ))}
               </View>
-            ) : movieCatalogue.isError ? (
-              <ErrorState onRetry={() => movieCatalogue.refetch()} />
+            ) : venueCatalogue.isError ? (
+              <ErrorState
+                message={venueCatalogue.error instanceof ApiError ? venueCatalogue.error.message : undefined}
+                onRetry={() => venueCatalogue.refetch()}
+              />
             ) : (
               <EmptyState
-                icon="film-outline"
-                title="No movies found"
+                icon="location-outline"
+                title="No venues found"
                 message={
                   query
                     ? `Nothing matches "${query}". Try a different search.`
-                    : 'Nothing is currently programmed at any cinema.'
+                    : 'No venues are listed yet.'
                 }
               />
             )
@@ -472,9 +459,4 @@ const styles = StyleSheet.create({
 
   item: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
   skeletonList: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
-
-  movieRow: { gap: Spacing.md },
-  movieItem: { flex: 1 },
-  movieSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  movieSkeleton: { width: '47%' },
 });

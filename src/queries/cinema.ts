@@ -1,9 +1,7 @@
-import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { fetchCinemaMovie, fetchCinemaShowtimes, fetchCinemas, fetchFeaturedCinemaMovies } from '@/api/cinema';
 import { queryKeys } from '@/queries/keys';
-import type { CinemaMovie } from '@/types/api';
 
 /**
  * Programmes change when a cinema publishes or pulls a screening, which is a
@@ -70,43 +68,4 @@ export function useFeaturedCinemaMovies() {
   });
 
   return { ...query, movies: query.data ?? [] };
-}
-
-/**
- * Every film currently programmed anywhere, deduped by movie id.
- *
- * No endpoint lists movies across cinemas — only a single cinema's own
- * showtimes do — so this merges every cinema's programme client-side, same
- * stopgap as the events catalogue in `queries/discover.ts`. Correct while the
- * cinema count stays small; the real fix is a search-capable
- * `/cinemas/public/movies` endpoint.
- */
-export function useMoviesCatalogue(enabled = true) {
-  const cinemas = useCinemas();
-
-  const showtimeQueries = useQueries({
-    queries: cinemas.cinemas.map((cinema) => ({
-      queryKey: queryKeys.cinemas.showtimes(cinema._id),
-      queryFn: () => fetchCinemaShowtimes(cinema._id),
-      staleTime: CINEMA_STALE_TIME,
-      enabled,
-    })),
-  });
-
-  const movies = useMemo(() => {
-    const byId = new Map<string, CinemaMovie>();
-    for (const result of showtimeQueries) {
-      for (const showtime of result.data ?? []) {
-        if (!byId.has(showtime.movie._id)) byId.set(showtime.movie._id, showtime.movie);
-      }
-    }
-    return [...byId.values()];
-  }, [showtimeQueries]);
-
-  return {
-    movies,
-    isLoading: cinemas.isLoading || (cinemas.cinemas.length > 0 && showtimeQueries.some((q) => q.isLoading)),
-    isError: cinemas.isError || showtimeQueries.some((q) => q.isError),
-    refetch: () => Promise.all([cinemas.refetch(), ...showtimeQueries.map((q) => q.refetch())]),
-  };
 }
