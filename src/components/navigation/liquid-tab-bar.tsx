@@ -144,7 +144,19 @@ function LiquidTabBarImpl({
       hasMounted.current = true;
       return;
     }
-    if (activeIndex < 0) return;
+    if (activeIndex < 0) {
+      // A hidden route (e.g. search) is showing — the pill has no slot to
+      // rest in. Fade it out rather than leaving it parked solid-white under
+      // whichever tab it last sat on, which otherwise washes that tab's
+      // unfocused icon out against it.
+      Animated.timing(pillOpacity, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
 
     const animations = [
       Animated.spring(slide, { toValue: activeIndex, ...SLIDE_SPRING }),
