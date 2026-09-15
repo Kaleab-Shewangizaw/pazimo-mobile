@@ -229,6 +229,47 @@ export function ticketFootPath(input: TicketGeometry): string {
 }
 
 /**
+ * Upper ticket section — the exact complement of `ticketFootPath`, split at
+ * the same seam (the notches' lower bound, where both sides are already back
+ * to full width). Used to keep the glass material off the artwork half: that
+ * half draws its own photo and scrim, and a second frosted layer on top of it
+ * only re-blurs the photo and re-darkens the text sitting over it.
+ */
+export function ticketHeadPath(input: TicketGeometry): string {
+  const g = normalizeGeometry(input);
+
+  const { width: w, height: h, radius: r, tearY: y, notch: n } = g;
+
+  if (w <= 0 || h <= 0) {
+    return '';
+  }
+
+  return [
+    `M ${r} 0`,
+    `H ${w - r}`,
+
+    // Top-right corner.
+    `A ${r} ${r} 0 0 1 ${w} ${r}`,
+
+    // Right edge down to the notch, then its bite — matches ticketPath().
+    `V ${y - n}`,
+    `A ${n} ${n} 0 0 0 ${w} ${y + n}`,
+
+    // Close across the seam ticketFootPath() starts from.
+    `H 0`,
+
+    // Back up through the left notch's bite, same arc ticketPath() draws.
+    `A ${n} ${n} 0 0 0 0 ${y - n}`,
+
+    // Left edge up to the top-left corner.
+    `V ${r}`,
+    `A ${r} ${r} 0 0 1 ${r} 0`,
+
+    'Z',
+  ].join(' ');
+}
+
+/**
  * Perforation line.
  *
  * It stops exactly where the notches begin.

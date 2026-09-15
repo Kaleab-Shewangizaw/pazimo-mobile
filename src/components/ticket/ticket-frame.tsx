@@ -23,6 +23,7 @@ import {
   insetGeometry,
   tearLinePath,
   ticketFootPath,
+  ticketHeadPath,
   ticketPath,
 } from '@/components/ticket/ticket-path';
 import { Glass } from '@/components/ui/glass';
@@ -470,9 +471,13 @@ function TicketFrameImpl({
         {/* LIQUID GLASS                                                      */}
         {/* ---------------------------------------------------------------- */}
 
+        {/* Head only, not the whole face — the foot already has its own
+            artwork and scrim (LOWER ARTWORK, above), and frosting it a
+            second time here only re-blurs that photo and washes out the
+            detail text sitting on top of it. */}
         {ready && glass ? (
           <ShapeMask
-            d={ticketPath(face)}
+            d={ticketHeadPath(face)}
             transform={faceTransform}
             size={svgSize}
             style={StyleSheet.absoluteFill}
