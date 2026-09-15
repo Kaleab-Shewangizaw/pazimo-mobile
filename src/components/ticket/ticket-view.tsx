@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, type RefObject, useMemo } from 'react';
+import { memo, useMemo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { DetailRow } from '@/components/ticket/detail-row';
