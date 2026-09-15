@@ -230,6 +230,7 @@ function WaitingOverlay({
             glass
             blurTarget={backdrop}
             glowing={phase === 'waiting'}
+            spinForever={phase === 'waiting'}
             stub={
               failure ? (
                 <View style={styles.cardBody}>

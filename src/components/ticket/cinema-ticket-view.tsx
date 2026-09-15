@@ -142,9 +142,6 @@ function CinemaTicketViewImpl({
               ))}
             </View>
           )}
-          <Text variant="caption" color="textMuted" style={[styles.centered, styles.serial]}>
-            {order.transactionId}
-          </Text>
 
           <Text variant="small" color="textSecondary" style={styles.centered}>
             {admits}
@@ -217,7 +214,6 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
 
   plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
-  serial: { letterSpacing: 1.5, marginTop: -Spacing.xs },
 
   qrGrid: {
     flexDirection: 'row',

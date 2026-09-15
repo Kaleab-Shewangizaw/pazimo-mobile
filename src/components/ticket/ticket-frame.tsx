@@ -16,12 +16,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import Svg, {
-  Defs,
-  Path,
-  Stop,
-  LinearGradient as SvgGradient,
-} from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import {
   type TicketGeometry,
@@ -31,11 +26,8 @@ import {
   ticketPath,
 } from '@/components/ticket/ticket-path';
 import { Glass } from '@/components/ui/glass';
-import { GLASS_SHADOW, GLASS_TINT } from '@/components/ui/glass-button';
 import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 /* -------------------------------------------------------------------------- */
 /*                                   MASKING                                  */
@@ -44,12 +36,21 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 /**
  * Web cannot use the native MaskedView implementation in the same way.
  * We generate the exact same SVG silhouette and use it as a CSS mask.
+ *
+ * `strokeWidth`, when given, masks to the *outline* of `d` rather than its
+ * fill — the shape that admits, so nothing has to rely on another layer
+ * painted on top to hide what a fill-mask would otherwise show everywhere
+ * inside it too.
  */
 function svgMaskUri(
   d: string,
   size: { width: number; height: number },
   transform?: string,
+  strokeWidth?: number,
 ): string {
+  const paint = strokeWidth
+    ? `fill="none" stroke="#000" stroke-width="${strokeWidth}"`
+    : `fill="#000"`;
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg"`,
     ` width="${size.width}"`,
@@ -57,7 +58,7 @@ function svgMaskUri(
     ` viewBox="0 0 ${size.width} ${size.height}">`,
     `<path d="${d}"`,
     transform ? ` transform="${transform}"` : '',
-    ` fill="#000"/>`,
+    ` ${paint}/>`,
     `</svg>`,
   ].join('');
 
@@ -71,13 +72,15 @@ type ShapeMaskProps = {
     width: number;
     height: number;
   };
+  /** Masks to the outline of `d` instead of its fill — see `svgMaskUri`. */
+  strokeWidth?: number;
   style?: ViewStyle | ViewStyle[];
   children: ReactNode;
 };
 
-function ShapeMask({ d, transform, size, style, children }: ShapeMaskProps) {
+function ShapeMask({ d, transform, size, strokeWidth, style, children }: ShapeMaskProps) {
   if (Platform.OS === 'web') {
-    const uri = svgMaskUri(d, size, transform);
+    const uri = svgMaskUri(d, size, transform, strokeWidth);
 
     return (
       <View
@@ -109,7 +112,13 @@ function ShapeMask({ d, transform, size, style, children }: ShapeMaskProps) {
           height={size.height}
           style={StyleSheet.absoluteFill}
         >
-          <Path d={d} transform={transform} fill="#000000" />
+          <Path
+            d={d}
+            transform={transform}
+            fill={strokeWidth ? 'none' : '#000000'}
+            stroke={strokeWidth ? '#000000' : undefined}
+            strokeWidth={strokeWidth}
+          />
         </Svg>
       }
     >
@@ -122,26 +131,53 @@ function ShapeMask({ d, transform, size, style, children }: ShapeMaskProps) {
 /*                                  GEOMETRY                                  */
 /* -------------------------------------------------------------------------- */
 
-/** The face sits above this lower shell, creating a visible acrylic edge. */
-const DEPTH = 4;
-
-/** Small inset that leaves the ticket silhouette visible around the face. */
-const GLASS_INSET = 5;
+/**
+ * Width of the ring left visible around the face — this is both the acrylic
+ * edge glass sits inside of, and, when `glowing`, the only part of the
+ * rotating light the face doesn't cover.
+ */
+const RING = 3;
 
 /**
  * Radius of each side notch.
  */
 const NOTCH = 15;
 
-const OUTER_EDGE_WIDTH = 1;
+/* -------------------------------------------------------------------------- */
+/*                                    GLOW                                    */
+/* -------------------------------------------------------------------------- */
+
+const SPIN_DURATION = 2600;
+
+/** Angular thickness of the spoke, as a fraction of the sweep's diameter. */
+const SPOKE_WIDTH = 0.34;
+
+/** Resting ring color, and what the beam sweeps over. */
+const IDLE_COLOR = 'rgba(255,255,255,0.12)';
+
+/** White core falling off to nothing either side, so the light has soft ends. */
+const BEAM = [
+  'rgba(255,255,255,0)',
+  'rgba(255,255,255,0.28)',
+  '#FFFFFF',
+  'rgba(255,255,255,0.28)',
+  'rgba(255,255,255,0)',
+] as const;
 
 /* -------------------------------------------------------------------------- */
 /*                                    GLASS                                   */
 /* -------------------------------------------------------------------------- */
 
-/** The event page's glass language: white translucency over the dark surface. */
-const GLASS_TOP = 'rgba(255,255,255,0.07)';
-const GLASS_BOTTOM = 'rgba(0,0,0,0.14)';
+/**
+ * A dark, smoked tint rather than the frosted-white glass buttons elsewhere use.
+ * Those sit over a photo and want to read as bright glass; this sits behind
+ * white title/body text that has to stay legible over *whatever* backdrop the
+ * page happens to have, so it tints toward black instead of brightening
+ * toward gray.
+ */
+const TICKET_GLASS_TINT = 'rgba(6,7,10,0.55)';
+const GLASS_TOP = 'rgba(255,255,255,0.05)';
+const GLASS_BOTTOM = 'rgba(0,0,0,0.22)';
 
 /**
  * Perforation.
@@ -174,6 +210,13 @@ export type TicketFrameProps = {
   glowing?: boolean;
 
   /**
+   * Keeps the light circling indefinitely — for an open-ended wait, like a
+   * payment still clearing. Left `false`, `glowing` plays one lap and settles,
+   * which reads as "here's your ticket" rather than an ongoing process.
+   */
+  spinForever?: boolean;
+
+  /**
    * Makes the ticket fill its available vertical space.
    */
   fill?: boolean;
@@ -203,6 +246,7 @@ function TicketFrameImpl({
   details,
   detailsBackground,
   glowing = false,
+  spinForever = false,
   fill = false,
   glass = false,
   blurTarget,
@@ -220,38 +264,42 @@ function TicketFrameImpl({
   /*                                  GLOW                                  */
   /* ---------------------------------------------------------------------- */
 
-  // A slow breathing light along the inner edge of the glass — the visible
-  // sign that this ticket is live. Runs only while `glowing`, so an idle
-  // ticket screen never pays for an animation loop nobody is looking at.
+  // A single lit point travelling the ticket's own outline — the visible sign
+  // that this ticket is live. Runs only while `glowing`, so an idle ticket
+  // screen never pays for an animation loop nobody is looking at.
   //
   // Animated.Value, not a Reanimated shared value — see the note in
   // `components/ui/pressable.tsx` about the React Compiler. `useState` rather
-  // than `useRef` for the same reason: the compiler flags `.current` reads
-  // on a ref during render, which `AnimatedPath`'s `opacity` prop below does.
-  const [glow] = useState(() => new Animated.Value(0));
+  // than `useRef` for the same reason: the compiler flags `.current` reads on
+  // a ref during render.
+  const [spin] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!glowing) return;
 
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-        Animated.timing(glow, {
-          toValue: 0,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [glowing, glow]);
+    // Not `Animated.loop` — it restarts each pass from wherever `spin`
+    // already sits rather than resetting it, so the second lap has nowhere
+    // left to travel and the light parks at the end of the first one. Setting
+    // it back to 0 by hand before every lap is what actually keeps it moving.
+    let cancelled = false;
+    const lap = () => {
+      spin.setValue(0);
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: SPIN_DURATION,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished && !cancelled && spinForever) lap();
+      });
+    };
+    lap();
+
+    return () => {
+      cancelled = true;
+      spin.stopAnimation();
+    };
+  }, [glowing, spinForever, spin]);
 
   /* ---------------------------------------------------------------------- */
   /*                                LAYOUT                                  */
@@ -282,14 +330,24 @@ function TicketFrameImpl({
 
   const ready = box.width > 0 && box.height > 0;
 
-  const face = insetGeometry(geometry, GLASS_INSET);
+  const face = insetGeometry(geometry, RING);
 
-  const faceTransform = `translate(${GLASS_INSET}, ${GLASS_INSET})`;
+  const faceTransform = `translate(${RING}, ${RING})`;
+
+  // The line the ring mask strokes: centred exactly between the outer edge
+  // and the face, so a `RING`-wide stroke on it spans precisely that gap.
+  const ringLine = insetGeometry(geometry, RING / 2);
+
+  const ringTransform = `translate(${RING / 2}, ${RING / 2})`;
 
   const svgSize = {
     width: box.width,
     height: box.height,
   };
+
+  // The sweep has to cover the card's diagonal at every angle, or a corner
+  // falls dark as the beam passes it.
+  const beamSize = Math.hypot(box.width, box.height) * 1.2;
 
   const sizing = [styles.frame, fill && styles.filled];
 
@@ -298,39 +356,73 @@ function TicketFrameImpl({
   /* ---------------------------------------------------------------------- */
 
   return (
-    <View style={[sizing, glass && GLASS_SHADOW]}>
+    <View style={sizing}>
       <View style={sizing} onLayout={onBox}>
         {/* ---------------------------------------------------------------- */}
-        {/* OUTER TICKET SILHOUETTE                                          */}
+        {/* OUTER TICKET SILHOUETTE / EDGE LIGHT                             */}
         {/* ---------------------------------------------------------------- */}
 
-        {ready ? (
-          <Svg
-            {...svgSize}
+        {/* The glow is not drawn along the path. It is an oversized gradient
+            spoke spun behind the card and masked to the OUTLINE of the
+            silhouette — a `RING`-wide stroke, not a fill — so the light
+            physically exists only in that band. Nothing has to cover the
+            interior to hide it, which matters on web: `Glass`'s backdrop-filter
+            there genuinely blurs whatever a fill-mask would have left showing
+            through the middle. One rotate transform on the native driver, no
+            per-frame path maths, which matters because this animates for as
+            long as the ticket stays on screen. */}
+        {ready && glowing ? (
+          <ShapeMask
+            d={ticketPath(ringLine)}
+            transform={ringTransform}
+            strokeWidth={RING}
+            size={svgSize}
             style={StyleSheet.absoluteFill}
-            pointerEvents="none"
           >
-            <Defs>
-              <SvgGradient id="ticketBody" x1="0" y1="0" x2="0.9" y2="1">
-                <Stop offset="0" stopColor="rgba(255,255,255,0.12)" />
-                <Stop offset="0.44" stopColor="rgba(255,255,255,0.055)" />
-                <Stop offset="1" stopColor="rgba(255,255,255,0.018)" />
-              </SvgGradient>
-
-            </Defs>
-
-            {/* Lower shell: the offset edge is what makes the ticket feel raised. */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: IDLE_COLOR }]} />
+            <Animated.View
+              style={[
+                styles.sweep,
+                {
+                  width: beamSize,
+                  height: beamSize,
+                  marginLeft: -beamSize / 2,
+                  marginTop: -beamSize / 2,
+                  transform: [
+                    {
+                      rotate: spin.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={BEAM}
+                locations={[0, 0.34, 0.5, 0.66, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[
+                  styles.spoke,
+                  {
+                    width: beamSize * SPOKE_WIDTH,
+                    height: beamSize / 2,
+                    marginLeft: (-beamSize * SPOKE_WIDTH) / 2,
+                  },
+                ]}
+              />
+            </Animated.View>
+          </ShapeMask>
+        ) : ready ? (
+          <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
             <Path
-              d={ticketPath(geometry)}
-              transform={`translate(0 ${DEPTH})`}
-              fill="rgba(0,0,0,0.58)"
-            />
-            <Path d={ticketPath(geometry)} fill="url(#ticketBody)" />
-            <Path
-              d={ticketPath(geometry)}
+              d={ticketPath(ringLine)}
+              transform={ringTransform}
               fill="none"
-              stroke={theme.glassBorder}
-              strokeWidth={OUTER_EDGE_WIDTH}
+              stroke={IDLE_COLOR}
+              strokeWidth={RING}
               strokeLinejoin="round"
             />
           </Svg>
@@ -349,7 +441,12 @@ function TicketFrameImpl({
             <Path
               d={ticketPath(face)}
               transform={faceTransform}
-              fill={glass ? 'rgba(255,255,255,0.025)' : faceColor}
+              // A real dark fill under the glass, not a near-invisible one —
+              // `Glass`'s blur only repaints what it can actually sample
+              // (native reads `blurTarget`, not this fill), so without this
+              // the face falls back to whatever gray the backdrop happens to
+              // blur to instead of a consistently dark, legible surface.
+              fill={glass ? 'rgba(8,8,11,0.6)' : faceColor}
             />
           </Svg>
         ) : null}
@@ -388,7 +485,7 @@ function TicketFrameImpl({
                 radius={0}
                 bordered={false}
                 blurTarget={blurTarget}
-                tint={GLASS_TINT}
+                tint={TICKET_GLASS_TINT}
                 style={StyleSheet.absoluteFill}
               />
 
@@ -434,47 +531,6 @@ function TicketFrameImpl({
               />
             </View>
           </ShapeMask>
-        ) : null}
-
-        {/* ---------------------------------------------------------------- */}
-        {/* EDGE LIGHT                                                        */}
-        {/* ---------------------------------------------------------------- */}
-
-        {/* Three stacked strokes on the same silhouette fake a soft glow —
-            react-native-svg has no cheap cross-platform blur filter, so width
-            does the softening instead of a real gaussian blur. Drawn on top
-            of the glass rather than behind it, so the light reads as coming
-            off the ticket's own edge instead of muffled under frosted glass. */}
-        {ready && glowing ? (
-          <Svg {...svgSize} style={StyleSheet.absoluteFill} pointerEvents="none">
-            <AnimatedPath
-              d={ticketPath(face)}
-              transform={faceTransform}
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth={8}
-              strokeLinejoin="round"
-              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.14] })}
-            />
-            <AnimatedPath
-              d={ticketPath(face)}
-              transform={faceTransform}
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth={3.5}
-              strokeLinejoin="round"
-              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.10, 0.32] })}
-            />
-            <AnimatedPath
-              d={ticketPath(face)}
-              transform={faceTransform}
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth={1.25}
-              strokeLinejoin="round"
-              opacity={glow.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0.85] })}
-            />
-          </Svg>
         ) : null}
 
         {/* ---------------------------------------------------------------- */}
@@ -529,6 +585,11 @@ const styles = StyleSheet.create({
   filled: {
     flex: 1,
   },
+
+  sweep: { position: 'absolute', left: '50%', top: '50%' },
+  // Top half only: the spoke runs from the centre of the sweep to beyond the
+  // card's edge, so rotating it walks one lit point around the outline.
+  spoke: { position: 'absolute', left: '50%', top: 0 },
 
   faceHighlight: {
     position: 'absolute',

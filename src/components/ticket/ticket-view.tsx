@@ -127,9 +127,6 @@ function TicketViewImpl({
               <PazimoQr value={payload} size={plate * QR_SHARE} />
             </QrPlate>
           </View>
-          <Text variant="caption" color="textMuted" style={[styles.centered, styles.serial]}>
-            {ticket.ticketId}
-          </Text>
 
           {ticket.purchaseQuantity > 1 ? (
             <Text variant="small" color="textSecondary" style={styles.centered}>
@@ -199,7 +196,6 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
 
   plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
-  serial: { letterSpacing: 1.5, marginTop: -Spacing.xs },
 
   stamp: {
     flexDirection: 'row',
