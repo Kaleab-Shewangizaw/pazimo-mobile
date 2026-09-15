@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { memo, type RefObject, useMemo } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
@@ -78,33 +77,24 @@ function TicketViewImpl({
             {/* Frosted at decode rather than by a BlurView. The artwork never
                 moves, so there is nothing for a live backdrop blur to track —
                 and the pager mounts every ticket in the group at once, which is
-                exactly where real blur views start costing frames. Lighter than
-                before: the point of `glass` is that the artwork still reads
-                through it, and a heavier blur just flattened it to mush. */}
+                exactly where real blur views start costing frames. Heavier
+                than before: the venue/date/price text has to read over this
+                whatever the photo, not just the specific ones this got tuned
+                against. */}
             <Image
               source={{ uri: cover }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={8}
+              blurRadius={22}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={ticket._id}
             />
-            {/* Darkest under the text column and clearing toward the right, so
-                the artwork stays legible as artwork where nothing is read over it. */}
-            <LinearGradient
-              colors={[
-                'rgba(10,10,12,0.78)',
-                'rgba(10,10,12,0.55)',
-                'rgba(10,10,12,0.3)',
-              ]}
-              locations={[0, 0.6, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* The specular lift that separates glass from a dark scrim. */}
-            <View style={styles.sheen} />
+            {/* Flat, not a lateral fade — the detail rows can run the full
+                width (a long venue name wraps), so anywhere the gradient used
+                to clear toward the right was exactly where text needed it
+                darkest. */}
+            <View style={styles.scrim} />
           </>
         ) : null
       }
@@ -208,13 +198,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
 
-  sheen: {
+  scrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
   details: {

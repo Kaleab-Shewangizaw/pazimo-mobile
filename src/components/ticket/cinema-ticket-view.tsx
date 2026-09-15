@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
@@ -76,23 +75,13 @@ function CinemaTicketViewImpl({
               source={{ uri: poster }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={8}
+              blurRadius={22}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={order.transactionId}
             />
-            <LinearGradient
-              colors={[
-                'rgba(10,10,12,0.78)',
-                'rgba(10,10,12,0.55)',
-                'rgba(10,10,12,0.3)',
-              ]}
-              locations={[0, 0.6, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.sheen} />
+            {/* Flat, not a lateral fade — see the same scrim in ticket-view.tsx. */}
+            <View style={styles.scrim} />
           </>
         ) : null
       }
@@ -234,13 +223,13 @@ const styles = StyleSheet.create({
   },
   qrCellImage: { width: GRID_QR_SIZE * 0.8, height: GRID_QR_SIZE * 0.8 },
 
-  sheen: {
+  scrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
   details: {

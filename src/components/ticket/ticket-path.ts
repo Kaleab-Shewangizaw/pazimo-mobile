@@ -186,12 +186,18 @@ export function insetGeometry(
 }
 
 /**
- * Lower ticket section.
+ * Lower ticket section — everything from the tear line down.
  *
- * This is used only for the artwork/background beneath the perforation.
+ * This is used for the artwork/background beneath the perforation, which is
+ * meant to run flush to the dashed line with no gap, so the split has to land
+ * exactly on it rather than below the notch like the outer silhouette's own
+ * bite does.
  *
- * It intentionally follows the same bottom corners and right/left
- * boundaries as ticketPath().
+ * Each notch is a true semicircle (its chord is exactly its diameter), so
+ * splitting it at the tear line splits it exactly in half: the two "deepest
+ * bite" points, `n` in from each edge at `y`, are precisely `n` away from
+ * both notch ends, which is what makes each half its own valid arc of the
+ * same radius rather than a lopsided one.
  */
 export function ticketFootPath(input: TicketGeometry): string {
   const g = normalizeGeometry(input);
@@ -203,8 +209,15 @@ export function ticketFootPath(input: TicketGeometry): string {
   }
 
   return [
-    // Start at the lower end of the left notch.
-    `M 0 ${y + n}`,
+    // Start at the deepest point of the left notch's bite, on the tear line.
+    `M ${n} ${y}`,
+
+    // Out to the edge at the notch's lower end. Sweep is 1, not 0, here and
+    // on the matching right-side arc below: this traces the second half of
+    // ticketPath()'s own notch arc, but starting from its *middle* instead
+    // of its end — reversing which end is which flips the sweep flag needed
+    // to keep tracing the same physical curve.
+    `A ${n} ${n} 0 0 1 0 ${y + n}`,
 
     // Left edge down.
     `V ${h - r}`,
@@ -218,11 +231,14 @@ export function ticketFootPath(input: TicketGeometry): string {
     // Bottom-right corner.
     `A ${r} ${r} 0 0 0 ${w} ${h - r}`,
 
-    // Right edge back to notch.
+    // Right edge back to the notch's lower end.
     `V ${y + n}`,
 
-    // Close across the lower notch boundary.
-    `A ${n} ${n} 0 0 0 ${w} ${y + n}`,
+    // In from the edge to the right notch's deepest point, on the tear line.
+    `A ${n} ${n} 0 0 1 ${w - n} ${y}`,
+
+    // Straight back across the tear line to close.
+    `H ${n}`,
 
     'Z',
   ].join(' ');
@@ -230,10 +246,10 @@ export function ticketFootPath(input: TicketGeometry): string {
 
 /**
  * Upper ticket section — the exact complement of `ticketFootPath`, split at
- * the same seam (the notches' lower bound, where both sides are already back
- * to full width). Used to keep the glass material off the artwork half: that
- * half draws its own photo and scrim, and a second frosted layer on top of it
- * only re-blurs the photo and re-darkens the text sitting over it.
+ * the tear line rather than below it. Used to keep the glass material off the
+ * artwork half: that half draws its own photo and scrim, and a second
+ * frosted layer on top of it only re-blurs the photo and re-darkens the text
+ * sitting over it.
  */
 export function ticketHeadPath(input: TicketGeometry): string {
   const g = normalizeGeometry(input);
@@ -251,14 +267,17 @@ export function ticketHeadPath(input: TicketGeometry): string {
     // Top-right corner.
     `A ${r} ${r} 0 0 1 ${w} ${r}`,
 
-    // Right edge down to the notch, then its bite — matches ticketPath().
+    // Right edge down to the notch's upper end.
     `V ${y - n}`,
-    `A ${n} ${n} 0 0 0 ${w} ${y + n}`,
 
-    // Close across the seam ticketFootPath() starts from.
-    `H 0`,
+    // In from the edge to the notch's deepest point, on the tear line —
+    // the other half of the same bite ticketFootPath() takes below it.
+    `A ${n} ${n} 0 0 0 ${w - n} ${y}`,
 
-    // Back up through the left notch's bite, same arc ticketPath() draws.
+    // Straight across the tear line to the left notch's deepest point.
+    `H ${n}`,
+
+    // Out to the edge at the left notch's upper end.
     `A ${n} ${n} 0 0 0 0 ${y - n}`,
 
     // Left edge up to the top-left corner.
