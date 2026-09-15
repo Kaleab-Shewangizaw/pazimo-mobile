@@ -1,16 +1,15 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SignInSheet } from '@/components/account/sign-in-sheet';
+import { AddEmailSheet } from '@/components/account/add-email-sheet';
+import { AuthSheet } from '@/components/account/auth-sheet';
 import { UsernameSheet } from '@/components/account/username-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
-import { Button } from '@/components/ui/button';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
-import { Touchable } from '@/components/ui/pressable';
+import { GlassIconButton } from '@/components/ui/glass-button';
+import { ListCard, ListRow } from '@/components/ui/list-row';
 import { EmptyState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
@@ -18,6 +17,12 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useMyTickets } from '@/queries/tickets';
 import { displayName, useAuthStore } from '@/stores/use-auth-store';
+import type { User } from '@/types/api';
+
+/** A no-email account either skipped it at signup or still has the backend's placeholder. */
+function needsEmail(user: User): boolean {
+  return !user.email || user.email.includes('customerpazimo');
+}
 
 /**
  * The account, such as it is.
@@ -32,35 +37,51 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   const user = useAuthStore((s) => s.user);
-  const signOut = useAuthStore((s) => s.signOut);
   const { tickets } = useMyTickets();
 
-  const [signInVisible, setSignInVisible] = useState(false);
+  const [authVisible, setAuthVisible] = useState(false);
+  const [addEmailVisible, setAddEmailVisible] = useState(false);
   const [usernameVisible, setUsernameVisible] = useState(false);
 
-  const confirmSignOut = useCallback(() => {
-    Alert.alert('Sign out?', 'Your tickets stay on your account and come back when you sign in.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => {
-          signOut().then(() => {
-            // The cached list belongs to the account that just left.
-            queryClient.clear();
-          });
-        },
-      },
-    ]);
-  }, [queryClient, signOut]);
+  // After a fresh sign-up/login, nudge toward the two things guest-created
+  // accounts are most likely to be missing — an email, then a username —
+  // one sheet at a time rather than dumping both on screen at once. Each
+  // next sheet waits for the previous one to actually finish closing (260ms,
+  // matching BottomSheet's own close animation) — opening one in the same
+  // tick the last one starts closing means two full-screen sheets are
+  // mounted at once, which visibly corrupts layout while they overlap.
+  const onAuthenticated = useCallback((authedUser: User) => {
+    if (needsEmail(authedUser)) {
+      setTimeout(() => setAddEmailVisible(true), 260);
+    } else if (!authedUser.username) {
+      setTimeout(() => setUsernameVisible(true), 260);
+    }
+  }, []);
+
+  const onAddEmailClose = useCallback(() => {
+    setAddEmailVisible(false);
+    if (user && !user.username) {
+      setTimeout(() => setUsernameVisible(true), 260);
+    }
+  }, [user]);
 
   return (
     <View style={styles.screen}>
       <AmbientBackground />
-      <GlassHeader title="Profile" />
+      <GlassHeader
+        title="Profile"
+        right={
+          user ? (
+            <GlassIconButton
+              icon="menu-outline"
+              accessibilityLabel="Account menu"
+              onPress={() => router.push('/account/menu')}
+            />
+          ) : undefined
+        }
+      />
 
       <ScrollView
         contentContainerStyle={[
@@ -89,40 +110,37 @@ export default function ProfileScreen() {
               ) : null}
             </View>
 
-            <View style={[styles.card, { borderColor: theme.glassBorder }]}>
-              <Row
+            <ListCard>
+              <ListRow
                 icon="ticket-outline"
                 label="My tickets"
                 value={String(tickets.length)}
                 onPress={() => router.push('/(tabs)/tickets')}
               />
-              <View style={[styles.divider, { backgroundColor: theme.hairline }]} />
-              <Row
+              <ListRow
                 icon="mail-outline"
                 label="Email"
-                // Checkout mints a placeholder address when the buyer skips the
-                // field; showing it would read as a mistake we made.
-                value={user.email?.includes('customerpazimo') ? 'Not set' : (user.email ?? '—')}
+                // The backend mints a placeholder address when the buyer skips
+                // the field; showing it would read as a mistake we made.
+                value={needsEmail(user) ? 'Not set' : (user.email ?? '—')}
+                onPress={() => setAddEmailVisible(true)}
               />
-              <View style={[styles.divider, { backgroundColor: theme.hairline }]} />
-              <Row
+              <ListRow
                 icon="at-outline"
                 label="Username"
                 value={user.username ? `@${user.username}` : 'Set up'}
                 onPress={() => setUsernameVisible(true)}
               />
-            </View>
-
-            <Button label="Sign out" variant="secondary" onPress={confirmSignOut} />
+            </ListCard>
           </>
         ) : (
           <>
             <EmptyState
               icon="person-circle-outline"
               title="You're browsing as a guest"
-              message="Sign in with the phone number you buy tickets with, and every ticket you've bought lands here."
-              actionLabel="Sign in"
-              onAction={() => setSignInVisible(true)}
+              message="Create an account (or log in) and every ticket you buy lands here."
+              actionLabel="Sign up or log in"
+              onAction={() => setAuthVisible(true)}
             />
             {tickets.length ? (
               <Text variant="small" color="textMuted" style={styles.note}>
@@ -135,43 +153,14 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      <SignInSheet visible={signInVisible} onClose={() => setSignInVisible(false)} />
+      <AuthSheet
+        visible={authVisible}
+        onClose={() => setAuthVisible(false)}
+        onAuthenticated={onAuthenticated}
+      />
+      <AddEmailSheet visible={addEmailVisible} onClose={onAddEmailClose} />
       <UsernameSheet visible={usernameVisible} onClose={() => setUsernameVisible(false)} />
     </View>
-  );
-}
-
-function Row({
-  icon,
-  label,
-  value,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  onPress?: () => void;
-}) {
-  const theme = useTheme();
-
-  const content = (
-    <View style={styles.row}>
-      <Ionicons name={icon} size={19} color={theme.textSecondary} />
-      <Text variant="body" style={styles.rowLabel}>
-        {label}
-      </Text>
-      <Text variant="body" color="textSecondary" numberOfLines={1} style={styles.rowValue}>
-        {value}
-      </Text>
-      {onPress ? <Ionicons name="chevron-forward" size={16} color={theme.textMuted} /> : null}
-    </View>
-  );
-
-  if (!onPress) return content;
-  return (
-    <Touchable accessibilityRole="button" onPress={onPress} pressedScale={0.99}>
-      {content}
-    </Touchable>
   );
 }
 
@@ -191,17 +180,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   initial: { color: '#FFFFFF' },
-
-  card: {
-    borderRadius: Radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: Spacing.lg,
-  },
-  divider: { height: StyleSheet.hairlineWidth },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.lg },
-  rowLabel: { flex: 1 },
-  rowValue: { maxWidth: '52%', textAlign: 'right' },
 
   note: { textAlign: 'center' },
 });

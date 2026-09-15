@@ -4,7 +4,7 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { GlassChip, GlassIconButton } from '@/components/ui/glass-button';
@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
 import { formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
+import { useSetWishlist, useWishlist } from '@/queries/events';
 import type { Currency, PazimoEvent } from '@/types/api';
 
 /**
@@ -51,9 +52,9 @@ export type EventCardProps = {
 function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardProps) {
   const theme = useTheme();
   const router = useRouter();
-  // UI-only for now — there is no favorites endpoint yet, so this does not
-  // survive leaving the screen (same caveat as the detail page's heart).
-  const [saved, setSaved] = useState(false);
+  const { events: wishlist } = useWishlist();
+  const { set: setWishlisted } = useSetWishlist();
+  const saved = wishlist.some((wishlisted) => wishlisted._id === event._id);
 
   const cover = eventCoverUrl(event.coverImages);
   const soldOut = isSoldOut(event);
@@ -99,7 +100,7 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
           color={saved ? '#E11D48' : '#FFFFFF'}
           size={36}
           haptic
-          onPress={() => setSaved((value) => !value)}
+          onPress={() => setWishlisted(event._id, !saved)}
         />
       </View>
 
