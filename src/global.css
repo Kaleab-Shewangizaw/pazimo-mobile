@@ -11,3 +11,12 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+/* The message composer's growing textarea scrolls internally once it hits
+   its line cap — this keeps that scrollable without a visible scrollbar. */
+#composer-textarea {
+  scrollbar-width: none;
+}
+#composer-textarea::-webkit-scrollbar {
+  display: none;
+}

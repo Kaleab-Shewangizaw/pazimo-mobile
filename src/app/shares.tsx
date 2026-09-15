@@ -1,46 +1,102 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SignInSheet } from '@/components/account/sign-in-sheet';
+import { AuthSheet } from '@/components/account/auth-sheet';
 import { ConversationRow } from '@/components/shares/conversation-row';
+import { NewChatFab } from '@/components/shares/new-chat-fab';
 import { NewChatSheet } from '@/components/shares/new-chat-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { GlassIconButton } from '@/components/ui/glass-button';
+import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { tabBarClearance } from '@/constants/layout';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useRefresh } from '@/hooks/use-refresh';
+import { useTheme } from '@/hooks/use-theme';
 import type { ShareConversation } from '@/lib/conversations';
-import { useShareConversations } from '@/queries/ticket-shares';
+import { pendingIncomingCounterpartyIds } from '@/lib/conversations';
+import { beverageShareToViewModel, cinemaShareToViewModel, ticketShareToViewModel } from '@/lib/share-item-view-model';
+import { useBeverageShares } from '@/queries/beverage-shares';
+import { useCinemaShares } from '@/queries/cinema-shares';
+import { useConversationsList } from '@/queries/messages';
+import { useTicketShares } from '@/queries/ticket-shares';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { ShareUser } from '@/types/api';
 
 /**
- * One row per person, not per ticket share — every share (sent or received,
- * any status) with the same counterparty collapses into one conversation,
- * newest activity first. See `lib/conversations.ts` for the grouping itself;
- * this screen just lists what it derives and opens `/conversation/[userId]`.
+ * One row per person — backend-driven now (`GET /conversations`), not
+ * derived by grouping flat share records client-side. Item-transfer
+ * pending-incoming dots are the one thing the `Conversation` model doesn't
+ * track itself, so those still come from the three share hooks, reduced to
+ * just a set of counterparty ids.
  */
 export default function SharesScreen() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const router = useRouter();
+  const goBack = useGoBack();
   const user = useAuthStore((s) => s.user);
+  const myId = user?._id;
 
   const [signInVisible, setSignInVisible] = useState(false);
   const [newChatVisible, setNewChatVisible] = useState(false);
 
-  const { conversations, isLoading, isError, error, refetch } = useShareConversations();
-  const { refreshing, onRefresh } = useRefresh(refetch);
+  const { conversations, isLoading, isError, error, refetch } = useConversationsList();
+  const { shares: ticketShares, refetch: refetchTickets } = useTicketShares({});
+  const { shares: beverageShares, refetch: refetchBeverages } = useBeverageShares({});
+  const { shares: cinemaShares, refetch: refetchCinema } = useCinemaShares({});
+
+  const pendingIncoming = useMemo(() => {
+    const items = [
+      ...ticketShares.map(ticketShareToViewModel),
+      ...beverageShares.map(beverageShareToViewModel),
+      ...cinemaShares.map(cinemaShareToViewModel),
+    ];
+    return pendingIncomingCounterpartyIds(items, myId);
+  }, [ticketShares, beverageShares, cinemaShares, myId]);
+
+  const rows: ShareConversation[] = useMemo(
+    () =>
+      conversations.map((conversation) => ({
+        counterpartyId: conversation.counterparty._id,
+        counterparty: conversation.counterparty,
+        shares: [],
+        lastActivityAt: conversation.lastMessageAt,
+        preview: {
+          text: conversation.lastMessagePreview ?? '',
+          sentByMe: conversation.lastMessageSenderId === myId,
+        },
+        hasPendingIncoming: pendingIncoming.has(conversation.counterparty._id),
+      })),
+    [conversations, pendingIncoming, myId],
+  );
+
+  const refetchAll = useCallback(
+    () => Promise.all([refetch(), refetchTickets(), refetchBeverages(), refetchCinema()]),
+    [refetch, refetchTickets, refetchBeverages, refetchCinema],
+  );
+  const { refreshing, onRefresh } = useRefresh(refetchAll);
 
   const openConversation = useCallback(
     (conversation: ShareConversation) => {
+      // Passed as a fast-path fallback only — the thread screen's own
+      // `useConversationsList()` is the authoritative source once it loads,
+      // this just avoids a flash of "Pazimo user" before that resolves.
+      const { counterparty } = conversation;
       router.push({
         pathname: '/conversation/[userId]',
-        params: { userId: conversation.counterpartyId },
+        params: {
+          userId: conversation.counterpartyId,
+          firstName: counterparty.firstName,
+          lastName: counterparty.lastName ?? '',
+          username: counterparty.username ?? '',
+        },
       });
     },
     [router],
@@ -75,11 +131,21 @@ export default function SharesScreen() {
       <AmbientBackground />
       <GlassHeader
         title="Chats"
+        left={
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={goBack}
+            pressedScale={0.9}
+            style={[styles.backButton, { backgroundColor: theme.surfaceMuted }]}>
+            <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+          </Touchable>
+        }
         right={
           user ? (
             <GlassIconButton
               icon="search"
-              accessibilityLabel="New chat"
+              accessibilityLabel="Search by username or phone number"
               size={34}
               onPress={() => setNewChatVisible(true)}
             />
@@ -91,8 +157,8 @@ export default function SharesScreen() {
         <View style={[styles.centered, { paddingTop: topPadding }]}>
           <EmptyState
             icon="paper-plane-outline"
-            title="Sign in to share tickets"
-            message="Sign in to send a ticket to a friend and see what's been shared with you."
+            title="Sign in to chat"
+            message="Sign in to message friends and send tickets, drinks, and more."
             actionLabel="Sign in"
             onAction={() => setSignInVisible(true)}
           />
@@ -103,7 +169,7 @@ export default function SharesScreen() {
         </View>
       ) : (
         <FlatList
-          data={conversations}
+          data={rows}
           keyExtractor={(conversation) => conversation.counterpartyId}
           renderItem={renderItem}
           contentContainerStyle={[
@@ -125,7 +191,7 @@ export default function SharesScreen() {
               <EmptyState
                 icon="paper-plane-outline"
                 title="No chats yet"
-                message="Search for someone or open a ticket with more than one admission to send one to a friend."
+                message="Search for someone or start a new chat to message a friend."
                 actionLabel="Find someone"
                 onAction={() => setNewChatVisible(true)}
               />
@@ -134,12 +200,14 @@ export default function SharesScreen() {
         />
       )}
 
+      {user ? <NewChatFab onPress={() => setNewChatVisible(true)} /> : null}
+
       <NewChatSheet
         visible={newChatVisible}
         onClose={() => setNewChatVisible(false)}
         onSelect={openNewChat}
       />
-      <SignInSheet visible={signInVisible} onClose={() => setSignInVisible(false)} />
+      <AuthSheet visible={signInVisible} onClose={() => setSignInVisible(false)} />
     </View>
   );
 }
@@ -148,4 +216,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { gap: Spacing.xs },
+  backButton: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

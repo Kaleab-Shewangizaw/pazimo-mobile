@@ -1,7 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 
 import { Env } from '@/lib/env';
-import type { ShareStatus } from '@/types/api';
+import type { DeletedMessageAck, Message, ShareStatus } from '@/types/api';
 
 /**
  * One socket for the whole app, matching how `api/client.ts` keeps one axios
@@ -26,11 +26,22 @@ export type TicketReceivedEvent = {
   items?: unknown;
 };
 
-type TicketEvent =
+/** `beverage:*`/`cinema:*` carry the same shape as their ticket counterparts. */
+type ShareTransferEvent =
   | { type: 'ticket:transfer'; payload: TicketTransferEvent }
-  | { type: 'ticket:received'; payload: TicketReceivedEvent };
+  | { type: 'ticket:received'; payload: TicketReceivedEvent }
+  | { type: 'beverage:transfer'; payload: TicketTransferEvent }
+  | { type: 'beverage:received'; payload: TicketReceivedEvent }
+  | { type: 'cinema:transfer'; payload: TicketTransferEvent }
+  | { type: 'cinema:received'; payload: TicketReceivedEvent }
+  /** Pushed to the recipient's room the instant a message is sent — the exact same shape `POST /conversations/:id/messages` returns. */
+  | { type: 'message:new'; payload: Message }
+  /** Pushed to the counterparty's room on an edit — same `Message` shape. */
+  | { type: 'message:updated'; payload: Message }
+  /** Pushed to the counterparty's room on a delete — just the id; the message itself is gone, nothing else to send. */
+  | { type: 'message:deleted'; payload: DeletedMessageAck };
 
-type Listener = (event: TicketEvent) => void;
+type Listener = (event: ShareTransferEvent) => void;
 
 let socket: Socket | null = null;
 let currentToken: string | null = null;
@@ -66,6 +77,27 @@ function ensureSocket(): Socket {
   });
   socket.on('ticket:received', (payload: TicketReceivedEvent) => {
     listeners.forEach((listen) => listen({ type: 'ticket:received', payload }));
+  });
+  socket.on('beverage:transfer', (payload: TicketTransferEvent) => {
+    listeners.forEach((listen) => listen({ type: 'beverage:transfer', payload }));
+  });
+  socket.on('beverage:received', (payload: TicketReceivedEvent) => {
+    listeners.forEach((listen) => listen({ type: 'beverage:received', payload }));
+  });
+  socket.on('cinema:transfer', (payload: TicketTransferEvent) => {
+    listeners.forEach((listen) => listen({ type: 'cinema:transfer', payload }));
+  });
+  socket.on('cinema:received', (payload: TicketReceivedEvent) => {
+    listeners.forEach((listen) => listen({ type: 'cinema:received', payload }));
+  });
+  socket.on('message:new', (payload: Message) => {
+    listeners.forEach((listen) => listen({ type: 'message:new', payload }));
+  });
+  socket.on('message:updated', (payload: Message) => {
+    listeners.forEach((listen) => listen({ type: 'message:updated', payload }));
+  });
+  socket.on('message:deleted', (payload: DeletedMessageAck) => {
+    listeners.forEach((listen) => listen({ type: 'message:deleted', payload }));
   });
 
   return socket;

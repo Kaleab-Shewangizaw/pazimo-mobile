@@ -1,5 +1,5 @@
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { ApiError } from '@/api/client';
 import {
@@ -13,7 +13,6 @@ import {
   type ShareDirection,
   type ShareItemInput,
 } from '@/api/ticket-shares';
-import { groupSharesByCounterparty } from '@/lib/conversations';
 import { isResolvableIdentifier } from '@/lib/identifier';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -38,22 +37,6 @@ export function useTicketShares(
   });
 
   return { ...query, shares: query.data ?? [] };
-}
-
-/**
- * The full share history collapsed to one row per counterparty — what the
- * Chats list and a conversation screen both read from. A pure `useMemo` over
- * `useTicketShares`, so it re-derives (and re-sorts) automatically whenever
- * that list refetches — including the live refetch the socket bridge
- * triggers on `ticket:transfer`/`ticket:received`.
- */
-export function useShareConversations() {
-  const myId = useAuthStore((s) => s.user?._id);
-  const { shares, ...rest } = useTicketShares({});
-
-  const conversations = useMemo(() => groupSharesByCounterparty(shares, myId), [shares, myId]);
-
-  return { ...rest, conversations };
 }
 
 /** Recent people to share with — derived from history, no separate contacts list. */

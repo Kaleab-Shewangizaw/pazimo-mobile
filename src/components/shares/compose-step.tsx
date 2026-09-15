@@ -1,14 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { PickableItemRow } from '@/components/shares/pickable-item-row';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { Touchable } from '@/components/ui/pressable';
-import { Stepper } from '@/components/ui/stepper';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
 import { formatTicketDate } from '@/lib/date';
 import type { TransferableTicket } from '@/types/api';
 
@@ -92,72 +89,39 @@ function TicketRow({
   quantity: number;
   onChange: (quantity: number) => void;
 }) {
-  const theme = useTheme();
   const selected = quantity > 0;
   const singleAdmission = ticket.transferableCapacity <= 1;
   const full = quantity === ticket.transferableCapacity;
 
-  const toggle = () => onChange(selected ? 0 : 1);
-
   return (
-    <View style={[styles.ticketRow, { borderColor: selected ? theme.brand : theme.hairline }]}>
-      <Touchable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected }}
-        accessibilityLabel={ticket.ticketType}
-        onPress={toggle}
-        pressedScale={0.98}
-        style={styles.ticketMain}>
-        <Ionicons
-          name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-          size={20}
-          color={selected ? theme.brand : theme.textMuted}
-        />
-        <View style={styles.ticketText}>
-          <Text variant="body" numberOfLines={1}>
-            {ticket.eventName} · {ticket.ticketType}
-          </Text>
-          <Text variant="caption" color="textSecondary">
-            {formatTicketDate(ticket.eventDate)}
-            {ticket.transferableCapacity > 1
-              ? ` · ${ticket.transferableCapacity} admissions available`
-              : ''}
-          </Text>
-        </View>
-      </Touchable>
-
-      {selected && !singleAdmission ? (
-        <View style={styles.stepperRow}>
-          <Stepper
-            value={quantity}
-            min={1}
-            max={ticket.transferableCapacity}
-            onChange={onChange}
-            accessibilityLabel="admissions"
-          />
-          <Text variant="caption" color="textSecondary">
-            {full
-              ? "You'll no longer have this ticket."
-              : `You'll keep ${ticket.transferableCapacity - quantity}, send ${quantity}.`}
-          </Text>
-        </View>
-      ) : null}
-    </View>
+    <PickableItemRow
+      title={`${ticket.eventName} · ${ticket.ticketType}`}
+      subtitle={
+        formatTicketDate(ticket.eventDate) +
+        (ticket.transferableCapacity > 1 ? ` · ${ticket.transferableCapacity} admissions available` : '')
+      }
+      selected={selected}
+      onToggle={() => onChange(selected ? 0 : 1)}
+      stepper={
+        singleAdmission
+          ? undefined
+          : {
+              value: quantity,
+              min: 1,
+              max: ticket.transferableCapacity,
+              onChange,
+              hint: full
+                ? "You'll no longer have this ticket."
+                : `You'll keep ${ticket.transferableCapacity - quantity}, send ${quantity}.`,
+            }
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.lg },
   ticketList: { gap: Spacing.sm },
-  ticketRow: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  ticketMain: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  ticketText: { flex: 1, gap: 2 },
-  stepperRow: { gap: Spacing.xs, paddingLeft: 32 },
   spinner: { marginVertical: Spacing.lg },
   empty: { textAlign: 'center', paddingVertical: Spacing.lg },
 });
