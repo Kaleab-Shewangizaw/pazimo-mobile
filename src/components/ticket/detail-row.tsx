@@ -29,7 +29,7 @@ function DetailRowImpl({
       <View style={styles.rule} />
       <Ionicons name={icon} size={13} color="rgba(255,255,255,0.55)" style={styles.icon} />
       <View style={styles.text}>
-        <Text variant="caption" color="textMuted" style={styles.label} numberOfLines={1}>
+        <Text variant="caption" color="textSecondary" style={styles.label} numberOfLines={1}>
           {label}
         </Text>
         <Text variant="callout" style={styles.value} numberOfLines={3}>
