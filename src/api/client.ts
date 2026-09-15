@@ -175,6 +175,20 @@ export async function putData<T>(
   return res.data.data;
 }
 
+export async function deleteData<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const res = await api.delete<{ data: T }>(url, config);
+  return res.data.data;
+}
+
+export async function patchData<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  const res = await api.patch<{ data: T }>(url, body, config);
+  return res.data.data;
+}
+
 /** Endpoints that return the payload under a bespoke key, e.g. `{ tickets: [] }`. */
 export async function getKeyed<T>(
   url: string,
@@ -197,5 +211,19 @@ export async function postRaw<T>(
   config?: AxiosRequestConfig,
 ): Promise<T> {
   const res = await api.post<T>(url, body, config);
+  return res.data;
+}
+
+export async function putRaw<T>(
+  url: string,
+  body?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  const res = await api.put<T>(url, body, config);
+  return res.data;
+}
+
+export async function deleteRaw<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const res = await api.delete<T>(url, config);
   return res.data;
 }
