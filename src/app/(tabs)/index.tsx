@@ -24,9 +24,12 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { isSoldOut } from '@/lib/pricing';
+import { useBeverageShares } from '@/queries/beverage-shares';
 import { useCategories } from '@/queries/categories';
+import { useCinemaShares } from '@/queries/cinema-shares';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
+import { useConversationsList } from '@/queries/messages';
 import { useRsvpFeed } from '@/queries/rsvp';
 import { useTicketShares } from '@/queries/ticket-shares';
 
@@ -50,8 +53,22 @@ export default function HomeScreen() {
   const categories = useCategories();
   const feed = useEventFeed();
   const rsvp = useRsvpFeed();
-  // Query itself no-ops for a guest — no session, nothing to poll.
-  const { shares: incomingShares } = useTicketShares({ direction: 'received', status: 'pending' });
+  // Every reason the Chats button's badge should light up: something of
+  // theirs still needs my response (any of the three share kinds — this used
+  // to check tickets only, which is why the badge stayed dark for a pending
+  // drink/cinema share or an unread message), or a thread has messages I
+  // haven't opened yet. Queries themselves no-op for a guest — no session,
+  // nothing to poll.
+  const { shares: incomingTicketShares } = useTicketShares({ direction: 'received', status: 'pending' });
+  const { shares: incomingBeverageShares } = useBeverageShares({ direction: 'received', status: 'pending' });
+  const { shares: incomingCinemaShares } = useCinemaShares({ direction: 'received', status: 'pending' });
+  const { conversations } = useConversationsList();
+  const hasUnreadMessages = conversations.some((c) => c.unreadCount > 0);
+  const chatsNeedAttention =
+    incomingTicketShares.length > 0 ||
+    incomingBeverageShares.length > 0 ||
+    incomingCinemaShares.length > 0 ||
+    hasUnreadMessages;
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -146,13 +163,11 @@ export default function HomeScreen() {
             <View>
               <GlassIconButton
                 icon="chatbubble-outline"
-                accessibilityLabel={
-                  incomingShares.length ? 'Chats, new tickets waiting' : 'Chats'
-                }
+                accessibilityLabel={chatsNeedAttention ? 'Chats, new activity waiting' : 'Chats'}
                 blurTarget={backdropRef}
                 onPress={() => router.push('/shares')}
               />
-              {incomingShares.length ? (
+              {chatsNeedAttention ? (
                 <View
                   style={[
                     styles.badge,
