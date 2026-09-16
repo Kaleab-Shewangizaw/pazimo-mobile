@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,6 +29,7 @@ import {
   useConversationsList,
   useDeleteMessage,
   useEditMessage,
+  useMarkConversationRead,
   useSetBlocked,
 } from '@/queries/messages';
 import { useAllShareConversations } from '@/queries/share-conversations';
@@ -59,6 +60,15 @@ export default function ConversationScreen() {
   const { conversations, isLoading: sharesLoading } = useAllShareConversations();
   const existing = conversations.find((c) => c.counterpartyId === userId);
   const { messages, isLoading: messagesLoading } = useConversationMessages(userId);
+  const { submit: markRead } = useMarkConversationRead();
+
+  // Clears this thread's Chats-list badge the moment it's opened, and again
+  // whenever more of it loads (new messages arriving live, or paging into
+  // older unread history) — the same "read on view" the badge count assumes.
+  useEffect(() => {
+    if (!userId) return;
+    markRead(userId);
+  }, [userId, messages.length, markRead]);
 
   // The message-inclusive list is the authoritative source for who this
   // person is — `useAllShareConversations` only knows about ticket/drink/

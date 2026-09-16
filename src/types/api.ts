@@ -243,6 +243,8 @@ export type ConversationSummary = {
   lastMessagePreview?: string;
   lastMessageSenderId: string;
   lastMessageKind: ConversationActivityKind;
+  /** Messages sent TO me in this thread that I haven't opened yet — the Chats list's unread badge. */
+  unreadCount: number;
 };
 
 /**

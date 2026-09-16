@@ -13,6 +13,7 @@ import {
   fetchContacts,
   fetchConversations,
   fetchMessages,
+  markConversationRead,
   removeContact,
   sendMessage,
   unblockUser,
@@ -55,6 +56,31 @@ export function useConversationMessages(counterpartyId: string | undefined) {
   });
 
   return { ...query, messages: query.data ?? [] };
+}
+
+/**
+ * Marks this thread's unread messages as read — call on opening a
+ * conversation, and again as more of it loads. Fire-and-forget from the
+ * caller's point of view (no loading/error state exposed): a missed read
+ * receipt on a flaky connection isn't worth surfacing, and the badge just
+ * catches up next time `useConversationsList` refetches.
+ */
+export function useMarkConversationRead() {
+  const queryClient = useQueryClient();
+
+  const submit = useCallback(
+    async (counterpartyId: string) => {
+      try {
+        await markConversationRead(counterpartyId);
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
+      } catch {
+        // Best-effort — see the function comment above.
+      }
+    },
+    [queryClient],
+  );
+
+  return { submit };
 }
 
 /** Manual mutation shape — matches `useCreateShare`'s, this codebase has no `useMutation` anywhere. */

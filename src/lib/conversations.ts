@@ -21,6 +21,8 @@ export type ShareConversation = {
   preview: { text: string; sentByMe: boolean };
   /** Something of theirs is still waiting on my response. */
   hasPendingIncoming: boolean;
+  /** Unread text messages from them — always 0 here, since this is the share-only grouping; the Chats list fills in the real count from `ConversationSummary` instead. */
+  unreadCount: number;
 };
 
 function activityTime(share: ShareItemViewModel): number {
@@ -111,6 +113,7 @@ export function groupSharesByCounterparty(
         sentByMe: group.previewSentByMe,
       },
       hasPendingIncoming: group.hasPendingIncoming,
+      unreadCount: 0,
     }))
     .sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime());
 }

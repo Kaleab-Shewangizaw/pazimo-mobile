@@ -45,6 +45,11 @@ export function deleteMessage(counterpartyId: string, messageId: string): Promis
   return deleteData<DeletedMessageAck>(`/conversations/${counterpartyId}/messages/${messageId}`);
 }
 
+/** Marks every unread message from `counterpartyId` as read, clearing this thread's Chats-list badge. */
+export function markConversationRead(counterpartyId: string): Promise<void> {
+  return postRaw<{ success: boolean }>(`/conversations/${counterpartyId}/read`).then(() => undefined);
+}
+
 /**
  * "Delete chat" — clears this account's own view of the whole thread with
  * `counterpartyId`. The other person's copy is untouched, and it isn't

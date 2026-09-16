@@ -73,6 +73,7 @@ export default function SharesScreen() {
           sentByMe: conversation.lastMessageSenderId === myId,
         },
         hasPendingIncoming: pendingIncoming.has(conversation.counterparty._id),
+        unreadCount: conversation.unreadCount,
       })),
     [conversations, pendingIncoming, myId],
   );
