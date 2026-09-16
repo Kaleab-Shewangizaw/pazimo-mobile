@@ -36,7 +36,10 @@ function SharedItemsSheetImpl({ visible, onClose, items, name, onSelectItem }: S
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}>
           {items.map((item) => (
             <ShareRow key={`${item.kind}-${item.id}`} share={item} onPress={select} />
           ))}
@@ -49,6 +52,7 @@ function SharedItemsSheetImpl({ visible, onClose, items, name, onSelectItem }: S
 const styles = StyleSheet.create({
   header: { paddingBottom: Spacing.md },
   list: { maxHeight: 420 },
+  listContent: { gap: Spacing.sm },
   empty: { paddingVertical: Spacing.xl, alignItems: 'center' },
   emptyText: { textAlign: 'center' },
 });
