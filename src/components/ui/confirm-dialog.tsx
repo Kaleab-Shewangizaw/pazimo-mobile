@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
-import { Glass } from '@/components/ui/glass';
+import { Surface } from '@/components/ui/glass';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -79,7 +79,7 @@ export function ConfirmDialog({
 
       <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="box-none">
         <Animated.View style={{ transform: [{ scale }], opacity: backdrop, width: '100%' }}>
-          <Glass variant="regular" intensity={80} radius={Radius.xl} style={styles.card}>
+          <Surface radius={Radius.xl} style={styles.card}>
             <View style={styles.content}>
               <Text variant="title" style={styles.centered}>
                 {title}
@@ -106,7 +106,7 @@ export function ConfirmDialog({
                 />
               </View>
             </View>
-          </Glass>
+          </Surface>
         </Animated.View>
       </View>
     </Modal>
