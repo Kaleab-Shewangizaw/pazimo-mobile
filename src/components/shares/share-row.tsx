@@ -7,7 +7,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTimeLabel } from '@/lib/date';
-import type { ShareItemViewModel } from '@/lib/share-item-view-model';
+import type { ShareItemViewModel, ShareKind } from '@/lib/share-item-view-model';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { ShareStatus } from '@/types/api';
 
@@ -17,6 +17,24 @@ const STATUS_LABEL: Record<ShareStatus, string> = {
   declined: 'Declined',
   cancelled: 'Cancelled',
   expired: 'Expired',
+};
+
+/** Same wording as the compose sheet's kind picker (`kind-picker-step.tsx`) — this is the eyebrow over the item's own name, not a fresh vocabulary for it. */
+const KIND_LABEL: Record<ShareKind, string> = {
+  TICKET: 'Event ticket',
+  BEVERAGE: 'Drink',
+  CINEMA_TICKET: 'Cinema ticket',
+  CINEMA_CONCESSION: 'Cinema snack',
+  MESSAGE: 'Message',
+};
+
+/** Translucent wash of each status color, same 12%-alpha convention as the danger icon fills in `chat-menu-sheet.tsx`. */
+const STATUS_TINT: Record<ShareStatus, string> = {
+  pending: 'rgba(255, 255, 255, 0.12)',
+  accepted: 'rgba(52, 211, 153, 0.12)',
+  declined: 'rgba(251, 113, 133, 0.12)',
+  cancelled: 'rgba(251, 113, 133, 0.12)',
+  expired: 'rgba(107, 107, 118, 0.12)',
 };
 
 export type ShareRowProps = {
@@ -40,10 +58,14 @@ function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
   // Computed unconditionally (before the MESSAGE early return below) so
   // every hook in this component runs on every render regardless of kind —
   // harmless for MESSAGE, whose `lines` is always empty.
-  const summary = useMemo(() => {
+  const { title, detail } = useMemo(() => {
     const lead = share.lines[0];
-    if (!lead) return '';
-    return share.lines.length > 1 ? `${lead.title} · ${share.lines.length} items` : lead.title;
+    if (!lead) return { title: '', detail: '' };
+    const multiple = share.lines.length > 1;
+    return {
+      title: multiple ? `${lead.title} · ${share.lines.length} items` : lead.title,
+      detail: lead.subtitle,
+    };
   }, [share.lines]);
 
   // A plain message has nothing to accept/decline/cancel and nothing but its
@@ -75,7 +97,7 @@ function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
   return (
     <Touchable
       accessibilityRole="button"
-      accessibilityLabel={`${sent ? 'Sent to' : 'Received from'} ${otherName}. ${summary}. ${STATUS_LABEL[share.status]}`}
+      accessibilityLabel={`${sent ? 'Sent to' : 'Received from'} ${otherName}. ${title}. ${detail}. ${STATUS_LABEL[share.status]}`}
       onPress={() => onPress(share)}
       pressedScale={0.98}
       style={[styles.row, sent ? styles.rowSent : styles.rowReceived]}>
@@ -86,22 +108,28 @@ function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
           { backgroundColor: sent ? 'rgba(255,255,255,0.08)' : theme.surfaceMuted, borderColor: theme.hairline },
         ]}>
         <View style={styles.bubbleHeader}>
-          <Text variant="callout" numberOfLines={1} style={styles.name}>
-            {otherName}
+          <Text variant="label" color="textSecondary" style={styles.eyebrow}>
+            {KIND_LABEL[share.kind]}
           </Text>
           <Text variant="caption" color="textMuted">
             {relativeTimeLabel(share.createdAt)}
           </Text>
         </View>
-        <Text variant="small" color="textSecondary" numberOfLines={1}>
-          {summary}
+        <Text variant="callout" numberOfLines={1} style={styles.itemTitle}>
+          {title}
         </Text>
+        {detail ? (
+          <Text variant="small" color="textSecondary" numberOfLines={1}>
+            {detail}
+          </Text>
+        ) : null}
         {share.message ? (
-          <Text variant="body" numberOfLines={2} style={styles.message}>
+          <Text variant="body" numberOfLines={2} style={[styles.message, { borderTopColor: theme.hairline }]}>
             {share.message}
           </Text>
         ) : null}
-        <View style={[styles.statusChip, { borderColor: statusColor }]}>
+        <View style={[styles.statusChip, { backgroundColor: STATUS_TINT[share.status] }]}>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
           <Text variant="caption" style={{ color: statusColor }}>
             {STATUS_LABEL[share.status]}
           </Text>
@@ -178,9 +206,9 @@ const styles = StyleSheet.create({
   rowSent: { flexDirection: 'row-reverse' },
   bubble: {
     flex: 1,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     gap: 4,
   },
   bubbleHeader: {
@@ -189,16 +217,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  name: { flexShrink: 1 },
-  message: { marginTop: 2 },
-  statusChip: {
-    alignSelf: 'flex-start',
+  eyebrow: { flexShrink: 1 },
+  itemTitle: { marginTop: 2 },
+  message: {
     marginTop: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
   // A percentage `maxWidth` needs a determinate-width parent to resolve
   // against — `row` qualifies, but the sent path's `Touchable` (an otherwise
   // unstyled wrapper) doesn't, so the constraint has to live here, on
