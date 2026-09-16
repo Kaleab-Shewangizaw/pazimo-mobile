@@ -14,6 +14,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
+import { PushNotificationsBridge } from '@/hooks/use-push-notifications';
 import { ShareTransferSocketBridge } from '@/hooks/use-share-transfer-socket';
 import { queryClient } from '@/lib/query-client';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -75,6 +76,7 @@ export default function RootLayout() {
         <ThemeProvider value={navigationTheme}>
           <StatusBar style="light" />
           <ShareTransferSocketBridge />
+          <PushNotificationsBridge />
           <Stack
             screenOptions={{
               headerShown: false,

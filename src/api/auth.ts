@@ -138,3 +138,13 @@ export function updateNotificationPreferences(
 ): Promise<NotificationPreferences> {
   return putData<NotificationPreferences>('/auth/notification-preferences', partial);
 }
+
+/** Registers this device's Expo push token — idempotent, safe to call on every launch. */
+export function registerPushToken(token: string): Promise<void> {
+  return postRaw<{ status: string }>('/auth/push-token', { token }).then(() => undefined);
+}
+
+/** Best-effort on sign-out — this device shouldn't keep getting this account's pushes once signed out. */
+export function unregisterPushToken(token: string): Promise<void> {
+  return deleteRaw<{ status: string }>('/auth/push-token', { data: { token } }).then(() => undefined);
+}
