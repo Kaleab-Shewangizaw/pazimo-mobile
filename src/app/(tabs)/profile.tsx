@@ -16,13 +16,8 @@ import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useMyTickets } from '@/queries/tickets';
-import { displayName, useAuthStore } from '@/stores/use-auth-store';
+import { displayName, needsEmail, useAuthStore } from '@/stores/use-auth-store';
 import type { User } from '@/types/api';
-
-/** A no-email account either skipped it at signup or still has the backend's placeholder. */
-function needsEmail(user: User): boolean {
-  return !user.email || user.email.includes('customerpazimo');
-}
 
 /**
  * The account, such as it is.

@@ -14,21 +14,42 @@ import type {
  * optional: the backend mints a placeholder address when it's left out, the
  * same way guest checkout used to, so the account is still fully reachable
  * by phone-number login.
+ *
+ * The account exists as soon as this resolves, but it has no token yet — the
+ * backend sends a code to the phone number instead, and the caller must
+ * complete sign-up with `verifyRegisterOtp` before it can sign in. Same
+ * `requiresOtp`-shaped body as `login`, hence the shared `postRaw` handling.
  */
 export function register(input: {
   fullName: string;
   phoneNumber: string;
   email?: string;
   password: string;
-}): Promise<AuthPayload> {
+}): Promise<LoginResult> {
   const parts = input.fullName.trim().split(/\s+/).filter(Boolean);
-  return postData<AuthPayload>('/auth/register', {
+  return postRaw<{
+    requiresOtp?: boolean;
+    data: Partial<AuthPayload> & {
+      email?: string;
+      channel?: PasswordResetChannel;
+      maskedDestination?: string;
+    };
+  }>('/auth/register', {
     firstName: parts[0] ?? '',
     lastName: parts.slice(1).join(' ') || undefined,
     phoneNumber: input.phoneNumber,
     email: input.email,
     password: input.password,
-  });
+  }).then(({ requiresOtp, data }) =>
+    requiresOtp
+      ? {
+          requiresOtp: true,
+          email: data.email!,
+          channel: data.channel ?? 'sms',
+          maskedDestination: data.maskedDestination!,
+        }
+      : { requiresOtp: false, user: data.user!, token: data.token! },
+  );
 }
 
 /**
@@ -61,6 +82,35 @@ export function login(identifier: string, password: string): Promise<LoginResult
 /** Completes the second-factor step `login` started. */
 export function verifyLoginOtp(email: string, code: string): Promise<AuthPayload> {
   return postData<AuthPayload>('/auth/organizer/verify-otp', { email, code });
+}
+
+/** Completes the phone-verification step `register` started, issuing the account's first token. */
+export function verifyRegisterOtp(email: string, code: string): Promise<AuthPayload> {
+  return postData<AuthPayload>('/auth/verify-register-otp', { email, code });
+}
+
+/** Re-sends the registration code — the "Resend code" link on the post-signup verify step. */
+export function resendRegisterOtp(email: string): Promise<PasswordResetRequestResult> {
+  return postRaw<PasswordResetRequestResult>('/auth/resend-register-otp', { email });
+}
+
+/**
+ * Sends a phone-verification code to the signed-in account's own number —
+ * for pre-existing accounts (created before phone verification shipped)
+ * that want to turn on login codes but have never verified.
+ */
+export function sendPhoneVerifyOtp(): Promise<PasswordResetRequestResult> {
+  return postRaw<PasswordResetRequestResult>('/auth/send-phone-verify-otp');
+}
+
+/** Completes `sendPhoneVerifyOtp`, marking the account's phone verified. */
+export function verifyPhoneOtp(code: string): Promise<User> {
+  return postData<User>('/auth/verify-phone-otp', { code });
+}
+
+/** Turns login codes on or off. The backend rejects `enabled: true` unless the phone is already verified. */
+export function updateOtpPreference(enabled: boolean): Promise<{ otpEnabled: boolean }> {
+  return putData<{ otpEnabled: boolean }>('/auth/otp-preference', { enabled });
 }
 
 /** Sends a 6-digit reset code to the email or phone on file. */

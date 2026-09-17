@@ -43,7 +43,8 @@ export type EventOrganizer = {
   firstName?: string;
   lastName?: string;
   fullName?: string;
-  organizerProfile?: { organization?: string };
+  /** `image` is a server path or full URL; run it through `resolveImageUrl`. */
+  organizerProfile?: { organization?: string; image?: string | null };
 };
 
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
@@ -109,6 +110,10 @@ export type User = {
   username?: string;
   role: UserRole;
   isActive?: boolean;
+  /** True once the phone number has been confirmed via a code — see `verifyRegisterOtp`/`verifyPhoneOtp`. Accounts created before this shipped default to false. */
+  isPhoneVerified?: boolean;
+  /** Self-serve login 2FA — requires `isPhoneVerified` first. Toggle via `updateOtpPreference`. */
+  otpEnabled?: boolean;
   tickets?: string[];
   wishlist?: string[];
 };
@@ -129,8 +134,11 @@ export type PasswordResetChannel = 'email' | 'sms';
 
 /**
  * `/auth/login` short-circuits into a second factor for organizer accounts
- * with 2FA enabled server-side, returning a masked destination instead of a
- * session. Ordinary customer accounts never see the `requiresOtp` branch.
+ * with 2FA enabled server-side, or for any customer who has turned on login
+ * codes in account settings (`otpEnabled`), returning a masked destination
+ * instead of a session. `/auth/register` uses this same shape unconditionally
+ * — every new account must prove its phone number before it gets a token —
+ * which is why `register()` in `api/auth.ts` returns this type too.
  */
 export type LoginResult =
   | ({ requiresOtp: false } & AuthPayload)
