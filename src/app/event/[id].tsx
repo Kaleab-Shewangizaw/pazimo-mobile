@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/api/client';
 import { AuthSheet } from '@/components/account/auth-sheet';
 import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
+import { AvatarInitials } from '@/components/shares/avatar-initials';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
@@ -25,7 +26,7 @@ import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
-import { organizerDisplayName } from '@/lib/organizer';
+import { organizerDisplayName, organizerImageUrl } from '@/lib/organizer';
 import { isSoldOut } from '@/lib/pricing';
 import { useEvent, useSetWishlist, useWishlist } from '@/queries/events';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -112,6 +113,7 @@ export default function EventDetailScreen() {
 
   const cover = eventCoverUrl(event?.coverImages);
   const organizer = event ? organizerDisplayName(event) : null;
+  const organizerImage = event ? organizerImageUrl(event) : null;
 
   const venue = [event?.location?.address, event?.location?.city].filter(Boolean).join(', ');
 
@@ -319,11 +321,7 @@ export default function EventDetailScreen() {
             {organizer ? (
               <View style={styles.block}>
                 <View style={[styles.hostCard, { borderColor: theme.glassBorder }]}>
-                  <View style={styles.hostAvatar}>
-                    <Text variant="callout" style={styles.hostInitial}>
-                      {organizer.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <AvatarInitials name={organizer} size={42} imageUri={organizerImage} />
                   <View style={styles.hostText}>
                     <Text variant="caption" style={styles.hostLabel}>
                       Hosted by
@@ -503,17 +501,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  hostAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  hostInitial: { color: '#FFFFFF' },
   hostText: { flex: 1, gap: 1 },
   hostLabel: { color: 'rgba(255,255,255,0.55)' },
   hostName: { color: '#FFFFFF' },
