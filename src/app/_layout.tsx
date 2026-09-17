@@ -14,7 +14,8 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
-import { TicketTransferSocketBridge } from '@/hooks/use-ticket-transfer-socket';
+import { PushNotificationsBridge } from '@/hooks/use-push-notifications';
+import { ShareTransferSocketBridge } from '@/hooks/use-share-transfer-socket';
 import { queryClient } from '@/lib/query-client';
 import { useAuthStore } from '@/stores/use-auth-store';
 
@@ -74,7 +75,8 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider value={navigationTheme}>
           <StatusBar style="light" />
-          <TicketTransferSocketBridge />
+          <ShareTransferSocketBridge />
+          <PushNotificationsBridge />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -85,7 +87,18 @@ export default function RootLayout() {
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="shares" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/menu" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/edit" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/wishlist" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/contacts" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/blocked" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/notifications" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/terms" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="account/support" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="conversation/[userId]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="refill/event/[eventId]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="refill/venue/[venueId]" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="refill/orders" options={{ animation: 'slide_from_right' }} />
             {/* Fades rather than slides, and cannot be swiped away: the poll
                 running on this screen is what issues the ticket, so leaving it
                 by accident mid-payment has a real cost. */}
@@ -100,6 +113,10 @@ export default function RootLayout() {
             {/* Same reasoning as checkout/[txn]: the poll here is what settles the order. */}
             <Stack.Screen
               name="cinema-order/[txn]"
+              options={{ animation: 'fade', gestureEnabled: false }}
+            />
+            <Stack.Screen
+              name="refill/order/[txn]"
               options={{ animation: 'fade', gestureEnabled: false }}
             />
           </Stack>

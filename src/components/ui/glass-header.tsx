@@ -17,11 +17,14 @@ const wordmark = require('@/assets/images/pazimo-logo.png');
 
 function GlassHeaderImpl({
   title,
+  left,
   right,
   showLogo = false,
   blurred = true,
 }: {
   title: string;
+  /** A back button, on the one screen using this header that isn't a tab root — every other screen leaves this unset. */
+  left?: ReactNode;
   right?: ReactNode;
   /** Home only — replaces the text title with the wordmark. */
   showLogo?: boolean;
@@ -39,6 +42,7 @@ function GlassHeaderImpl({
 
   const content = (
     <View style={styles.row}>
+      {left}
       <View style={styles.titles}>
         {showLogo ? (
           // The source PNG is gold — tinting flattens it to a white logotype.

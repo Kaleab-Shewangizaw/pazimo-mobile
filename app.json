@@ -43,7 +43,14 @@
       ],
       "expo-secure-store",
       "expo-sharing",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#08080A"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

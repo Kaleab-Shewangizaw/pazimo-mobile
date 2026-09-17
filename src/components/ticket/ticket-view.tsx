@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { DetailRow } from '@/components/ticket/detail-row';
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
+import { QrPlate } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -34,9 +35,20 @@ export type TicketViewProps = {
   ticket: Ticket;
   /** Width available to the card, so the QR plate can be sized against it. */
   width?: number;
+  /** Stretches the card to fill its parent — the same size the loading card was. */
+  fill?: boolean;
+  /** Real glass instead of a flat dark fill. Needs `blurTarget` to have anything to sample on Android. */
+  glass?: boolean;
+  blurTarget?: RefObject<View | null>;
 };
 
-function TicketViewImpl({ ticket, width }: TicketViewProps) {
+function TicketViewImpl({
+  ticket,
+  width,
+  fill = false,
+  glass = false,
+  blurTarget,
+}: TicketViewProps) {
   const theme = useTheme();
   const window = useWindowDimensions();
 
@@ -45,56 +57,65 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
   const available = width ?? window.width - Spacing.lg * 2;
   const plate = Math.min(available - Spacing.xl * 2, MAX_PLATE);
   const venue =
-    [ticket.event.location?.address, ticket.event.location?.city].filter(Boolean).join(', ') ||
-    'Announced by the organizer';
+    [ticket.event.location?.address, ticket.event.location?.city]
+      .filter(Boolean)
+      .join(', ') || 'Announced by the organizer';
   const cover = eventCoverUrl(ticket.event.coverImages);
+  // The edge light reads as "this admits you" — it goes quiet the moment the
+  // ticket stops being that, rather than glowing on a stub someone already used.
+  const alive = ticket.status === 'active' && !ticket.checkedIn;
 
   return (
     <TicketFrame
+      fill={fill}
+      glass={glass}
+      glowing={alive}
+      blurTarget={blurTarget}
       detailsBackground={
         cover ? (
           <>
             {/* Frosted at decode rather than by a BlurView. The artwork never
                 moves, so there is nothing for a live backdrop blur to track —
                 and the pager mounts every ticket in the group at once, which is
-                exactly where real blur views start costing frames. */}
+                exactly where real blur views start costing frames. Heavier
+                than before: the venue/date/price text has to read over this
+                whatever the photo, not just the specific ones this got tuned
+                against. */}
             <Image
               source={{ uri: cover }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={18}
+              blurRadius={22}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={ticket._id}
             />
-            {/* Darkest under the text column and clearing toward the right, so
-                the artwork stays legible as artwork where nothing is read over it. */}
-            <LinearGradient
-              colors={['rgba(10,10,12,0.9)', 'rgba(10,10,12,0.7)', 'rgba(10,10,12,0.42)']}
-              locations={[0, 0.6, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
-            />
-            {/* The specular lift that separates glass from a dark scrim. */}
-            <View style={styles.sheen} />
+            {/* Flat, not a lateral fade — the detail rows can run the full
+                width (a long venue name wraps), so anywhere the gradient used
+                to clear toward the right was exactly where text needed it
+                darkest. */}
+            <View style={styles.scrim} />
           </>
         ) : null
       }
       stub={
-        <View style={styles.stub}>
+        <View style={[styles.stub, fill && styles.stubFilled]}>
+          {ticket.ticketType ? (
+            <Text variant="label" color="textSecondary" style={styles.eyebrow}>
+              {ticket.ticketType}
+            </Text>
+          ) : null}
           <Text variant="heading" role="heading" style={styles.title}>
             {ticket.event.title}
           </Text>
           <Text variant="small" color="textSecondary" style={styles.centered}>
             Show this QR code at the event entrance
           </Text>
-          {/* <Text variant="caption" color="textMuted" style={styles.centered}>
-            Ticket: {ticket.ticketId}
-          </Text> */}
 
-          <View style={[styles.plate, { width: plate, height: plate }]}>
-            <PazimoQr value={payload} size={plate * QR_SHARE} />
+          <View style={styles.plateWrap}>
+            <QrPlate size={plate}>
+              <PazimoQr value={payload} size={plate * QR_SHARE} />
+            </QrPlate>
           </View>
 
           {ticket.purchaseQuantity > 1 ? (
@@ -105,7 +126,11 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
 
           {ticket.checkedIn ? (
             <View style={[styles.stamp, { borderColor: theme.danger }]}>
-              <Ionicons name="checkmark-circle" size={14} color={theme.danger} />
+              <Ionicons
+                name="checkmark-circle"
+                size={14}
+                color={theme.danger}
+              />
               <Text variant="caption" color="danger">
                 Already checked in
               </Text>
@@ -120,43 +145,20 @@ function TicketViewImpl({ ticket, width }: TicketViewProps) {
             icon="calendar-clear"
             label="Date & Time"
             value={
-              formatTicketDate(ticket.event.startDate, ticket.event.startTime) || 'To be announced'
+              formatTicketDate(
+                ticket.event.startDate,
+                ticket.event.startTime,
+              ) || 'To be announced'
             }
           />
           <DetailRow
             icon="pricetag"
-            label={ticket.ticketType ? ticket.ticketType : 'Price'}
+            label="Price"
             value={formatPrice(ticket.price, ticket.currency)}
           />
         </View>
       }
     />
-  );
-}
-
-function DetailRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={15} color="#FFFFFF" />
-      </View>
-      <View style={styles.rowText}>
-        <Text variant="caption" color="textMuted">
-          {label}
-        </Text>
-        <Text variant="callout" numberOfLines={2}>
-          {value}
-        </Text>
-      </View>
-    </View>
   );
 }
 
@@ -169,6 +171,11 @@ const styles = StyleSheet.create({
     // Clears the perforation, which is drawn on this block's bottom edge.
     paddingBottom: Spacing.xl,
   },
+  // When the card fills the screen, its content has to fill that space too —
+  // otherwise the title and QR cluster at the top and leave a dead gap above
+  // the tear line.
+  stubFilled: { flex: 1, justifyContent: 'center' },
+  eyebrow: { textAlign: 'center', marginBottom: 2 },
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -178,14 +185,7 @@ const styles = StyleSheet.create({
   },
   centered: { textAlign: 'center' },
 
-  plate: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xs,
-    borderRadius: Radius.lg,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
 
   stamp: {
     flexDirection: 'row',
@@ -198,28 +198,20 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
 
-  sheen: {
+  scrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
-  details: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
+  details: {
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
-  rowText: { flex: 1, gap: 1 },
 });
 
 export const TicketView = memo(TicketViewImpl);

@@ -105,7 +105,7 @@ export type User = {
   firstName: string;
   lastName?: string;
   phoneNumber: string;
-  /** Lowercased, `^[a-z0-9_]{3,20}$`, globally unique. Absent until set via `PUT /auth/update-username`. */
+  /** Lowercased, `^[a-z0-9_]{4,20}$`, globally unique. Absent until set via `PUT /auth/update-username`. */
   username?: string;
   role: UserRole;
   isActive?: boolean;
@@ -113,7 +113,39 @@ export type User = {
   wishlist?: string[];
 };
 
+/**
+ * Stored preferences only — the backend has no push-token/device
+ * registration yet, so these don't gate any actual delivery today.
+ */
+export type NotificationPreferences = {
+  ticketUpdates: boolean;
+  chatMessages: boolean;
+  promotions: boolean;
+};
+
 export type AuthPayload = { user: User; token: string };
+
+export type PasswordResetChannel = 'email' | 'sms';
+
+/**
+ * `/auth/login` short-circuits into a second factor for organizer accounts
+ * with 2FA enabled server-side, returning a masked destination instead of a
+ * session. Ordinary customer accounts never see the `requiresOtp` branch.
+ */
+export type LoginResult =
+  | ({ requiresOtp: false } & AuthPayload)
+  | {
+      requiresOtp: true;
+      email: string;
+      channel: PasswordResetChannel;
+      maskedDestination: string;
+    };
+
+export type PasswordResetRequestResult = {
+  channel: PasswordResetChannel;
+  maskedDestination: string;
+  message: string;
+};
 
 /* ----------------------------- tickets ---------------------------- */
 
@@ -193,6 +225,78 @@ export type ShareContact = {
   shareCount: number;
 };
 
+/* ------------------------------ chat ------------------------------ */
+
+/** What the most recent activity in a conversation was — picks the chat list's preview icon/copy. */
+export type ConversationActivityKind =
+  | 'MESSAGE'
+  | 'TICKET'
+  | 'BEVERAGE'
+  | 'CINEMA_TICKET'
+  | 'CINEMA_CONCESSION';
+
+/** A row from `GET /conversations` — the Chats tab's data source, backend-authoritative (not client-derived from share history). */
+export type ConversationSummary = {
+  _id: string;
+  counterparty: ShareUser;
+  lastMessageAt: string;
+  lastMessagePreview?: string;
+  lastMessageSenderId: string;
+  lastMessageKind: ConversationActivityKind;
+  /** Messages sent TO me in this thread that I haven't opened yet — the Chats list's unread badge. */
+  unreadCount: number;
+};
+
+/**
+ * A single free-text chat message. The sender may edit their own message
+ * afterward (`editedAt` gets set); deleting one removes it from history
+ * entirely server-side, so a deleted message is never represented here at
+ * all — there is no tombstone shape to render.
+ */
+export type Message = {
+  _id: string;
+  conversation: string;
+  sender: ShareUser;
+  recipient: ShareUser;
+  text: string;
+  createdAt: string;
+  readAt?: string | null;
+  editedAt?: string | null;
+};
+
+/** `DELETE /conversations/:id/messages/:messageId` — just enough to know which message is gone. */
+export type DeletedMessageAck = { _id: string };
+
+/** `GET /conversations/:counterpartyId/messages` — one page, newest-first. */
+export type MessagesPage = {
+  messages: Message[];
+  /** The oldest message id in this page — pass as `before` to fetch the next (older) page. `null` once there's nothing older. */
+  nextCursor: string | null;
+};
+
+/**
+ * A chat's "contact card" — `GET /conversations/:id/contact-card`. `username`
+ * is always present when set; `phoneNumber` is included by the server only
+ * once both people have added each other as contacts (never sent, not just
+ * falsy, otherwise) — never derive visibility from the field being absent
+ * vs. empty on the client, the server already decided this.
+ */
+export type ContactCard = {
+  _id: string;
+  firstName: string;
+  lastName?: string;
+  username?: string;
+  phoneNumber?: string;
+  /** Whether *I* have added this person — not whether it's mutual. */
+  isContact: boolean;
+};
+
+/** A row from `GET /conversations/contacts` — everyone this account has added. */
+export type ContactSummary = ShareUser;
+
+/** A row from `GET /conversations/blocked`. */
+export type BlockedUser = ShareUser & { blockedAt: string };
+
 /** The reduced ticket shape a share carries, not the full `Ticket`. */
 export type ShareTicket = {
   _id: string;
@@ -256,6 +360,70 @@ export type TransferableTicket = {
   transferableCapacity: number;
 };
 
+/* ------------------------ beverage (drink) shares ------------------------ */
+
+/** Which ledger every `sale`/`resultingSale` in a `BeverageShare`'s items lives in. */
+export type BeverageSalesContext = 'EVENT_BEVERAGE' | 'VENUE_BEVERAGE';
+
+/** The reduced sale shape a share carries — `attachSaleDetails`'s populated view, not the full sale document. */
+export type ShareSaleDetails = {
+  _id: string;
+  referenceNumber: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  currency: Currency;
+  status: 'confirmed' | 'refunded';
+  redeemedAt?: string | null;
+  soldAt: string;
+  beverage?: { name: string; color?: string | null };
+  /** Only populated on an `EVENT_BEVERAGE` share. */
+  event?: { title: string; startDate: string; location?: EventLocation };
+  /** Only populated on a `VENUE_BEVERAGE` share. */
+  venue?: { name: string; venueType?: string; city?: string };
+};
+
+/**
+ * One drink + quantity within a share. Mirrors `ShareItem`, but `sale`/
+ * `resultingSale` are bare ids (no schema `ref` server-side — the target
+ * collection depends on the parent `BeverageShare.salesContext`), so the
+ * populated view rides alongside as `saleDetails`/`resultingSaleDetails`
+ * rather than replacing the id field the way `ShareItem.ticket` does.
+ */
+export type BeverageShareItem = {
+  sale: string;
+  quantity: number;
+  transferType: 'FULL' | 'PARTIAL';
+  resultingSale: string | null;
+  saleDetails: ShareSaleDetails | null;
+  resultingSaleDetails: ShareSaleDetails | null;
+};
+
+export type BeverageShare = {
+  _id: string;
+  salesContext: BeverageSalesContext;
+  status: ShareStatus;
+  message?: string;
+  createdAt: string;
+  expiresAt: string;
+  respondedAt: string | null;
+  fromUser: ShareUser;
+  toUser: ShareUser;
+  items: BeverageShareItem[];
+};
+
+/** A row from `GET /beverages/refill/transferable` — the drink-attach picker's data source, event and venue merged. */
+export type TransferableBeverageSale = {
+  saleId: string;
+  salesContext: BeverageSalesContext;
+  beverageName: string;
+  title: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  currency: Currency;
+};
+
 /* ---------------------------- payments ---------------------------- */
 
 export type PaymentProvider = 'CHAPA' | 'SANTIM';
@@ -301,21 +469,12 @@ export type PaymentInitiateRequest = {
   successUrl?: string;
 };
 
-/**
- * The `user` here is the initiate route's own projection: it carries `id` but
- * not `_id`, unlike every other user payload in the API.
- */
-export type PaymentInitiateUser = Omit<User, '_id'> & { id: string };
-
 export type PaymentInitiateResponse = {
   success: true;
   transactionId: string;
   /** Only set for Chapa web checkout (visa/mastercard). Null for direct charge. */
   checkoutUrl?: string | null;
   message?: string;
-  /** Guest checkout auto-creates an account and returns its session here. */
-  token?: string | null;
-  user?: PaymentInitiateUser | null;
 };
 
 export type PaymentStatus = 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'FAILED' | 'NOT_FOUND';
@@ -325,7 +484,6 @@ export type PaymentStatusResponse = {
   status: PaymentStatus;
   transactionId: string;
   ticketId?: string | null;
-  newUserCredentials?: { email: string; password: string } | null;
 };
 
 /* ------------------------------ rsvp ------------------------------ */
@@ -425,6 +583,23 @@ export type Cinema = {
   city?: string;
   address?: string;
   phoneNumber?: string;
+  /** Server path or full URL; run it through `resolveImageUrl`. */
+  image?: string | null;
+};
+
+/**
+ * A physical place events happen at, from `/api/event-venues/public` — an
+ * admin-curated directory, not a link off any particular event. Unrelated to
+ * `RefillVenueSummary`: that is a business account selling drinks, this is
+ * just a name and an address someone can search for.
+ */
+export type EventVenue = {
+  _id: string;
+  name: string;
+  description?: string;
+  address?: string;
+  city?: string;
+  country?: string;
   /** Server path or full URL; run it through `resolveImageUrl`. */
   image?: string | null;
 };
@@ -649,6 +824,8 @@ export type CinemaCheckoutStartResponse = {
 };
 
 export type CinemaTicket = {
+  /** Present on every read (Mongoose includes it by default) — needed to send this ticket to a friend. */
+  _id: string;
   ticketId: string;
   movieTitle: string;
   hallName?: string;
@@ -667,11 +844,237 @@ export type CinemaTicket = {
   cinema: { _id: string; name: string; address?: string; city?: string };
 };
 
+/**
+ * One concession sale on a paid order — the real `CinemaBeverageSale`
+ * document, not the priced-basket snapshot `CinemaQuoteConcessionLine` is.
+ * Carries an `_id` (needed to send this snack to a friend) and reflects a
+ * later refund/collection, which a snapshot never could.
+ */
+export type CinemaOrderConcessionSale = {
+  _id: string;
+  referenceNumber: string;
+  cinemaBeverage: string;
+  beverageName: string;
+  beverageColor?: string | null;
+  beverageCategory?: string;
+  unitPrice: number;
+  quantity: number;
+  totalAmount: number;
+  currency: 'ETB';
+  status: 'confirmed' | 'refunded';
+  redeemedAt?: string | null;
+  soldAt: string;
+};
+
 export type CinemaOrder = {
   transactionId: string;
   status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
   total: number;
   currency: 'ETB';
   tickets: CinemaTicket[];
-  concessions: CinemaQuoteConcessionLine[];
+  concessions: CinemaOrderConcessionSale[];
+};
+
+/* ------------------------- cinema (ticket/snack) shares ------------------------- */
+
+/** Which collection every `item` in a `CinemaShare`'s items lives in. */
+export type CinemaShareItemType = 'CINEMA_TICKET' | 'CINEMA_CONCESSION';
+
+/**
+ * The populated view of a cinema share's item — either a `CinemaTicket` or a
+ * `CinemaBeverageSale` projection, depending on the parent share's
+ * `itemType`. Loosely typed (most fields optional) rather than a
+ * discriminated union: the two shapes are read in exactly one place
+ * (`cinemaShareToViewModel`), which already knows which fields apply from
+ * `itemType` and never needs the type checker to narrow it further.
+ */
+export type CinemaShareItemDetails = {
+  _id: string;
+  quantity: number;
+  currency: Currency;
+  // Ticket fields
+  ticketId?: string;
+  movieTitle?: string;
+  hallName?: string;
+  showtimeStartsAt?: string;
+  ticketType?: string;
+  status?: string;
+  checkedIn?: boolean;
+  movie?: { title: string; poster?: string | null };
+  // Concession fields
+  referenceNumber?: string;
+  beverageName?: string;
+  beverageColor?: string | null;
+  beverageCategory?: string;
+  unitPrice?: number;
+  totalAmount?: number;
+  redeemedAt?: string | null;
+  soldAt?: string;
+  // Shared
+  cinema?: { name: string; city?: string };
+};
+
+/** One ticket/snack + quantity within a share. FULL-only — no `transferType`, no `resultingItem`, unlike `ShareItem`/`BeverageShareItem`. */
+export type CinemaShareItem = {
+  item: string;
+  quantity: number;
+  itemDetails: CinemaShareItemDetails | null;
+};
+
+export type CinemaShare = {
+  _id: string;
+  itemType: CinemaShareItemType;
+  status: ShareStatus;
+  message?: string;
+  createdAt: string;
+  expiresAt: string;
+  respondedAt: string | null;
+  fromUser: ShareUser;
+  toUser: ShareUser;
+  items: CinemaShareItem[];
+};
+
+/** A row from `GET /cinemas/my-tickets/transferable` — the cinema-ticket-attach picker's data source. */
+export type TransferableCinemaTicket = {
+  _id: string;
+  ticketId: string;
+  movieTitle: string;
+  hallName?: string;
+  showtimeStartsAt: string;
+  ticketType: string;
+  quantity: number;
+  currency: Currency;
+  cinema?: { name: string; city?: string };
+};
+
+/** A row from `GET /cinemas/my-concessions/transferable` — the cinema-snack-attach picker's data source. */
+export type TransferableCinemaConcession = {
+  _id: string;
+  beverageName: string;
+  beverageColor?: string | null;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  currency: Currency;
+  cinema?: { name: string; city?: string };
+};
+
+/* ---------------------------- refill (beverages) ---------------------------- */
+
+/** `GET /beverages/refill/events` — events I hold a valid ticket for AND that sell drinks. */
+export type RefillEventSummary = {
+  eventId: string;
+  title: string;
+  startDate: string;
+  coverImages?: string[];
+  beverageCount: number;
+};
+
+/** `GET /venues/refill` — venues currently selling drinks. */
+export type RefillVenueSummary = {
+  venueId: string;
+  name: string;
+  venueType?: string;
+  city?: string;
+  image?: string | null;
+  beverageCount: number;
+};
+
+/** One buyable row in an event's or venue's line-up — the shared shape both refill-catalog endpoints return. */
+export type RefillBeverageItem = {
+  /** The EventBeverage/VenueBeverage row id — not the underlying Beverage id. */
+  id: string;
+  beverageId: string;
+  name: string;
+  image?: string | null;
+  color?: string | null;
+  price: number;
+  currency: Currency;
+  /** `stockTotal - sold`, already floored at 0 server-side. */
+  remaining: number;
+};
+
+export type RefillEventCatalog = {
+  success: true;
+  data: RefillBeverageItem[];
+  event: { _id: string; title: string; startDate: string };
+};
+
+export type RefillVenueCatalog = {
+  success: true;
+  data: RefillBeverageItem[];
+  venue: { _id: string; name: string; venueType?: string; city?: string };
+};
+
+/** One basket line as `concessionBasketService` prices it — shared shape for both channels. */
+export type RefillBasketLine = {
+  beverageId: string;
+  name: string;
+  color?: string | null;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  currency: Currency;
+};
+
+/** `POST .../checkout/quote` — what a basket would cost. Reserves nothing. */
+export type RefillBasket = {
+  salesContext: 'EVENT' | 'VENUE';
+  lines: RefillBasketLine[];
+  total: number;
+  currency: Currency;
+};
+
+/** `POST .../checkout` request body — the priced basket plus who's paying. */
+export type RefillCheckoutRequest = {
+  items: { id: string; quantity: number }[];
+  phoneNumber: string;
+  customerName: string;
+  customerEmail?: string;
+  method: PaymentMethodId;
+  origin?: string;
+};
+
+/** `POST .../checkout` response — starts a Chapa payment, same shape as `CinemaCheckoutStartResponse`. */
+export type RefillCheckoutStartResponse = {
+  transactionId: string;
+  checkoutUrl: string | null;
+  provider: string;
+  action: 'redirect' | 'prompt';
+  total: number;
+  currency: Currency;
+};
+
+/** One drink a paid order produced. `referenceNumber` is what the buyer shows at the counter. */
+export type RefillOrderSale = {
+  /** Not excluded by the projection server-side, just previously undeclared here — needed to send this drink to a friend. */
+  _id: string;
+  referenceNumber: string;
+  beverageName: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  status: 'confirmed' | 'refunded';
+  redeemedAt?: string | null;
+  soldAt: string;
+};
+
+/** `GET .../refill/orders/:transactionId` — everything one paid order produced. */
+export type RefillOrder = {
+  transactionId: string;
+  status: PaymentStatus;
+  total: number;
+  currency: Currency;
+  sales: RefillOrderSale[];
+};
+
+/** `GET /beverages/refill/my-orders` — a thin row for the "Your orders" list, event and venue channels merged. */
+export type RefillOrderSummary = {
+  transactionId: string;
+  channel: 'EVENT' | 'VENUE';
+  status: PaymentStatus;
+  total: number;
+  currency: Currency;
+  title: string;
+  createdAt: string;
 };

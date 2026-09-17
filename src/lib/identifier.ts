@@ -5,7 +5,7 @@
  * requests aren't fired at all while the input is obviously incomplete,
  * rather than firing on every keystroke and letting the server say no.
  */
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/;
 const PHONE_PATTERN = /^[+\d][\d\s\-()]{6,}$/;
 
 export function looksLikeUsername(text: string): boolean {

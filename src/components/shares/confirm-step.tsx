@@ -5,9 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TransferableTicket } from '@/types/api';
 
-export type ConfirmSelection = { ticket: TransferableTicket; quantity: number };
+/**
+ * One line of the review — already fully composed by the caller (the title,
+ * and the "you'll no longer own this" / "sending N of M, you'll keep the
+ * rest" subtitle), so this step never needs to know which kind produced it.
+ */
+export type ConfirmSelection = {
+  id: string;
+  title: string;
+  subtitle: string;
+  /** Whether the sender loses this item entirely. Every kind but a partial ticket transfer is always full. */
+  full: boolean;
+};
 
 export type ConfirmStepProps = {
   recipientName: string;
@@ -21,9 +31,9 @@ export type ConfirmStepProps = {
 
 /**
  * The one screen where the permanence of a transfer actually gets said out
- * loud, per-ticket — a full transfer reads "you'll no longer own this",
- * a partial one reads what's kept vs sent, and neither of those get
- * softened into vaguer copy. Nothing here is submitted until `onConfirm`.
+ * loud, per-item — a full transfer reads "you'll no longer own this", a
+ * partial one reads what's kept vs sent, and neither gets softened into
+ * vaguer copy. Nothing here is submitted until `onConfirm`.
  */
 function ConfirmStepImpl({
   recipientName,
@@ -36,33 +46,23 @@ function ConfirmStepImpl({
 }: ConfirmStepProps) {
   const theme = useTheme();
 
-  const allFull = useMemo(
-    () => selections.every((s) => s.quantity === s.ticket.transferableCapacity),
-    [selections],
-  );
+  const allFull = useMemo(() => selections.every((s) => s.full), [selections]);
 
   return (
     <View style={styles.container}>
       <Text variant="title">Confirm transfer</Text>
 
       <View style={styles.list}>
-        {selections.map(({ ticket, quantity }) => {
-          const full = quantity === ticket.transferableCapacity;
-          return (
-            <View key={ticket.ticketId} style={[styles.row, { borderColor: theme.hairline }]}>
-              <Text variant="body" numberOfLines={1}>
-                {ticket.eventName} · {ticket.ticketType}
-              </Text>
-              <Text variant="caption" color="textSecondary">
-                {full
-                  ? quantity > 1
-                    ? `All ${quantity} admissions — you'll no longer own this ticket`
-                    : "You'll no longer own this ticket"
-                  : `Sending ${quantity} of ${ticket.transferableCapacity} — you'll keep ${ticket.transferableCapacity - quantity}`}
-              </Text>
-            </View>
-          );
-        })}
+        {selections.map((selection) => (
+          <View key={selection.id} style={[styles.row, { borderColor: theme.hairline }]}>
+            <Text variant="body" numberOfLines={1}>
+              {selection.title}
+            </Text>
+            <Text variant="caption" color="textSecondary">
+              {selection.subtitle}
+            </Text>
+          </View>
+        ))}
       </View>
 
       <View style={styles.toRow}>
@@ -84,7 +84,7 @@ function ConfirmStepImpl({
       <Text variant="caption" color="textMuted" style={styles.warning}>
         {allFull
           ? 'This transfer cannot be undone.'
-          : 'The admissions you send cannot be taken back. What you keep stays yours.'}
+          : 'What you send cannot be taken back. What you keep stays yours.'}
       </Text>
 
       {error ? (

@@ -1,10 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { memo } from 'react';
+import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { cinemaTicketQrUrl } from '@/api/cinema-checkout';
+import { DetailRow } from '@/components/ticket/detail-row';
+import { QrPlate } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -30,9 +30,20 @@ const GRID_QR_SIZE = 84;
 export type CinemaTicketViewProps = {
   order: CinemaOrder;
   width?: number;
+  /** Stretches the card to fill its parent — the same size the loading card was. */
+  fill?: boolean;
+  /** Real glass instead of a flat dark fill. Needs `blurTarget` to have anything to sample on Android. */
+  glass?: boolean;
+  blurTarget?: RefObject<View | null>;
 };
 
-function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
+function CinemaTicketViewImpl({
+  order,
+  width,
+  fill = false,
+  glass = false,
+  blurTarget,
+}: CinemaTicketViewProps) {
   const window = useWindowDimensions();
   const available = width ?? window.width - Spacing.lg * 2;
 
@@ -47,9 +58,16 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
     : `${lead.ticketType} × ${tickets.reduce((n, t) => n + t.quantity, 0)}`;
   const total = tickets.reduce((sum, t) => sum + t.totalAmount, 0);
   const plate = Math.min(available - Spacing.xl * 2, SINGLE_PLATE_MAX);
+  // Live as long as at least one seat on the order still admits — the same
+  // "this still gets you in" signal `TicketView` uses.
+  const alive = tickets.some((t) => t.status === 'active');
 
   return (
     <TicketFrame
+      fill={fill}
+      glass={glass}
+      glowing={alive}
+      blurTarget={blurTarget}
       detailsBackground={
         poster ? (
           <>
@@ -57,24 +75,21 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
               source={{ uri: poster }}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              blurRadius={18}
+              blurRadius={22}
               transition={220}
               cachePolicy="memory-disk"
               recyclingKey={order.transactionId}
             />
-            <LinearGradient
-              colors={['rgba(10,10,12,0.9)', 'rgba(10,10,12,0.7)', 'rgba(10,10,12,0.42)']}
-              locations={[0, 0.6, 1]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.sheen} />
+            {/* Flat, not a lateral fade — see the same scrim in ticket-view.tsx. */}
+            <View style={styles.scrim} />
           </>
         ) : null
       }
       stub={
-        <View style={styles.stub}>
+        <View style={[styles.stub, fill && styles.stubFilled]}>
+          <Text variant="label" color="textSecondary" style={styles.eyebrow}>
+            {lead.ticketType}
+          </Text>
           <Text variant="heading" role="heading" style={styles.title}>
             {lead.movieTitle}
           </Text>
@@ -85,12 +100,14 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
           </Text>
 
           {tickets.length === 1 ? (
-            <View style={[styles.plate, { width: plate, height: plate }]}>
-              <Image
-                source={{ uri: cinemaTicketQrUrl(lead.ticketId) }}
-                style={{ width: plate * 0.78, height: plate * 0.78 }}
-                contentFit="contain"
-              />
+            <View style={styles.plateWrap}>
+              <QrPlate size={plate}>
+                <Image
+                  source={{ uri: cinemaTicketQrUrl(lead.ticketId) }}
+                  style={{ width: plate * 0.78, height: plate * 0.78 }}
+                  contentFit="contain"
+                />
+              </QrPlate>
             </View>
           ) : (
             <View style={styles.qrGrid}>
@@ -103,7 +120,11 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
                       contentFit="contain"
                     />
                   </View>
-                  <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                  <Text
+                    variant="caption"
+                    color="textSecondary"
+                    numberOfLines={1}
+                  >
                     {t.seat ? `${t.seat.row}${t.seat.number}` : t.ticketType}
                   </Text>
                 </View>
@@ -119,53 +140,46 @@ function CinemaTicketViewImpl({ order, width }: CinemaTicketViewProps) {
       details={
         <View style={styles.details}>
           <DetailRow icon="business" label="Cinema" value={lead.cinema.name} />
-          <DetailRow icon="calendar-clear" label="Showtime" value={formatShowtime(lead.showtimeStartsAt)} />
-          {lead.hallName ? <DetailRow icon="film-outline" label="Hall" value={lead.hallName} /> : null}
+          <DetailRow
+            icon="calendar-clear"
+            label="Showtime"
+            value={formatShowtime(lead.showtimeStartsAt)}
+          />
+          {lead.hallName ? (
+            <DetailRow icon="film-outline" label="Hall" value={lead.hallName} />
+          ) : null}
           {order.concessions.length ? (
             <DetailRow
               icon="fast-food-outline"
               label="Snacks"
-              value={order.concessions.map((c) => `${c.name} ×${c.quantity}`).join(', ')}
+              value={order.concessions
+                .map((c) => `${c.beverageName} ×${c.quantity}`)
+                .join(', ')}
             />
           ) : null}
-          <DetailRow icon="pricetag" label="Total" value={formatPrice(total, lead.currency)} />
+          <DetailRow
+            icon="pricetag"
+            label="Total"
+            value={formatPrice(total, lead.currency)}
+          />
         </View>
       }
     />
   );
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Ionicons name={icon} size={15} color="#FFFFFF" />
-      </View>
-      <View style={styles.rowText}>
-        <Text variant="caption" color="textMuted">
-          {label}
-        </Text>
-        <Text variant="callout" numberOfLines={3}>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 function formatShowtime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return iso;
-  const date = when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const date = when.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const time = when.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   return `${date} · ${time}`;
 }
 
@@ -177,17 +191,18 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xl,
     paddingBottom: Spacing.xl,
   },
-  title: { color: '#FFFFFF', textAlign: 'center', lineHeight: 31, letterSpacing: -0.6, marginBottom: 2 },
+  stubFilled: { flex: 1, justifyContent: 'center' },
+  eyebrow: { textAlign: 'center', marginBottom: 2 },
+  title: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 31,
+    letterSpacing: -0.6,
+    marginBottom: 2,
+  },
   centered: { textAlign: 'center' },
 
-  plate: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xs,
-    borderRadius: Radius.lg,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
 
   qrGrid: {
     flexDirection: 'row',
@@ -208,28 +223,20 @@ const styles = StyleSheet.create({
   },
   qrCellImage: { width: GRID_QR_SIZE * 0.8, height: GRID_QR_SIZE * 0.8 },
 
-  sheen: {
+  scrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
-  details: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
+  details: {
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
-  rowText: { flex: 1, gap: 1 },
 });
 
 export const CinemaTicketView = memo(CinemaTicketViewImpl);

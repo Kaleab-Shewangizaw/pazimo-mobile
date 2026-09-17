@@ -9,6 +9,7 @@ import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
+import { AuthSheet } from '@/components/account/auth-sheet';
 import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
@@ -26,7 +27,8 @@ import { formatLongDate } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName } from '@/lib/organizer';
 import { isSoldOut } from '@/lib/pricing';
-import { useEvent } from '@/queries/events';
+import { useEvent, useSetWishlist, useWishlist } from '@/queries/events';
+import { useAuthStore } from '@/stores/use-auth-store';
 
 /** Floating chrome — the scroll starts below it. */
 const HEADER_HEIGHT = 44;
@@ -77,12 +79,17 @@ export default function EventDetailScreen() {
   const backdropRef = useRef<View>(null);
 
   const { data: event, isLoading, isError, error, refetch } = useEvent(id);
+  const user = useAuthStore((s) => s.user);
   // Tier, currency, quantity and payment details all live inside the sheet —
   // this page only decides whether it is open.
   const [sheetVisible, setSheetVisible] = useState(false);
-  // UI-only for now — there is no favorites endpoint yet, so the heart does
-  // not survive leaving the screen.
-  const [saved, setSaved] = useState(false);
+  // Ticket purchase now requires a real account — no more guest checkout —
+  // so "Buy Now" opens this instead when signed out, and hands off straight
+  // into the checkout sheet once it succeeds.
+  const [authVisible, setAuthVisible] = useState(false);
+  const { events: wishlist } = useWishlist();
+  const { set: setWishlisted } = useSetWishlist();
+  const saved = Boolean(event) && wishlist.some((wishlisted) => wishlisted._id === event!._id);
   const [coverReady, setCoverReady] = useState(false);
   // The artwork's own proportions, so the poster frame can take its shape
   // instead of cropping it to a fixed one. Arrives with `onLoad`, which is the
@@ -101,7 +108,6 @@ export default function EventDetailScreen() {
       ? descLines > DESC_PREVIEW_LINES
       : description.length > 180 || (description.match(/\n/g)?.length ?? 0) >= DESC_PREVIEW_LINES;
 
-  const tiers = event?.ticketTypes ?? [];
   const soldOut = event ? isSoldOut(event) : false;
 
   const cover = eventCoverUrl(event?.coverImages);
@@ -125,7 +131,24 @@ export default function EventDetailScreen() {
     setCoverReady(true);
   }, []);
 
-  const openSheet = useCallback(() => setSheetVisible(true), []);
+  const openSheet = useCallback(() => {
+    if (user) {
+      setSheetVisible(true);
+    } else {
+      setAuthVisible(true);
+    }
+  }, [user]);
+
+  const onAuthenticated = useCallback(() => {
+    // AuthSheet is still mid-close (its own slide/fade-out) when this fires —
+    // opening CheckoutSheet in the same tick means two full-screen sheets are
+    // mounted at once, and their overlapping blur/animation corrupted
+    // CheckoutSheet's own step-height measurement (the tier list and button
+    // rendered squashed/out of bounds). 260ms matches BottomSheet's own close
+    // animation (also what checkout-sheet.tsx's `close()` waits before its
+    // own reset), so CheckoutSheet only opens once AuthSheet is fully gone.
+    setTimeout(() => setSheetVisible(true), 260);
+  }, []);
 
   const onShare = useCallback(() => {
     if (!event) return;
@@ -361,7 +384,7 @@ export default function EventDetailScreen() {
             accessibilityState={{ selected: saved }}
             color={saved ? '#FB7185' : '#FFFFFF'}
             haptic
-            onPress={() => setSaved((value) => !value)}
+            onPress={() => event && setWishlisted(event._id, !saved)}
             blurTarget={backdropRef}
           />
           <GlassIconButton
@@ -374,26 +397,39 @@ export default function EventDetailScreen() {
       </View>
 
       {/* The only solid-white element on the screen — everything above is
-          transparent or dimmed, so the action reads instantly. */}
-      {event && tiers.length > 0 ? (
+          transparent or dimmed, so the action reads instantly. Sold out is a
+          blocking state, not a disabled button: there's no tier picker or
+          quantity stepper to reach behind it. */}
+      {event ? (
         <View style={[styles.buyBar, { paddingBottom: insets.bottom + Spacing.md }]}>
-          <Button
-            label={soldOut ? 'Sold out' : 'Buy Now'}
-            disabled={soldOut}
-            size="lg"
-            style={styles.buyButton}
-            onPress={openSheet}
-          />
+          {soldOut ? (
+            <View style={styles.soldOutBlock}>
+              <Text variant="callout" style={styles.soldOutTitle}>
+                Tickets Not Available
+              </Text>
+              <Text variant="small" style={styles.soldOutSubtext}>
+                This event is sold out or has ended.
+              </Text>
+            </View>
+          ) : (
+            <Button label="Buy Now" size="lg" style={styles.buyButton} onPress={openSheet} />
+          )}
         </View>
       ) : null}
 
-      {event ? (
+      {event && !soldOut ? (
         <CheckoutSheet
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
           event={event}
         />
       ) : null}
+
+      <AuthSheet
+        visible={authVisible}
+        onClose={() => setAuthVisible(false)}
+        onAuthenticated={onAuthenticated}
+      />
 
       {/* Sits under the chrome (zIndex) so Back stays reachable on a slow
           connection, but over everything else until the reveal. */}
@@ -495,6 +531,18 @@ const styles = StyleSheet.create({
 
   buyBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.lg },
   buyButton: { width: '100%' },
+  soldOutBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  soldOutTitle: { color: '#FFFFFF' },
+  soldOutSubtext: { color: 'rgba(255,255,255,0.6)' },
 
   loadingOverlay: {
     position: 'absolute',

@@ -14,8 +14,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ShareTicketSheet } from '@/components/shares/share-ticket-sheet';
-import { TicketPoster, posterHostStyle } from '@/components/ticket/ticket-poster';
+import { ShareItemSheet } from '@/components/shares/share-item-sheet';
+import {
+  TicketPoster,
+  posterHostStyle,
+} from '@/components/ticket/ticket-poster';
 import { TicketView } from '@/components/ticket/ticket-view';
 import { Button } from '@/components/ui/button';
 import { Touchable } from '@/components/ui/pressable';
@@ -73,7 +76,9 @@ export function TicketScreen({
   const pagerRef = useRef<ScrollView>(null);
   const jumped = useRef(false);
 
-  const [index, setIndex] = useState(() => Math.min(Math.max(initialIndex, 0), tickets.length - 1));
+  const [index, setIndex] = useState(() =>
+    Math.min(Math.max(initialIndex, 0), tickets.length - 1),
+  );
   const active = tickets[index] ?? tickets[0];
 
   const { posterRef, download, saving } = useTicketDownload(active);
@@ -98,14 +103,26 @@ export function TicketScreen({
 
   // No token, no query — a guest opening a shared/deep-linked ticket can't
   // have an outgoing transfer of their own to check for.
-  const { shares: pendingOutgoing } = useTicketShares({ direction: 'sent', status: 'pending' });
+  const { shares: pendingOutgoing } = useTicketShares({
+    direction: 'sent',
+    status: 'pending',
+  });
   const pendingShare = active
-    ? pendingOutgoing.find((share) => share.items.some((item) => item.ticket._id === active._id))
+    ? pendingOutgoing.find((share) =>
+        share.items.some((item) => item.ticket._id === active._id),
+      )
     : undefined;
-  const { cancel: cancelShare, submitting: cancelling, error: cancelError } = useRespondToShare();
+  const {
+    cancel: cancelShare,
+    submitting: cancelling,
+    error: cancelError,
+  } = useRespondToShare();
 
   const [shareSheetVisible, setShareSheetVisible] = useState(false);
-  const shareDisabled = Boolean(pendingShare) || active?.checkedIn || active?.status === 'cancelled';
+  const shareDisabled =
+    Boolean(pendingShare) ||
+    active?.checkedIn ||
+    active?.status === 'cancelled';
 
   const onPage = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -133,28 +150,46 @@ export function TicketScreen({
   const body = many ? (
     <ScrollView
       ref={pagerRef}
+      style={styles.pager}
       horizontal
       pagingEnabled
       showsHorizontalScrollIndicator={false}
       onMomentumScrollEnd={onPage}
       // `contentOffset` is iOS-only on ScrollView, so the opening page is set
       // imperatively once the pages have a width to be measured against.
-      onContentSizeChange={jumpToInitial}>
+      onContentSizeChange={jumpToInitial}
+    >
       {tickets.map((ticket) => (
         <View key={ticket._id} style={[styles.page, { width }]}>
-          <TicketView ticket={ticket} width={cardWidth} />
+          <TicketView
+            ticket={ticket}
+            width={cardWidth}
+            fill
+            glass
+            blurTarget={backdropRef}
+          />
         </View>
       ))}
     </ScrollView>
   ) : (
     <View style={styles.single}>
-      <TicketView ticket={active} width={cardWidth} />
+      <TicketView
+        ticket={active}
+        width={cardWidth}
+        fill
+        glass
+        blurTarget={backdropRef}
+      />
     </View>
   );
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <BlurTargetView ref={backdropRef} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <BlurTargetView
+        ref={backdropRef}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      >
         {cover ? (
           <Image
             source={{ uri: cover }}
@@ -178,7 +213,8 @@ export function TicketScreen({
           accessibilityLabel={backLabel}
           onPress={onBack}
           pressedScale={0.9}
-          style={styles.headerButton}>
+          style={styles.headerButton}
+        >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Touchable>
         <View style={styles.headerTitles}>
@@ -190,7 +226,8 @@ export function TicketScreen({
               variant="caption"
               color="textSecondary"
               style={styles.headerTitle}
-              accessibilityLiveRegion="polite">
+              accessibilityLiveRegion="polite"
+            >
               {index + 1} of {tickets.length}
             </Text>
           ) : null}
@@ -201,7 +238,8 @@ export function TicketScreen({
             accessibilityLabel="Share this ticket"
             onPress={onShare}
             pressedScale={0.9}
-            style={styles.headerButton}>
+            style={styles.headerButton}
+          >
             <Ionicons name="share-outline" size={21} color="#FFFFFF" />
           </Touchable>
           <Touchable
@@ -211,18 +249,31 @@ export function TicketScreen({
             disabled={shareDisabled}
             onPress={() => setShareSheetVisible(true)}
             pressedScale={0.9}
-            style={[styles.headerButton, shareDisabled ? styles.headerButtonDisabled : null]}>
+            style={[
+              styles.headerButton,
+              shareDisabled ? styles.headerButtonDisabled : null,
+            ]}
+          >
             <Ionicons name="paper-plane-outline" size={20} color="#FFFFFF" />
           </Touchable>
         </View>
       </View>
 
       {pendingShare ? (
-        <View style={[styles.pendingBanner, { borderColor: theme.hairline, backgroundColor: theme.surfaceMuted }]}>
+        <View
+          style={[
+            styles.pendingBanner,
+            {
+              borderColor: theme.hairline,
+              backgroundColor: theme.surfaceMuted,
+            },
+          ]}
+        >
           <Ionicons name="time-outline" size={16} color={theme.textSecondary} />
           <View style={styles.pendingText}>
             <Text variant="small" color="textSecondary">
-              Pending transfer to {pendingShare.toUser.firstName} — waiting for them to accept
+              Pending transfer to {pendingShare.toUser.firstName} — waiting for
+              them to accept
             </Text>
             {cancelError ? (
               <Text variant="caption" color="danger">
@@ -235,7 +286,8 @@ export function TicketScreen({
             accessibilityLabel="Cancel transfer"
             disabled={cancelling}
             onPress={() => cancelShare(pendingShare._id)}
-            pressedScale={0.94}>
+            pressedScale={0.94}
+          >
             <Text variant="small" color="danger">
               {cancelling ? 'Cancelling…' : 'Cancel'}
             </Text>
@@ -248,8 +300,14 @@ export function TicketScreen({
         contentContainerStyle={[
           styles.content,
           { paddingBottom: footerHeight + Spacing.lg },
-        ]}>
-        {children ? children(body) : body}
+        ]}
+      >
+        {/* `flexGrow` on the content container only stretches its *children*
+            when they in turn opt into that space with `flex: 1` — and the
+            reveal wraps `body` in its own `Animated.View`, outside this
+            file's control, so that has to be given something to stretch
+            here rather than relying on the flex chain alone. */}
+        <View style={styles.bodyFlex}>{children ? children(body) : body}</View>
 
         {many ? (
           <View style={styles.dots} accessibilityElementsHidden>
@@ -258,7 +316,9 @@ export function TicketScreen({
                 key={ticket._id}
                 style={[
                   styles.dot,
-                  i === index ? styles.dotActive : { backgroundColor: theme.textMuted },
+                  i === index
+                    ? styles.dotActive
+                    : { backgroundColor: theme.textMuted },
                 ]}
               />
             ))}
@@ -268,14 +328,17 @@ export function TicketScreen({
 
       <View
         onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-        style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
+        style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}
+      >
         {footer}
         <Button
           label={many ? `Download ticket ${index + 1}` : 'Download ticket'}
           size="lg"
           loading={saving}
           onPress={download}
-          icon={<Ionicons name="download-outline" size={18} color={theme.onBrand} />}
+          icon={
+            <Ionicons name="download-outline" size={18} color={theme.onBrand} />
+          }
           style={styles.download}
         />
       </View>
@@ -286,9 +349,10 @@ export function TicketScreen({
         <TicketPoster ref={posterRef} ticket={active} />
       </View>
 
-      <ShareTicketSheet
+      <ShareItemSheet
         visible={shareSheetVisible}
         onClose={() => setShareSheetVisible(false)}
+        forcedKind="TICKET"
         eventId={active.event._id}
         initialTicketId={active._id}
       />
@@ -332,11 +396,16 @@ const styles = StyleSheet.create({
   },
   pendingText: { flex: 1, gap: 2 },
 
-  content: { paddingTop: Spacing.sm, gap: Spacing.lg },
+  // `flexGrow` (not `flex`) — a content container only ever grows past its
+  // content's natural size, it never shrinks below it, so a tall ticket
+  // still scrolls instead of being clipped to the viewport.
+  content: { flexGrow: 1, paddingTop: Spacing.sm, gap: Spacing.lg },
+  bodyFlex: { flex: 1 },
   // The pager spans the full screen so each page snaps edge to edge, which is
   // why the horizontal inset lives on the page rather than on the scroll.
-  page: { paddingHorizontal: Spacing.lg },
-  single: { paddingHorizontal: Spacing.lg },
+  pager: { flex: 1 },
+  page: { flex: 1, paddingHorizontal: Spacing.lg },
+  single: { flex: 1, paddingHorizontal: Spacing.lg },
 
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: Radius.pill },

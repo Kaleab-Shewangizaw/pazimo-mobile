@@ -1,6 +1,7 @@
 /**
- * A client-generated key for `POST /ticket-shares`, scoped to one compose
- * session (see `share-ticket-sheet.tsx`'s `reset()`). Retrying the same
+ * A client-generated key for `POST /ticket-shares` (and its `/beverage-shares`
+ * twin), scoped to one compose session (see `share-item-sheet.tsx`'s
+ * `reset()`). Retrying the same
  * attempt — a double-tap, or a retry after a dropped connection — reuses it,
  * which is what lets the backend's own idempotency collapse those into the
  * one share instead of creating a duplicate. A new open of the sheet gets a

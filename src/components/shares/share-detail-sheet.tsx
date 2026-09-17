@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatShortDate, formatTicketDate } from '@/lib/date';
-import { useRespondToShare } from '@/queries/ticket-shares';
+import { useRespondToShareItem } from '@/hooks/use-respond-to-share-item';
+import { formatShortDate } from '@/lib/date';
+import type { ShareItemViewModel } from '@/lib/share-item-view-model';
 import { useAuthStore } from '@/stores/use-auth-store';
-import type { ShareStatus, TicketShare } from '@/types/api';
+import type { ShareStatus } from '@/types/api';
 
 const STATUS_LABEL: Record<ShareStatus, string> = {
   pending: 'Pending',
@@ -26,7 +27,7 @@ export type ShareDetailSheetProps = {
    * content doesn't blank out mid dismiss-animation — same reasoning as the
    * `reset()` timing in `checkout-sheet.tsx`.
    */
-  share: TicketShare | null;
+  share: ShareItemViewModel | null;
   visible: boolean;
   onClose: () => void;
 };
@@ -34,7 +35,9 @@ export type ShareDetailSheetProps = {
 function ShareDetailSheetImpl({ share, visible, onClose }: ShareDetailSheetProps) {
   const theme = useTheme();
   const myId = useAuthStore((s) => s.user?._id);
-  const { accept, decline, cancel, submitting, pendingAction, error } = useRespondToShare();
+  const { accept, decline, cancel, submitting, pendingAction, error } = useRespondToShareItem(
+    share?.kind ?? 'TICKET',
+  );
 
   const sent = share ? share.fromUser._id === myId : false;
   const otherUser = share ? (sent ? share.toUser : share.fromUser) : null;
@@ -47,7 +50,7 @@ function ShareDetailSheetImpl({ share, visible, onClose }: ShareDetailSheetProps
     async (action: 'accept' | 'decline' | 'cancel') => {
       if (!share) return;
       const result =
-        action === 'accept' ? await accept(share._id) : action === 'decline' ? await decline(share._id) : await cancel(share._id);
+        action === 'accept' ? await accept(share.id) : action === 'decline' ? await decline(share.id) : await cancel(share.id);
       if (result) onClose();
     },
     [share, accept, decline, cancel, onClose],
@@ -69,19 +72,14 @@ function ShareDetailSheetImpl({ share, visible, onClose }: ShareDetailSheetProps
             </View>
           </View>
 
-          <View style={styles.ticketList}>
-            {share.items.map((item) => (
-              <View
-                key={item.ticket._id}
-                style={[styles.ticketRow, { borderColor: theme.hairline }]}>
+          <View style={styles.itemList}>
+            {share.lines.map((line) => (
+              <View key={line.id} style={[styles.itemRow, { borderColor: theme.hairline }]}>
                 <Text variant="body" numberOfLines={1}>
-                  {item.ticket.event.title}
+                  {line.title}
                 </Text>
                 <Text variant="caption" color="textSecondary">
-                  {item.ticket.ticketType} · {formatTicketDate(item.ticket.event.startDate)} ·{' '}
-                  {item.transferType === 'FULL'
-                    ? 'entire ticket'
-                    : `${item.quantity} admission${item.quantity > 1 ? 's' : ''}`}
+                  {line.subtitle}
                 </Text>
               </View>
             ))}
@@ -142,8 +140,8 @@ const styles = StyleSheet.create({
   container: { gap: Spacing.lg },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   headerText: { flex: 1, gap: 2 },
-  ticketList: { gap: Spacing.sm },
-  ticketRow: {
+  itemList: { gap: Spacing.sm },
+  itemRow: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.md,
     padding: Spacing.md,

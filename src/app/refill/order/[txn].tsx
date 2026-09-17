@@ -1,0 +1,286 @@
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  BackHandler,
+  Easing,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { cancelPayment } from '@/api/payments';
+import { RefillOrderScreen } from '@/components/refill/refill-order-screen';
+import { TicketFrame } from '@/components/ticket/ticket-frame';
+import { AmbientBackground } from '@/components/ui/ambient-background';
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
+import { Spacing } from '@/constants/theme';
+import { useRefillOrderWatcher } from '@/hooks/use-refill-order-watcher';
+import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * The screen a refill payment lands on — `checkout/[txn].tsx`'s counterpart.
+ * Same reasoning throughout: the poll running here (`useRefillOrderWatcher`)
+ * is what actually settles the order when the provider webhook can't reach a
+ * local backend, so leaving early can genuinely cost paid-for drinks — which
+ * is why the hardware back button is held until the payment resolves.
+ *
+ * Drinks have no seat hold to release, so cancelling here is the same
+ * best-effort `cancelPayment` the ticket flow uses, not a bespoke endpoint.
+ */
+
+const REVEAL_DURATION = 900;
+
+const FAILURE_COPY: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; title: string }
+> = {
+  cancelled: { icon: 'close-circle-outline', title: 'Payment cancelled' },
+  failed: { icon: 'alert-circle-outline', title: 'Payment failed' },
+  timeout: { icon: 'time-outline', title: 'Still waiting' },
+  error: { icon: 'cloud-offline-outline', title: 'Something went wrong' },
+};
+
+export default function RefillOrderScreenRoute() {
+  const { txn } = useLocalSearchParams<{ txn: string }>();
+  const router = useRouter();
+
+  const { phase, order, message } = useRefillOrderWatcher(txn);
+
+  const [reveal] = useState(() => new Animated.Value(0));
+  const [turned, setTurned] = useState(false);
+
+  useEffect(() => {
+    if (phase !== 'issued' || !order) return;
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {
+          // A device without a taptic engine must not throw.
+        },
+      );
+    }
+    Animated.timing(reveal, {
+      toValue: 1,
+      duration: REVEAL_DURATION,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setTurned(true);
+    });
+  }, [phase, order, reveal]);
+
+  useEffect(() => {
+    if (phase !== 'waiting') return;
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
+    return () => subscription.remove();
+  }, [phase]);
+
+  const leave = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/refill');
+  }, [router]);
+
+  const abandon = useCallback(() => {
+    if (txn) {
+      cancelPayment(txn).catch(() => {
+        // Best effort: the server expires an unclaimed intent after three
+        // minutes anyway, so a failed cancel changes nothing for the buyer.
+      });
+    }
+    leave();
+  }, [txn, leave]);
+
+  const done = useCallback(() => router.replace('/(tabs)/refill'), [router]);
+
+  return (
+    <View style={styles.screen}>
+      {order ? (
+        <RefillOrderScreen order={order} onDone={done}>
+          {(body) => (
+            <Animated.View
+              style={{
+                flex: 1,
+                opacity: reveal.interpolate({
+                  inputRange: [0.5, 0.62],
+                  outputRange: [0, 1],
+                }),
+                transform: [
+                  { perspective: 1200 },
+                  {
+                    rotateY: reveal.interpolate({
+                      inputRange: [0.5, 1],
+                      outputRange: ['-90deg', '0deg'],
+                      extrapolate: 'clamp',
+                    }),
+                  },
+                ],
+              }}
+            >
+              {body}
+            </Animated.View>
+          )}
+        </RefillOrderScreen>
+      ) : null}
+
+      {!turned ? (
+        <WaitingOverlay
+          reveal={reveal}
+          phase={phase}
+          message={message}
+          onCancel={abandon}
+          onLeave={leave}
+          onDone={done}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function WaitingOverlay({
+  reveal,
+  phase,
+  message,
+  onCancel,
+  onLeave,
+  onDone,
+}: {
+  reveal: Animated.Value;
+  phase: string;
+  message?: string;
+  onCancel: () => void;
+  onLeave: () => void;
+  onDone: () => void;
+}) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const backdrop = useRef<View>(null);
+  const failure =
+    phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        {
+          opacity: reveal.interpolate({
+            inputRange: [0, 0.45],
+            outputRange: [1, 0],
+          }),
+        },
+      ]}
+      pointerEvents={phase === 'issued' ? 'none' : 'auto'}
+    >
+      <AmbientBackground blurTarget={backdrop} />
+
+      <View
+        style={[
+          styles.stage,
+          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom },
+        ]}
+      >
+        <Animated.View
+          style={[
+            styles.card,
+            {
+              transform: [
+                { perspective: 1200 },
+                {
+                  rotateY: reveal.interpolate({
+                    inputRange: [0, 0.5],
+                    outputRange: ['0deg', '90deg'],
+                    extrapolate: 'clamp',
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TicketFrame
+            fill
+            glass
+            blurTarget={backdrop}
+            glowing={phase === 'waiting'}
+            spinForever={phase === 'waiting'}
+            stub={
+              failure ? (
+                <View style={styles.cardBody}>
+                  <Ionicons name={failure.icon} size={40} color={theme.text} />
+                  <Text variant="title" style={styles.centered}>
+                    {failure.title}
+                  </Text>
+                  <Text
+                    variant="small"
+                    color="textSecondary"
+                    style={styles.centered}
+                  >
+                    {message ??
+                      'We stopped waiting for this payment. If it went through, your order will be in your history.'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.blank} />
+              )
+            }
+            details={<View style={styles.cardFooter} />}
+          />
+        </Animated.View>
+
+        <View style={styles.actions}>
+          {failure ? (
+            <>
+              <Button
+                label="Back to Refill"
+                size="lg"
+                onPress={onLeave}
+                style={styles.wide}
+              />
+              <Button
+                label="Browse drinks"
+                variant="ghost"
+                onPress={onDone}
+                style={styles.wide}
+              />
+            </>
+          ) : (
+            <Button
+              label="Cancel payment"
+              variant="ghost"
+              onPress={onCancel}
+              style={styles.wide}
+            />
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  stage: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xl,
+  },
+  card: { flex: 1, width: '100%' },
+  blank: { flex: 1 },
+  cardBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+  },
+  cardFooter: { height: 152 },
+  centered: { textAlign: 'center' },
+  actions: { gap: Spacing.xs },
+  wide: { width: '100%' },
+});

@@ -2,7 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Platform, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  BackHandler,
+  Easing,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cancelPayment } from '@/api/payments';
@@ -33,7 +40,10 @@ import { useTheme } from '@/hooks/use-theme';
 /** Long enough to read as a card turning over, short enough not to be a wait. */
 const REVEAL_DURATION = 900;
 
-const FAILURE_COPY: Record<string, { icon: keyof typeof Ionicons.glyphMap; title: string }> = {
+const FAILURE_COPY: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; title: string }
+> = {
   cancelled: { icon: 'close-circle-outline', title: 'Payment cancelled' },
   failed: { icon: 'alert-circle-outline', title: 'Payment failed' },
   timeout: { icon: 'time-outline', title: 'Still waiting' },
@@ -55,9 +65,11 @@ export default function CheckoutScreen() {
   useEffect(() => {
     if (phase !== 'issued' || !ticket) return;
     if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
-        // A device without a taptic engine must not throw.
-      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {
+          // A device without a taptic engine must not throw.
+        },
+      );
     }
     Animated.timing(reveal, {
       toValue: 1,
@@ -73,7 +85,10 @@ export default function CheckoutScreen() {
   // back to, and leaving stops the poll that issues the ticket.
   useEffect(() => {
     if (phase !== 'waiting') return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => true,
+    );
     return () => subscription.remove();
   }, [phase]);
 
@@ -92,7 +107,10 @@ export default function CheckoutScreen() {
     leave();
   }, [txn, leave]);
 
-  const toTickets = useCallback(() => router.replace('/(tabs)/tickets'), [router]);
+  const toTickets = useCallback(
+    () => router.replace('/(tabs)/tickets'),
+    [router],
+  );
 
   return (
     <View style={styles.screen}>
@@ -100,11 +118,16 @@ export default function CheckoutScreen() {
         <TicketScreen
           tickets={tickets}
           onBack={toTickets}
-          backLabel="Go to your tickets">
+          backLabel="Go to your tickets"
+        >
           {(body) => (
             <Animated.View
               style={{
-                opacity: reveal.interpolate({ inputRange: [0.5, 0.62], outputRange: [0, 1] }),
+                flex: 1,
+                opacity: reveal.interpolate({
+                  inputRange: [0.5, 0.62],
+                  outputRange: [0, 1],
+                }),
                 transform: [
                   { perspective: 1200 },
                   {
@@ -115,7 +138,8 @@ export default function CheckoutScreen() {
                     }),
                   },
                 ],
-              }}>
+              }}
+            >
               {body}
             </Animated.View>
           )}
@@ -154,20 +178,30 @@ function WaitingOverlay({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const backdrop = useRef<View>(null);
-  const failure = phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
+  const failure =
+    phase !== 'waiting' && phase !== 'issued' ? FAILURE_COPY[phase] : null;
 
   return (
     <Animated.View
       style={[
         StyleSheet.absoluteFill,
         {
-          opacity: reveal.interpolate({ inputRange: [0, 0.45], outputRange: [1, 0] }),
+          opacity: reveal.interpolate({
+            inputRange: [0, 0.45],
+            outputRange: [1, 0],
+          }),
         },
       ]}
-      pointerEvents={phase === 'issued' ? 'none' : 'auto'}>
+      pointerEvents={phase === 'issued' ? 'none' : 'auto'}
+    >
       <AmbientBackground blurTarget={backdrop} />
 
-      <View style={[styles.stage, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.stage,
+          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom },
+        ]}
+      >
         <Animated.View
           style={[
             styles.card,
@@ -183,7 +217,8 @@ function WaitingOverlay({
                 },
               ],
             },
-          ]}>
+          ]}
+        >
           {/* Empty on purpose. The wait has nothing to report that the buyer
               doesn't already know — they are staring at their own phone waiting
               for a prompt — so it is the outline of the ticket they are buying,
@@ -195,6 +230,7 @@ function WaitingOverlay({
             glass
             blurTarget={backdrop}
             glowing={phase === 'waiting'}
+            spinForever={phase === 'waiting'}
             stub={
               failure ? (
                 <View style={styles.cardBody}>
@@ -202,7 +238,11 @@ function WaitingOverlay({
                   <Text variant="title" style={styles.centered}>
                     {failure.title}
                   </Text>
-                  <Text variant="small" color="textSecondary" style={styles.centered}>
+                  <Text
+                    variant="small"
+                    color="textSecondary"
+                    style={styles.centered}
+                  >
                     {message ??
                       'We stopped waiting for this payment. If it went through, your ticket will be in the Tickets tab.'}
                   </Text>
@@ -218,7 +258,12 @@ function WaitingOverlay({
         <View style={styles.actions}>
           {failure ? (
             <>
-              <Button label="Back to the event" size="lg" onPress={onLeave} style={styles.wide} />
+              <Button
+                label="Back to the event"
+                size="lg"
+                onPress={onLeave}
+                style={styles.wide}
+              />
               <Button
                 label="Check my tickets"
                 variant="ghost"

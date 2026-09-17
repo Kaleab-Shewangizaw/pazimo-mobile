@@ -10,8 +10,8 @@ import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/use-auth-store';
 
-/** Same rule the backend enforces (`^[a-z0-9_]{3,20}$`) — checked client-side only to give instant feedback before the round trip. */
-const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+/** Same rule the backend enforces (`^[a-z0-9_]{4,20}$`) — checked client-side only to give instant feedback before the round trip. */
+const USERNAME_PATTERN = /^[a-z0-9_]{4,20}$/;
 
 /**
  * How other people find this account to send it a ticket. Search is
@@ -30,7 +30,7 @@ export function UsernameSheet({ visible, onClose }: { visible: boolean; onClose:
 
   const formatError = USERNAME_PATTERN.test(value)
     ? null
-    : '3-20 characters: lowercase letters, digits, and underscores only.';
+    : '4-20 characters: lowercase letters, digits, and underscores only.';
 
   const onChange = useCallback((text: string) => {
     // Matches the format the backend accepts and lowercases anyway, so the

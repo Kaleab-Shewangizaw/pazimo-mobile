@@ -8,8 +8,9 @@ import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { isResolvableIdentifier } from '@/lib/identifier';
-import { useShareContacts, useShareSearch } from '@/queries/ticket-shares';
-import type { ShareContact, ShareUser } from '@/types/api';
+import { useConversationsList } from '@/queries/messages';
+import { useShareSearch } from '@/queries/ticket-shares';
+import type { ShareUser } from '@/types/api';
 
 export type RecipientStepProps = {
   onSelect: (recipient: ShareUser) => void;
@@ -31,20 +32,16 @@ function RecipientStepImpl({ onSelect }: RecipientStepProps) {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
 
-  const { contacts, isLoading: contactsLoading } = useShareContacts();
+  // "RECENT" is every real conversation partner — via a message or any
+  // ticket/drink/cinema share — not just people you've sent a ticket to
+  // (that narrower `useShareContacts`/`TicketShare`-only aggregation is left
+  // in place but unused here now that a real Conversation exists).
+  const { conversations: contacts, isLoading: contactsLoading } = useConversationsList();
   const { results, isLoading: searchLoading } = useShareSearch(deferredQuery);
 
   const trimmed = deferredQuery.trim();
   const resolvable = isResolvableIdentifier(trimmed);
   const typing = trimmed.length > 0;
-
-  const selectContact = (contact: ShareContact) =>
-    onSelect({
-      _id: contact.userId,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      username: contact.username,
-    });
 
   return (
     <View style={styles.container}>
@@ -102,18 +99,18 @@ function RecipientStepImpl({ onSelect }: RecipientStepProps) {
             <ActivityIndicator color="#FFFFFF" style={styles.spinner} />
           ) : contacts.length ? (
             <View style={styles.list}>
-              {contacts.map((contact) => (
+              {contacts.map((conversation) => (
                 <PersonRow
-                  key={contact.userId}
-                  name={nameOf(contact)}
-                  handle={contact.username}
-                  onPress={() => selectContact(contact)}
+                  key={conversation.counterparty._id}
+                  name={nameOf(conversation.counterparty)}
+                  handle={conversation.counterparty.username}
+                  onPress={() => onSelect(conversation.counterparty)}
                 />
               ))}
             </View>
           ) : (
             <Text variant="small" color="textMuted" style={styles.empty}>
-              Enter a full username or phone number to send them a ticket.
+              Enter a full username or phone number to start chatting.
             </Text>
           )}
         </>
