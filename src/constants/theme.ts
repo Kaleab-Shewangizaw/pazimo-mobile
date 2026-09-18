@@ -43,6 +43,8 @@ const palette = {
   danger: '#FB7185',
   /** White like the brand — scarcity copy reads as emphasis, not a hue. */
   warning: white.full,
+  /** The one warm accent in an otherwise white-on-black palette — reserved for happy-hour pricing. */
+  happyHour: '#FBBF24',
 
   /** Scrim under text laid over cover art. */
   scrim: 'rgba(0, 0, 0, 0.62)',

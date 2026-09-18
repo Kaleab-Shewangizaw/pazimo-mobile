@@ -6,6 +6,7 @@ import type {
   CinemaCheckoutStartRequest,
   CinemaCheckoutStartResponse,
   CinemaOrder,
+  CinemaScreenConfig,
   CinemaSeatMap,
 } from '@/types/api';
 
@@ -29,6 +30,11 @@ import type {
 
 export function fetchShowtimeSeats(showtimeId: string): Promise<CinemaSeatMap> {
   return getData<CinemaSeatMap>(`/cinemas/public/showtimes/${showtimeId}/seats`);
+}
+
+/** The one looping clip that plays behind every cinema's seat map — see `useScreenVideo`. */
+export function fetchScreenVideo(): Promise<CinemaScreenConfig> {
+  return getData<CinemaScreenConfig>('/cinemas/public/screen-video');
 }
 
 export function quoteCinemaCheckout(basket: CinemaCheckoutBasket): Promise<CinemaCheckoutQuote> {

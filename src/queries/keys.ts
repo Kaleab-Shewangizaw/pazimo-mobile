@@ -36,6 +36,7 @@ export const queryKeys = {
     concessions: (cinemaId: string) => ['cinema-checkout', 'concessions', cinemaId] as const,
     order: (transactionId: string) => ['cinema-checkout', 'order', transactionId] as const,
     myOrders: () => ['cinema-checkout', 'my-orders'] as const,
+    screenVideo: () => ['cinema-checkout', 'screen-video'] as const,
   },
   paymentConfig: ['payment-config'] as const,
   shares: {

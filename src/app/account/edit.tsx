@@ -18,12 +18,7 @@ import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useUpdateProfile } from '@/queries/account';
-import { useAuthStore } from '@/stores/use-auth-store';
-import type { User } from '@/types/api';
-
-function needsEmail(user: User): boolean {
-  return !user.email || user.email.includes('customerpazimo');
-}
+import { needsEmail, useAuthStore } from '@/stores/use-auth-store';
 
 export default function EditAccountScreen() {
   const insets = useSafeAreaInsets();

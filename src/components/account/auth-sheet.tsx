@@ -6,8 +6,10 @@ import {
   forgotPassword,
   login,
   register,
+  resendRegisterOtp,
   resetPassword,
   verifyLoginOtp,
+  verifyRegisterOtp,
   verifyResetCode,
 } from '@/api/auth';
 import { ApiError } from '@/api/client';
@@ -24,7 +26,14 @@ import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { AuthPayload, PasswordResetChannel, User } from '@/types/api';
 
-type Mode = 'signup' | 'password' | 'otp' | 'forgot-request' | 'forgot-verify' | 'forgot-reset';
+type Mode =
+  | 'signup'
+  | 'password'
+  | 'otp'
+  | 'verify-phone'
+  | 'forgot-request'
+  | 'forgot-verify'
+  | 'forgot-reset';
 
 /**
  * Every account now needs a real password — there is no more "the password
@@ -95,10 +104,14 @@ export function AuthSheet({
 
   const completeSignIn = useCallback(
     async (payload: AuthPayload) => {
-      await signIn(payload);
+      // `signIn` resolves the authoritative profile (reconciled against
+      // `/auth/me`) rather than echoing back `payload.user`, which can be
+      // missing fields like `username` — the nudge below must see the real
+      // profile or it'll ask for things the account already has.
+      const user = await signIn(payload);
       queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
       onClose();
-      onAuthenticated?.(payload.user);
+      onAuthenticated?.(user);
     },
     [onAuthenticated, onClose, queryClient, signIn],
   );
@@ -139,13 +152,20 @@ export function AuthSheet({
     setError(null);
     setDuplicateIdentifier(null);
     try {
-      const payload = await register({
+      const result = await register({
         fullName: fullName.trim(),
         phoneNumber: nationalEthiopianNumber(phone),
         email: email.trim() || undefined,
         password,
       });
-      await completeSignIn(payload);
+      if (result.requiresOtp) {
+        setOtpEmail(result.email);
+        setMaskedDestination(result.maskedDestination);
+        setCode('');
+        goTo('verify-phone');
+      } else {
+        await completeSignIn(result);
+      }
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'EMAIL_TAKEN' || err.code === 'PHONE_TAKEN')) {
         setError(err.message);
@@ -160,7 +180,17 @@ export function AuthSheet({
     } finally {
       setSubmitting(false);
     }
-  }, [completeSignIn, email, fullName, nameError, phone, phoneError, password, passwordError]);
+  }, [
+    completeSignIn,
+    email,
+    fullName,
+    goTo,
+    nameError,
+    phone,
+    phoneError,
+    password,
+    passwordError,
+  ]);
 
   const submitPassword = useCallback(async () => {
     setShowErrors(true);
@@ -201,6 +231,37 @@ export function AuthSheet({
       setSubmitting(false);
     }
   }, [code, codeError, completeSignIn, otpEmail]);
+
+  const submitVerifyPhone = useCallback(async () => {
+    setShowErrors(true);
+    if (codeError) return;
+
+    Keyboard.dismiss();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload = await verifyRegisterOtp(otpEmail, code);
+      await completeSignIn(payload);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'That code did not work. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [code, codeError, completeSignIn, otpEmail]);
+
+  const resendVerifyPhone = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await resendRegisterOtp(otpEmail);
+      setMaskedDestination(result.maskedDestination);
+      setCode('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send a code. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [otpEmail]);
 
   const requestResetCode = useCallback(async () => {
     setShowErrors(true);
@@ -423,6 +484,40 @@ export function AuthSheet({
               onPress={() => goTo('password')}>
               <Text variant="small" color="textSecondary">
                 Back to log in
+              </Text>
+            </Touchable>
+          </>
+        ) : null}
+
+        {mode === 'verify-phone' ? (
+          <>
+            <View style={styles.intro}>
+              <Text variant="title">Verify your number</Text>
+              <Text variant="small" color="textSecondary">
+                We sent a 6-digit code to {maskedDestination} to confirm it&apos;s really you.
+              </Text>
+            </View>
+
+            <OtpInput value={code} onChangeText={setCode} autoFocus />
+            {showErrors && codeError ? (
+              <Text variant="caption" color="danger">
+                {codeError}
+              </Text>
+            ) : null}
+
+            {error ? (
+              <Text variant="small" color="danger" style={styles.error}>
+                {error}
+              </Text>
+            ) : null}
+
+            <Button label="Verify" size="lg" loading={submitting} onPress={submitVerifyPhone} />
+            <Touchable
+              accessibilityRole="button"
+              style={styles.linkCenter}
+              onPress={resendVerifyPhone}>
+              <Text variant="small" color="brand">
+                Resend code
               </Text>
             </Touchable>
           </>

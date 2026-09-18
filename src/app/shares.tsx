@@ -21,6 +21,7 @@ import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import type { ShareConversation } from '@/lib/conversations';
 import { pendingIncomingCounterpartyIds } from '@/lib/conversations';
+import { inviteChatPreview, parseInviteLink } from '@/lib/invite-link';
 import { beverageShareToViewModel, cinemaShareToViewModel, ticketShareToViewModel } from '@/lib/share-item-view-model';
 import { useBeverageShares } from '@/queries/beverage-shares';
 import { useCinemaShares } from '@/queries/cinema-shares';
@@ -63,18 +64,29 @@ export default function SharesScreen() {
 
   const rows: ShareConversation[] = useMemo(
     () =>
-      conversations.map((conversation) => ({
-        counterpartyId: conversation.counterparty._id,
-        counterparty: conversation.counterparty,
-        shares: [],
-        lastActivityAt: conversation.lastMessageAt,
-        preview: {
-          text: conversation.lastMessagePreview ?? '',
-          sentByMe: conversation.lastMessageSenderId === myId,
-        },
-        hasPendingIncoming: pendingIncoming.has(conversation.counterparty._id),
-        unreadCount: conversation.unreadCount,
-      })),
+      conversations.map((conversation) => {
+        // An invite (movie/event/venue) is a plain MESSAGE whose text is a
+        // deep link — see `lib/invite-link.ts`. The backend just echoes it
+        // as the preview, so it's swapped for a friendly label here rather
+        // than showing the raw link in the Chats list.
+        const invite =
+          conversation.lastMessageKind === 'MESSAGE' && conversation.lastMessagePreview
+            ? parseInviteLink(conversation.lastMessagePreview)
+            : null;
+
+        return {
+          counterpartyId: conversation.counterparty._id,
+          counterparty: conversation.counterparty,
+          shares: [],
+          lastActivityAt: conversation.lastMessageAt,
+          preview: {
+            text: invite ? inviteChatPreview(invite.kind) : (conversation.lastMessagePreview ?? ''),
+            sentByMe: conversation.lastMessageSenderId === myId,
+          },
+          hasPendingIncoming: pendingIncoming.has(conversation.counterparty._id),
+          unreadCount: conversation.unreadCount,
+        };
+      }),
     [conversations, pendingIncoming, myId],
   );
 

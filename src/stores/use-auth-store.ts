@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { fetchMe } from '@/api/auth';
 import { setAuthToken } from '@/api/client';
 import { StorageKeys, secureStorage } from '@/lib/storage';
 import type { AuthPayload, User } from '@/types/api';
@@ -22,7 +23,8 @@ type AuthState = {
   /** False until the persisted session has been read, so nothing flashes signed-out. */
   hydrated: boolean;
   hydrate: () => Promise<void>;
-  signIn: (payload: AuthPayload) => Promise<void>;
+  /** Resolves to the authoritative profile — see the `signIn` implementation for why that isn't just `payload.user`. */
+  signIn: (payload: AuthPayload) => Promise<User>;
   /** Refreshes the cached profile in place without touching the session. */
   setUser: (user: User) => Promise<void>;
   signOut: () => Promise<void>;
@@ -56,10 +58,18 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signIn: async ({ user, token }) => {
     setAuthToken(token);
     set({ user, token });
+    // `/auth/login` and `/auth/register` don't reliably echo back every profile
+    // field (username in particular can be missing even when the account has
+    // one set), so this reconciles against `/auth/me` before anything — the
+    // post-signin "add your email"/"pick a username" nudge included — trusts
+    // the profile as complete.
+    const resolved = await fetchMe().catch(() => user);
+    set({ user: resolved });
     await Promise.all([
       secureStorage.set(StorageKeys.token, token),
-      secureStorage.set(StorageKeys.user, JSON.stringify(user)),
+      secureStorage.set(StorageKeys.user, JSON.stringify(resolved)),
     ]);
+    return resolved;
   },
 
   setUser: async (user) => {
@@ -81,4 +91,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
 export function displayName(user: User | null): string {
   if (!user) return 'Guest';
   return [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.email;
+}
+
+/** A no-email account either skipped it at signup or still has the backend's placeholder. */
+export function needsEmail(user: User): boolean {
+  return !user.email || user.email.includes('customerpazimo');
 }

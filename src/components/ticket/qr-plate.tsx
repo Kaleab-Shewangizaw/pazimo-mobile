@@ -18,13 +18,16 @@ const BRACKET_COLOR = 'rgba(255,255,255,0.45)';
 
 export type QrPlateProps = {
   size: number;
+  /** Defaults to `size` — pass a different value to draw a rectangular plate (e.g. for a barcode) instead of a square one. */
+  height?: number;
   children: ReactNode;
 };
 
-function QrPlateImpl({ size, children }: QrPlateProps) {
+function QrPlateImpl({ size, height, children }: QrPlateProps) {
+  const plateHeight = height ?? size;
   return (
-    <View style={{ width: size, height: size }}>
-      <View style={[styles.plate, { width: size, height: size }]}>{children}</View>
+    <View style={{ width: size, height: plateHeight }}>
+      <View style={[styles.plate, { width: size, height: plateHeight }]}>{children}</View>
       <View style={[styles.bracket, styles.topLeft]} />
       <View style={[styles.bracket, styles.topRight]} />
       <View style={[styles.bracket, styles.bottomLeft]} />

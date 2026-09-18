@@ -8,6 +8,7 @@ import { ApiError } from '@/api/client';
 import { submitRsvpResponse } from '@/api/rsvp';
 import { AttendeeStep } from '@/components/rsvp/attendee-step';
 import { ConfirmationScreen } from '@/components/rsvp/confirmation-screen';
+import { RsvpIntroStep } from '@/components/rsvp/intro-step';
 import { QuestionInput } from '@/components/rsvp/question-input';
 import { Button } from '@/components/ui/button';
 import { GlassButton } from '@/components/ui/glass-button';
@@ -57,6 +58,10 @@ export default function RsvpScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Once set, this replaces the wizard entirely — there is no guest-side edit/cancel to come back to.
   const [response, setResponse] = useState<RsvpResponse | null>(null);
+  // Gates the wizard behind a beautiful "are you interested" screen showing
+  // the form's own cover art and description, instead of dropping guests
+  // straight into input fields.
+  const [interested, setInterested] = useState(false);
 
   const steps = useMemo<Step[]>(() => {
     if (!form) return [];
@@ -125,7 +130,7 @@ export default function RsvpScreen() {
 
   const onBack = () => {
     if (stepIndex === 0) {
-      goBack();
+      setInterested(false);
       return;
     }
     setShowErrors(false);
@@ -167,6 +172,10 @@ export default function RsvpScreen() {
         </ScrollView>
       </View>
     );
+  }
+
+  if (!interested) {
+    return <RsvpIntroStep form={form} onContinue={() => setInterested(true)} onBack={goBack} />;
   }
 
   const cover = resolveImageUrl(form.coverImage);
