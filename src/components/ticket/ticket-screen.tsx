@@ -7,7 +7,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   ScrollView,
-  Share,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -26,7 +25,6 @@ import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useTicketDownload } from '@/hooks/use-ticket-download';
-import { formatTicketDate } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
 import { useRespondToShare, useTicketShares } from '@/queries/ticket-shares';
 import type { Ticket } from '@/types/api';
@@ -88,18 +86,6 @@ export function TicketScreen({
 
   const cover = eventCoverUrl(active?.event.coverImages);
   const many = tickets.length > 1;
-
-  const onShare = useCallback(() => {
-    if (!active) return;
-    Share.share({
-      message: `${active.event.title} — ${formatTicketDate(
-        active.event.startDate,
-        active.event.startTime,
-      )}\nTicket ${active.ticketId} on Pazimo`,
-    }).catch(() => {
-      // Dismissed; nothing to recover from.
-    });
-  }, [active]);
 
   // No token, no query — a guest opening a shared/deep-linked ticket can't
   // have an outgoing transfer of their own to check for.
@@ -233,15 +219,6 @@ export function TicketScreen({
           ) : null}
         </View>
         <View style={styles.headerActions}>
-          <Touchable
-            accessibilityRole="button"
-            accessibilityLabel="Share this ticket"
-            onPress={onShare}
-            pressedScale={0.9}
-            style={styles.headerButton}
-          >
-            <Ionicons name="share-outline" size={21} color="#FFFFFF" />
-          </Touchable>
           <Touchable
             accessibilityRole="button"
             accessibilityLabel="Send to a friend"

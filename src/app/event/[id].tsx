@@ -4,7 +4,7 @@ import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { ApiError } from '@/api/client';
 import { AuthSheet } from '@/components/account/auth-sheet';
 import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
 import { AvatarInitials } from '@/components/shares/avatar-initials';
+import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
@@ -88,6 +89,7 @@ export default function EventDetailScreen() {
   // so "Buy Now" opens this instead when signed out, and hands off straight
   // into the checkout sheet once it succeeds.
   const [authVisible, setAuthVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
   const { events: wishlist } = useWishlist();
   const { set: setWishlisted } = useSetWishlist();
   const saved = Boolean(event) && wishlist.some((wishlisted) => wishlisted._id === event!._id);
@@ -151,13 +153,6 @@ export default function EventDetailScreen() {
     // own reset), so CheckoutSheet only opens once AuthSheet is fully gone.
     setTimeout(() => setSheetVisible(true), 260);
   }, []);
-
-  const onShare = useCallback(() => {
-    if (!event) return;
-    Share.share({ message: `${event.title} — on Pazimo` }).catch(() => {
-      // User dismissed the sheet; nothing to recover from.
-    });
-  }, [event]);
 
   // Worth pulling on: tier inventory and sold-out state are the parts of this
   // page most likely to have moved since it was cached.
@@ -388,7 +383,7 @@ export default function EventDetailScreen() {
           <GlassIconButton
             icon="share-outline"
             accessibilityLabel="Share this event"
-            onPress={onShare}
+            onPress={() => setShareVisible(true)}
             blurTarget={backdropRef}
           />
         </View>
@@ -428,6 +423,17 @@ export default function EventDetailScreen() {
         onClose={() => setAuthVisible(false)}
         onAuthenticated={onAuthenticated}
       />
+
+      {event ? (
+        <InviteShareSheet
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          kind="event"
+          id={event.shortId ?? event._id}
+          title={event.title}
+          image={cover}
+        />
+      ) : null}
 
       {/* Sits under the chrome (zIndex) so Back stays reachable on a slow
           connection, but over everything else until the reveal. */}

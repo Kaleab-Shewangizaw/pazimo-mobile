@@ -748,6 +748,11 @@ export type CinemaSeatMap =
       needsRepricing: boolean;
     };
 
+/** The admin-uploaded clip for the auditorium screen — platform-wide, not per-cinema. */
+export type CinemaScreenConfig = {
+  video: string | null;
+};
+
 export type CinemaConcessionItem = {
   _id: string;
   beverage: {
@@ -996,10 +1001,17 @@ export type RefillBeverageItem = {
   name: string;
   image?: string | null;
   color?: string | null;
+  /** What this item actually charges — already discounted when `isHappyHour` is set. */
   price: number;
   currency: Currency;
   /** `stockTotal - sold`, already floored at 0 server-side. */
   remaining: number;
+  /** Set while a happy-hour discount is active on this item. */
+  isHappyHour?: boolean;
+  /** Pre-discount price, only meaningful when `isHappyHour` is true — shown struck through next to `price`. */
+  originalPrice?: number;
+  /** When the current happy-hour window closes, if the server reports it. */
+  happyHourEndsAt?: string | null;
 };
 
 export type RefillEventCatalog = {
