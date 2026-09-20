@@ -4,9 +4,10 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { memo, useCallback } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useState } from 'react';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 
+import { AuthSheet } from '@/components/account/auth-sheet';
 import { GlassChip, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
@@ -16,6 +17,7 @@ import { formatDateTime } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
 import { formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
 import { useSetWishlist, useWishlist } from '@/queries/events';
+import { useAuthStore } from '@/stores/use-auth-store';
 import type { Currency, PazimoEvent } from '@/types/api';
 
 /**
@@ -52,8 +54,10 @@ export type EventCardProps = {
 function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardProps) {
   const theme = useTheme();
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const { events: wishlist } = useWishlist();
-  const { set: setWishlisted } = useSetWishlist();
+  const { set: setWishlisted, submitting: wishlistSubmitting } = useSetWishlist();
+  const [authVisible, setAuthVisible] = useState(false);
   const saved = wishlist.some((wishlisted) => wishlisted._id === event._id);
 
   const cover = eventCoverUrl(event.coverImages);
@@ -68,8 +72,21 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
     router.push(`/event/${event.shortId ?? event._id}`);
   }, [event._id, event.shortId, router]);
 
+  // Wishlisting requires a session — with no auth gate here, a signed-out tap
+  // just 401'd silently. Route to sign-in instead, same as the detail page's
+  // "Buy Now" does when signed out.
+  const onToggleWishlist = useCallback(async () => {
+    if (!user) {
+      setAuthVisible(true);
+      return;
+    }
+    const ok = await setWishlisted(event._id, !saved);
+    if (!ok) Alert.alert('Could not update wishlist', 'Please try again.');
+  }, [user, event._id, saved, setWishlisted]);
+
   return (
-    <Touchable
+    <>
+      <Touchable
       accessibilityRole="button"
       accessibilityLabel={`${event.title}. ${formatDateTime(event.startDate, event.startTime)}`}
       onPress={onPress}
@@ -100,7 +117,8 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
           color={saved ? '#E11D48' : '#FFFFFF'}
           size={36}
           haptic
-          onPress={() => setWishlisted(event._id, !saved)}
+          disabled={wishlistSubmitting}
+          onPress={onToggleWishlist}
         />
       </View>
 
@@ -170,7 +188,9 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
           ) : null}
         </View>
       </View>
-    </Touchable>
+      </Touchable>
+      <AuthSheet visible={authVisible} onClose={() => setAuthVisible(false)} />
+    </>
   );
 }
 

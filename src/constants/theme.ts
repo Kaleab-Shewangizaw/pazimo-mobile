@@ -30,7 +30,7 @@ const palette = {
   surface: '#16161A',
   surfaceMuted: '#1E1E23',
 
-  glass: 'rgba(22, 22, 26, 0.55)',
+  glass: 'rgba(22, 22, 26, 0.68)',
   glassStrong: 'rgba(12, 12, 15, 0.80)',
   glassBorder: 'rgba(255, 255, 255, 0.10)',
   hairline: 'rgba(255, 255, 255, 0.08)',

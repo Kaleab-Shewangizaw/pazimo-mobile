@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "pazimo-mobile",
+    "name": "pazimo",
     "slug": "pazimo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,8 @@
     "backgroundColor": "#08080A",
     "ios": {
       "icon": "./assets/expo.icon",
-      "userInterfaceStyle": "dark"
+      "userInterfaceStyle": "dark",
+      "associatedDomains": ["applinks:pazimo.com"]
     },
     "android": {
       "userInterfaceStyle": "dark",
@@ -20,7 +21,16 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.kal_x.pazimomobile",
+      "intentFilters": [
+        {
+          "autoVerify": true,
+          "action": "VIEW",
+          "data": [{ "scheme": "https", "host": "pazimo.com", "pathPrefix": "/events/" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",

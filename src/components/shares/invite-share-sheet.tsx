@@ -11,7 +11,7 @@ import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { isResolvableIdentifier } from '@/lib/identifier';
-import { buildInviteLink, type InviteKind } from '@/lib/invite-link';
+import { buildInviteLink, buildPublicInviteLink, type InviteKind } from '@/lib/invite-link';
 import { useConversationsList, useSendMessage } from '@/queries/messages';
 import { useShareSearch } from '@/queries/ticket-shares';
 import type { ShareUser } from '@/types/api';
@@ -68,8 +68,13 @@ export function InviteShareSheet({
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState('Copy link');
 
+  // In-chat sends use the app's own deep link (a rich card renders from it,
+  // see the module doc). Copy/external-share needs a URL that works for
+  // someone without the app installed, so those use the public web page
+  // instead, falling back to the deep link where there isn't one yet.
   const link = buildInviteLink(kind, id, { openShowtimes: kind === 'movie' });
-  const shareText = `${KIND_INVITE_LINE[kind]} — ${title}\n${link}`;
+  const publicLink = buildPublicInviteLink(kind, id) ?? link;
+  const shareText = `${KIND_INVITE_LINE[kind]} — ${title}\n${publicLink}`;
 
   const trimmed = deferredQuery.trim();
   const resolvable = isResolvableIdentifier(trimmed);
@@ -87,11 +92,11 @@ export function InviteShareSheet({
   );
 
   const copyLink = useCallback(() => {
-    Clipboard.setStringAsync(link).then(() => {
+    Clipboard.setStringAsync(publicLink).then(() => {
       setCopyLabel('Copied!');
       setTimeout(() => setCopyLabel('Copy link'), 1500);
     });
-  }, [link]);
+  }, [publicLink]);
 
   const shareExternally = useCallback(() => {
     Share.share({ message: shareText }).catch(() => {
