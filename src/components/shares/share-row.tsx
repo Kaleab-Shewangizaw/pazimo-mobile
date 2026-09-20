@@ -2,11 +2,13 @@ import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AvatarInitials } from '@/components/shares/avatar-initials';
+import { InviteMessageCard } from '@/components/shares/invite-message-card';
 import { Text } from '@/components/ui/text';
 import { Touchable } from '@/components/ui/pressable';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTimeLabel } from '@/lib/date';
+import { inviteChatPreview, parseInviteLink } from '@/lib/invite-link';
 import type { ShareItemViewModel, ShareKind } from '@/lib/share-item-view-model';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { ShareStatus } from '@/types/api';
@@ -158,7 +160,14 @@ function MessageBubble({
   // Only the sender can edit/delete their own message.
   const actionable = sent && Boolean(onLongPress);
 
-  const bubble = (
+  // An invite (movie/event/venue) rides as a plain message whose text is a
+  // deep link — see `lib/invite-link.ts`. Detected here so it renders as a
+  // rich card instead of raw link text.
+  const invite = share.message ? parseInviteLink(share.message) : null;
+
+  const bubble = invite ? (
+    <InviteMessageCard kind={invite.kind} id={invite.id} openShowtimes={invite.openShowtimes} sent={sent} />
+  ) : (
     <View
       style={[
         styles.messageBubble,
@@ -180,7 +189,7 @@ function MessageBubble({
 
   return (
     <View
-      accessibilityLabel={`${sent ? 'You' : otherName}: ${share.message}`}
+      accessibilityLabel={`${sent ? 'You' : otherName}: ${invite ? inviteChatPreview(invite.kind) : share.message}`}
       style={[styles.row, sent ? styles.rowSent : styles.rowReceived]}>
       <AvatarInitials name={otherName} size={40} />
       {actionable ? (

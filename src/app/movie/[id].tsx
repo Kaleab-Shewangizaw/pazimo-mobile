@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShowtimeSheet } from '@/components/cinema/showtime-sheet';
 import { TrailerPlayer } from '@/components/cinema/trailer-player';
+import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
 import { Button } from '@/components/ui/button';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
 import { Text } from '@/components/ui/text';
@@ -41,12 +42,14 @@ const BOOK_BAR_HEIGHT = Spacing.md + Spacing.lg * 2 + 22;
  * the viewer was just looking at.
  */
 export default function MovieScreen() {
-  const { id, cinemaId, date } = useLocalSearchParams<{
+  const { id, cinemaId, date, openShowtimes } = useLocalSearchParams<{
     id: string;
     cinemaId?: string;
     /** `YYYY-MM-DD` — the single day picked on the cinema screen. Booking is
      * scoped to it: this page only ever offers the day the viewer already chose. */
     date?: string;
+    /** Set by a tapped chat invite card (`invite-message-card.tsx`) — opens the showtime sheet as soon as a bookable slot exists, same as tapping "Book Now" would. */
+    openShowtimes?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -56,9 +59,26 @@ export default function MovieScreen() {
 
   const [playing, setPlaying] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const detail = useCinemaMovie(id);
   const cached = useCinemaShowtimes(cinemaId);
+
+  // Fires at most once per mount — computed independently of `days`/`bookable`
+  // below since those are derived after this component's early "not found"
+  // return, and hooks can't be conditional on that.
+  const autoOpenedShowtimes = useRef(false);
+  useEffect(() => {
+    if (autoOpenedShowtimes.current || openShowtimes !== '1') return;
+    const allDays = detail.page?.days ?? [];
+    const scopedDays = date ? allDays.filter((d) => d.date === date) : allDays;
+    const hasBookableSlot = scopedDays.some((d) => d.showtimes.some((s) => !s.soldOut));
+    if (hasBookableSlot) {
+      autoOpenedShowtimes.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to the single-film fetch landing (an external async source), not to a prior render's own state; there's no render this could be computed in instead.
+      setSheetVisible(true);
+    }
+  }, [openShowtimes, date, detail.page]);
 
   // The programme's own copy of this film, used until the detail lands and as
   // the fallback if it never does. Scoped to the picked day too, so the page
@@ -154,11 +174,18 @@ export default function MovieScreen() {
 
       <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
         <GlassIconButton icon="arrow-back" accessibilityLabel="Go back" onPress={goBack} />
-        {cinemaName ? (
-          <Text variant="caption" color="textSecondary" numberOfLines={1} style={styles.headerText}>
-            {cinemaName}
-          </Text>
-        ) : null}
+        <View style={styles.headerText}>
+          {cinemaName ? (
+            <Text variant="caption" color="textSecondary" numberOfLines={1}>
+              {cinemaName}
+            </Text>
+          ) : null}
+        </View>
+        <GlassIconButton
+          icon="share-outline"
+          accessibilityLabel="Share this movie"
+          onPress={() => setShareVisible(true)}
+        />
       </View>
 
       <ScrollView
@@ -171,7 +198,12 @@ export default function MovieScreen() {
         {/* The trailer takes the poster's exact footprint, so starting it swaps
             one rectangle for another instead of reflowing the page. */}
         {playing && trailer ? (
-          <TrailerPlayer trailer={trailer} width={posterWidth} height={posterHeight} />
+          <TrailerPlayer
+            trailer={trailer}
+            width={posterWidth}
+            height={posterHeight}
+            onClose={() => setPlaying(false)}
+          />
         ) : (
           <View style={[styles.poster, { width: posterWidth, height: posterHeight }]}>
             {poster ? (
@@ -259,6 +291,15 @@ export default function MovieScreen() {
         onClose={() => setSheetVisible(false)}
         days={days}
         onSelect={onSelectSlot}
+      />
+
+      <InviteShareSheet
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        kind="movie"
+        id={id}
+        title={movie.title}
+        image={poster}
       />
     </View>
   );

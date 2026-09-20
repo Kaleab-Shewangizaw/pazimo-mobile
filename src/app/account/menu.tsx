@@ -62,6 +62,17 @@ export default function AccountMenuScreen() {
         </View>
 
         <View>
+          <SectionHeader title="Security" />
+          <ListCard>
+            <ListRow
+              icon="shield-checkmark-outline"
+              label="Security"
+              onPress={() => router.push('/account/security')}
+            />
+          </ListCard>
+        </View>
+
+        <View>
           <SectionHeader title="Your activity" />
           <ListCard>
             <ListRow

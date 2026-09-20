@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -6,6 +7,7 @@ import { cinemaTicketQrUrl } from '@/api/cinema-checkout';
 import { DetailRow } from '@/components/ticket/detail-row';
 import { QrPlate } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
+import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { resolveImageUrl } from '@/lib/media';
@@ -35,6 +37,8 @@ export type CinemaTicketViewProps = {
   /** Real glass instead of a flat dark fill. Needs `blurTarget` to have anything to sample on Android. */
   glass?: boolean;
   blurTarget?: RefObject<View | null>;
+  /** Opens the itemized seats/snacks sheet — omitted, the "Show seats & snacks" line doesn't render. */
+  onShowSeats?: () => void;
 };
 
 function CinemaTicketViewImpl({
@@ -43,6 +47,7 @@ function CinemaTicketViewImpl({
   fill = false,
   glass = false,
   blurTarget,
+  onShowSeats,
 }: CinemaTicketViewProps) {
   const window = useWindowDimensions();
   const available = width ?? window.width - Spacing.lg * 2;
@@ -135,6 +140,20 @@ function CinemaTicketViewImpl({
           <Text variant="small" color="textSecondary" style={styles.centered}>
             {admits}
           </Text>
+
+          {onShowSeats ? (
+            <Touchable
+              accessibilityRole="button"
+              accessibilityLabel="Show seats and snacks"
+              onPress={onShowSeats}
+              pressedScale={0.96}
+              style={styles.showSeatsButton}>
+              <Text variant="small" color="textSecondary" style={styles.showSeatsText}>
+                Show seats & snacks
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.55)" />
+            </Touchable>
+          ) : null}
         </View>
       }
       details={
@@ -203,6 +222,15 @@ const styles = StyleSheet.create({
   centered: { textAlign: 'center' },
 
   plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
+
+  showSeatsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: Spacing.sm,
+    alignSelf: 'center',
+  },
+  showSeatsText: { textDecorationLine: 'underline' },
 
   qrGrid: {
     flexDirection: 'row',

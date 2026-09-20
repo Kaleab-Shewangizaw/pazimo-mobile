@@ -4,9 +4,12 @@ import { useCallback, useState } from 'react';
 import {
   deleteAccount,
   fetchNotificationPreferences,
+  sendPhoneVerifyOtp,
   updateNotificationPreferences,
+  updateOtpPreference,
   updatePassword,
   updateProfile,
+  verifyPhoneOtp,
 } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { queryKeys } from '@/queries/keys';
@@ -98,6 +101,84 @@ export function useUpdatePassword() {
       setSubmitting(false);
     }
   }, []);
+
+  return { submit, submitting, error };
+}
+
+/** Sends (or re-sends) a phone-verification code to the signed-in user's own number. */
+export function useSendPhoneVerifyOtp() {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await sendPhoneVerifyOtp();
+      return result.maskedDestination;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send a code. Try again.');
+      return null;
+    } finally {
+      setSubmitting(false);
+    }
+  }, []);
+
+  return { submit, submitting, error };
+}
+
+/** Completes phone verification, refreshing the cached profile in the auth store on success. */
+export function useVerifyPhoneOtp() {
+  const setUser = useAuthStore((s) => s.setUser);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(
+    async (code: string) => {
+      setSubmitting(true);
+      setError(null);
+      try {
+        const user = await verifyPhoneOtp(code);
+        await setUser(user);
+        return true;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'That code did not work. Try again.');
+        return false;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [setUser],
+  );
+
+  return { submit, submitting, error };
+}
+
+/** Login-code (2FA) toggle — the backend rejects turning it on until the phone is verified. */
+export function useUpdateOtpPreference() {
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(
+    async (enabled: boolean) => {
+      if (!user) return false;
+      setSubmitting(true);
+      setError(null);
+      try {
+        const { otpEnabled } = await updateOtpPreference(enabled);
+        await setUser({ ...user, otpEnabled });
+        return true;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'That did not go through. Try again.');
+        return false;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [setUser, user],
+  );
 
   return { submit, submitting, error };
 }

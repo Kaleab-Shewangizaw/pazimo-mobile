@@ -1,3 +1,4 @@
+import { resolveImageUrl } from '@/lib/media';
 import type { PazimoEvent } from '@/types/api';
 
 /**
@@ -11,4 +12,12 @@ export function organizerDisplayName(event: Pick<PazimoEvent, 'organizer'>): str
 
   const joined = [organizer.firstName, organizer.lastName].filter(Boolean).join(' ');
   return organizer.organizerProfile?.organization || organizer.fullName || joined || null;
+}
+
+/** Organization profile image, resolved to a usable URL. Falls back to initials when absent. */
+export function organizerImageUrl(event: Pick<PazimoEvent, 'organizer'>): string | null {
+  const { organizer } = event;
+  if (!organizer || typeof organizer === 'string') return null;
+
+  return resolveImageUrl(organizer.organizerProfile?.image);
 }

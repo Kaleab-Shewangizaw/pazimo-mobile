@@ -1,13 +1,16 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
 import { BasketFooter } from '@/components/refill/basket-footer';
-import { BeverageLine } from '@/components/refill/beverage-line';
+import { BeverageCard } from '@/components/refill/beverage-card';
 import { CatalogHero } from '@/components/refill/catalog-hero';
 import { RefillCheckoutSheet } from '@/components/refill/refill-checkout-sheet';
+import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
+import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
@@ -17,6 +20,7 @@ import { useVenueBeverageCatalog } from '@/queries/beverages';
 import type { RefillBeverageItem } from '@/types/api';
 
 const SKELETON_ROWS = [0, 1, 2];
+const SHARE_BUTTON = 40;
 
 /** The buyable line-up for one venue — reached only from the Refill page's Venues tab. */
 export default function VenueRefillScreen() {
@@ -26,6 +30,7 @@ export default function VenueRefillScreen() {
   const { items, venue, isLoading, isError, error, refetch } = useVenueBeverageCatalog(venueId);
   const [quantities, setQuantities] = useState<Map<string, number>>(() => new Map());
   const [checkoutVisible, setCheckoutVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const changeQuantity = (itemId: string, quantity: number) => {
     setQuantities((current) => {
@@ -63,13 +68,31 @@ export default function VenueRefillScreen() {
     <View style={styles.screen}>
       <AmbientBackground />
 
-      <CatalogHero cover={cover || null} title={venue?.name ?? 'Drinks'} subtitle={venue?.city} onBack={goBack} />
+      <CatalogHero
+        cover={cover || null}
+        title={venue?.name ?? 'Drinks'}
+        subtitle={venue?.city}
+        onBack={goBack}
+        accessory={
+          <Touchable
+            accessibilityRole="button"
+            accessibilityLabel="Share this venue"
+            onPress={() => setShareVisible(true)}
+            pressedScale={0.9}
+            haptic
+            style={styles.shareButton}>
+            <Ionicons name="share-outline" size={19} color="#FFFFFF" />
+          </Touchable>
+        }
+      />
 
       {isLoading ? (
         <View style={styles.list}>
-          {SKELETON_ROWS.map((row) => (
-            <LineSkeleton key={row} />
-          ))}
+          <View style={styles.grid}>
+            {SKELETON_ROWS.map((row) => (
+              <CardSkeleton key={row} />
+            ))}
+          </View>
         </View>
       ) : isError ? (
         <View style={styles.centered}>
@@ -86,8 +109,10 @@ export default function VenueRefillScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
           renderItem={({ item }: { item: RefillBeverageItem }) => (
-            <BeverageLine
+            <BeverageCard
               item={item}
               quantity={quantities.get(item.id) ?? 0}
               onChange={(q) => changeQuantity(item.id, q)}
@@ -124,17 +149,29 @@ export default function VenueRefillScreen() {
           summary={`${itemCount} item${itemCount === 1 ? '' : 's'} from ${venue?.name ?? 'this venue'}`}
         />
       ) : null}
+
+      {venueId ? (
+        <InviteShareSheet
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          kind="venue"
+          id={venueId}
+          title={venue?.name ?? 'Drinks'}
+          subtitle={venue?.city}
+          image={cover || null}
+        />
+      ) : null}
     </View>
   );
 }
 
-function LineSkeleton() {
+function CardSkeleton() {
   return (
-    <View style={styles.skeletonRow}>
-      <Skeleton width={60} height={60} radius={Radius.md} />
+    <View style={styles.skeletonCard}>
+      <Skeleton width="100%" height="auto" radius={Radius.md} style={styles.skeletonPlate} />
       <View style={styles.skeletonText}>
-        <Skeleton width="55%" height={16} />
-        <Skeleton width="35%" height={12} />
+        <Skeleton width="70%" height={14} />
+        <Skeleton width="45%" height={12} />
       </View>
     </View>
   );
@@ -144,7 +181,18 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl },
   list: { padding: Spacing.lg, gap: Spacing.sm },
+  grid: { flexDirection: 'row', gap: Spacing.sm },
+  gridRow: { gap: Spacing.sm },
   sectionLabel: { marginBottom: Spacing.sm },
-  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },
-  skeletonText: { flex: 1, gap: 6 },
+  shareButton: {
+    width: SHARE_BUTTON,
+    height: SHARE_BUTTON,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  skeletonCard: { flex: 1, gap: Spacing.sm },
+  skeletonPlate: { aspectRatio: 1 },
+  skeletonText: { gap: 6 },
 });

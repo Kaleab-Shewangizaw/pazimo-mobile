@@ -4,13 +4,15 @@ import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
 import { AuthSheet } from '@/components/account/auth-sheet';
 import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
+import { AvatarInitials } from '@/components/shares/avatar-initials';
+import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
@@ -25,7 +27,7 @@ import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate } from '@/lib/date';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
-import { organizerDisplayName } from '@/lib/organizer';
+import { organizerDisplayName, organizerImageUrl } from '@/lib/organizer';
 import { isSoldOut } from '@/lib/pricing';
 import { useEvent, useSetWishlist, useWishlist } from '@/queries/events';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -87,6 +89,7 @@ export default function EventDetailScreen() {
   // so "Buy Now" opens this instead when signed out, and hands off straight
   // into the checkout sheet once it succeeds.
   const [authVisible, setAuthVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
   const { events: wishlist } = useWishlist();
   const { set: setWishlisted } = useSetWishlist();
   const saved = Boolean(event) && wishlist.some((wishlisted) => wishlisted._id === event!._id);
@@ -112,6 +115,7 @@ export default function EventDetailScreen() {
 
   const cover = eventCoverUrl(event?.coverImages);
   const organizer = event ? organizerDisplayName(event) : null;
+  const organizerImage = event ? organizerImageUrl(event) : null;
 
   const venue = [event?.location?.address, event?.location?.city].filter(Boolean).join(', ');
 
@@ -149,13 +153,6 @@ export default function EventDetailScreen() {
     // own reset), so CheckoutSheet only opens once AuthSheet is fully gone.
     setTimeout(() => setSheetVisible(true), 260);
   }, []);
-
-  const onShare = useCallback(() => {
-    if (!event) return;
-    Share.share({ message: `${event.title} — on Pazimo` }).catch(() => {
-      // User dismissed the sheet; nothing to recover from.
-    });
-  }, [event]);
 
   // Worth pulling on: tier inventory and sold-out state are the parts of this
   // page most likely to have moved since it was cached.
@@ -319,11 +316,7 @@ export default function EventDetailScreen() {
             {organizer ? (
               <View style={styles.block}>
                 <View style={[styles.hostCard, { borderColor: theme.glassBorder }]}>
-                  <View style={styles.hostAvatar}>
-                    <Text variant="callout" style={styles.hostInitial}>
-                      {organizer.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <AvatarInitials name={organizer} size={42} imageUri={organizerImage} />
                   <View style={styles.hostText}>
                     <Text variant="caption" style={styles.hostLabel}>
                       Hosted by
@@ -390,7 +383,7 @@ export default function EventDetailScreen() {
           <GlassIconButton
             icon="share-outline"
             accessibilityLabel="Share this event"
-            onPress={onShare}
+            onPress={() => setShareVisible(true)}
             blurTarget={backdropRef}
           />
         </View>
@@ -430,6 +423,17 @@ export default function EventDetailScreen() {
         onClose={() => setAuthVisible(false)}
         onAuthenticated={onAuthenticated}
       />
+
+      {event ? (
+        <InviteShareSheet
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          kind="event"
+          id={event.shortId ?? event._id}
+          title={event.title}
+          image={cover}
+        />
+      ) : null}
 
       {/* Sits under the chrome (zIndex) so Back stays reachable on a slow
           connection, but over everything else until the reveal. */}
@@ -503,17 +507,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  hostAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  hostInitial: { color: '#FFFFFF' },
   hostText: { flex: 1, gap: 1 },
   hostLabel: { color: 'rgba(255,255,255,0.55)' },
   hostName: { color: '#FFFFFF' },

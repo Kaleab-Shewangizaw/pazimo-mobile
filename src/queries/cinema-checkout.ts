@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '@/api/client';
 import { fetchCinemaConcessions } from '@/api/cinema';
-import { fetchShowtimeSeats, quoteCinemaCheckout } from '@/api/cinema-checkout';
+import { fetchScreenVideo, fetchShowtimeSeats, quoteCinemaCheckout } from '@/api/cinema-checkout';
 import { queryKeys } from '@/queries/keys';
 import type { CinemaCheckoutBasket, CinemaCheckoutQuote } from '@/types/api';
 
@@ -12,6 +12,9 @@ const SEATS_STALE_TIME = 10 * 1000;
 
 /** Matches `CINEMA_STALE_TIME` in `queries/cinema.ts`: a cinema's snack lineup changes at human scale. */
 const CONCESSIONS_STALE_TIME = 5 * 60 * 1000;
+
+/** Admin-set, rarely changed — matches the payment provider config's own staleTime. */
+const SCREEN_VIDEO_STALE_TIME = 10 * 60 * 1000;
 
 export function useShowtimeSeats(showtimeId: string | undefined) {
   const query = useQuery({
@@ -22,6 +25,17 @@ export function useShowtimeSeats(showtimeId: string | undefined) {
   });
 
   return { ...query, seatMap: query.data };
+}
+
+/** The seat map's screen backdrop — one clip for every cinema, admin-set. */
+export function useScreenVideo() {
+  const query = useQuery({
+    queryKey: queryKeys.cinemaCheckout.screenVideo(),
+    queryFn: fetchScreenVideo,
+    staleTime: SCREEN_VIDEO_STALE_TIME,
+  });
+
+  return { ...query, video: query.data?.video ?? null };
 }
 
 export function useCinemaConcessions(cinemaId: string | undefined) {

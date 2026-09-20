@@ -4,7 +4,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
 import { BasketFooter } from '@/components/refill/basket-footer';
-import { BeverageLine } from '@/components/refill/beverage-line';
+import { BeverageCard } from '@/components/refill/beverage-card';
 import { CatalogHero } from '@/components/refill/catalog-hero';
 import { RefillCheckoutSheet } from '@/components/refill/refill-checkout-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
@@ -73,9 +73,11 @@ export default function EventRefillScreen() {
 
       {isLoading ? (
         <View style={styles.list}>
-          {SKELETON_ROWS.map((row) => (
-            <LineSkeleton key={row} />
-          ))}
+          <View style={styles.grid}>
+            {SKELETON_ROWS.map((row) => (
+              <CardSkeleton key={row} />
+            ))}
+          </View>
         </View>
       ) : isError ? (
         <View style={styles.centered}>
@@ -92,8 +94,10 @@ export default function EventRefillScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
           renderItem={({ item }: { item: RefillBeverageItem }) => (
-            <BeverageLine
+            <BeverageCard
               item={item}
               quantity={quantities.get(item.id) ?? 0}
               onChange={(q) => changeQuantity(item.id, q)}
@@ -134,13 +138,13 @@ export default function EventRefillScreen() {
   );
 }
 
-function LineSkeleton() {
+function CardSkeleton() {
   return (
-    <View style={styles.skeletonRow}>
-      <Skeleton width={60} height={60} radius={Radius.md} />
+    <View style={styles.skeletonCard}>
+      <Skeleton width="100%" height="auto" radius={Radius.md} style={styles.skeletonPlate} />
       <View style={styles.skeletonText}>
-        <Skeleton width="55%" height={16} />
-        <Skeleton width="35%" height={12} />
+        <Skeleton width="70%" height={14} />
+        <Skeleton width="45%" height={12} />
       </View>
     </View>
   );
@@ -150,7 +154,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.xl },
   list: { padding: Spacing.lg, gap: Spacing.sm },
+  grid: { flexDirection: 'row', gap: Spacing.sm },
+  gridRow: { gap: Spacing.sm },
   sectionLabel: { marginBottom: Spacing.sm },
-  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },
-  skeletonText: { flex: 1, gap: 6 },
+  skeletonCard: { flex: 1, gap: Spacing.sm },
+  skeletonPlate: { aspectRatio: 1 },
+  skeletonText: { gap: 6 },
 });

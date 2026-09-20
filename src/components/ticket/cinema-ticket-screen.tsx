@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaTicketView } from '@/components/ticket/cinema-ticket-view';
+import { SeatsConcessionsSheet } from '@/components/ticket/seats-concessions-sheet';
 import { ShareItemSheet } from '@/components/shares/share-item-sheet';
 import { Button } from '@/components/ui/button';
 import { Touchable } from '@/components/ui/pressable';
@@ -49,6 +50,7 @@ export function CinemaTicketScreen({
   const insets = useSafeAreaInsets();
   const backdropRef = useRef<View>(null);
   const [shareVisible, setShareVisible] = useState(false);
+  const [seatsVisible, setSeatsVisible] = useState(false);
 
   // One order can hold both a ticket and a snack — the sheet's kind picker
   // only offers what this order actually has, and skips itself entirely
@@ -73,7 +75,13 @@ export function CinemaTicketScreen({
 
   const body = (
     <View style={styles.single}>
-      <CinemaTicketView order={order} fill glass blurTarget={backdropRef} />
+      <CinemaTicketView
+        order={order}
+        fill
+        glass
+        blurTarget={backdropRef}
+        onShowSeats={() => setSeatsVisible(true)}
+      />
     </View>
   );
 
@@ -140,6 +148,12 @@ export function CinemaTicketScreen({
         onClose={() => setShareVisible(false)}
         forcedKind={forcedKind}
         allowedKinds={allowedKinds}
+      />
+
+      <SeatsConcessionsSheet
+        visible={seatsVisible}
+        onClose={() => setSeatsVisible(false)}
+        order={order}
       />
     </View>
   );
