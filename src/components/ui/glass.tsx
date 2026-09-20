@@ -69,7 +69,7 @@ const ANDROID_BLUR = 'dimezisBlurViewSdk31Plus';
 function GlassImpl({
   children,
   variant = 'regular',
-  intensity = 40,
+  intensity = 55,
   radius = Radius.lg,
   bordered = true,
   tint,

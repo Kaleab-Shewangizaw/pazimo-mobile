@@ -80,14 +80,27 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A handful of backend error paths echo a caught exception's `.message`
+ * straight into the response body with no guard — and `new Error(null)` (or
+ * `undefined`) stringifies to the literal text "null"/"undefined", which is
+ * a real, valid, non-empty string as far as this function is concerned.
+ * Reject those specifically rather than showing meaningless text.
+ */
+const JUNK_MESSAGES = new Set(['null', 'undefined', '[object object]']);
+
+function isUsableMessage(value: unknown): value is string {
+  return typeof value === 'string' && Boolean(value.trim()) && !JUNK_MESSAGES.has(value.trim().toLowerCase());
+}
+
 /** Pulls a human message out of any of the shapes the backend actually emits. */
 function messageFrom(body: unknown, fallback: string): string {
-  if (typeof body === 'string' && body.trim()) return body;
+  if (isUsableMessage(body)) return body;
   if (body && typeof body === 'object') {
     const b = body as Record<string, unknown>;
     for (const key of ['message', 'error'] as const) {
       const value = b[key];
-      if (typeof value === 'string' && value.trim()) return value;
+      if (isUsableMessage(value)) return value;
     }
   }
   return fallback;

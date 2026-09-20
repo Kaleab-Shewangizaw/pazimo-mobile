@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.09)',
     paddingHorizontal: Spacing.lg,
   },
   divider: { height: StyleSheet.hairlineWidth },

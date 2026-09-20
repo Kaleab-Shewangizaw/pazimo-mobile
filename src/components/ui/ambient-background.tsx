@@ -14,7 +14,13 @@ import { Platform, StyleSheet, View } from 'react-native';
 const BG = require('@/assets/images/bg.jpg');
 
 /** Final darkening pass so panels and text keep their contrast floor. */
-const GLASS_TINT = 'rgba(3, 3, 4, 0.55)';
+const GLASS_TINT = 'rgba(3, 3, 4, 0.749)';
+
+/**
+ * SDK 31+ only, matches the constant in `ui/glass.tsx`. The pre-31
+ * implementation is the one Expo flags as a performance risk.
+ */
+const ANDROID_BLUR = 'dimezisBlurViewSdk31Plus';
 
 export type AmbientBackgroundProps = {
   /**
@@ -27,23 +33,30 @@ export type AmbientBackgroundProps = {
 
 function AmbientBackgroundImpl({ blurTarget }: AmbientBackgroundProps) {
   return (
-    <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Image
-        source={BG}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        blurRadius={10}
-        cachePolicy="memory-disk"
-      />
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* The target must wrap only the raw image, never the `BlurView` that
+          samples it — a target containing its own sampler feeds back into
+          itself. */}
+      <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+        <Image
+          source={BG}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          blurRadius={16}
+          cachePolicy="memory-disk"
+        />
+      </BlurTargetView>
       <BlurView
-        intensity={40}
+        intensity={60}
         tint="dark"
-        // Android's BlurView only tints unless the experimental renderer is on.
-        experimentalBlurMethod={Platform.OS === 'android' ? 'dimezisBlurView' : 'none'}
+        // Needs its own `blurTarget` too, same as every other BlurView here —
+        // without one it silently falls back to a flat tint on Android.
+        blurMethod={Platform.OS === 'android' ? ANDROID_BLUR : 'none'}
+        blurTarget={blurTarget}
         style={StyleSheet.absoluteFill}
       />
       <View style={[StyleSheet.absoluteFill, styles.glass]} />
-    </BlurTargetView>
+    </View>
   );
 }
 

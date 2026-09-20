@@ -32,7 +32,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
  * can't use these components — a text field, say — still land on the same
  * material instead of eyeballing their own.
  */
-export const GLASS_TINT = 'rgba(255, 255, 255, 0.14)';
+export const GLASS_TINT = 'rgba(255, 255, 255, 0.24)';
 
 /** The lift that separates floating chrome from the page under it. */
 export const GLASS_SHADOW = {
@@ -130,7 +130,7 @@ function GlassButtonImpl({
       ) : (
         <Glass
           variant="clear"
-          intensity={28}
+          intensity={45}
           tint={GLASS_TINT}
           radius={Radius.pill}
           blurTarget={blurTarget}
@@ -165,7 +165,7 @@ function GlassIconButtonImpl({
     <Touchable accessibilityRole="button" pressedScale={0.88} style={[styles.shadow, style]} {...rest}>
       <Glass
         variant="clear"
-        intensity={28}
+        intensity={45}
         tint={GLASS_TINT}
         radius={Radius.pill}
         blurTarget={blurTarget}
@@ -189,7 +189,7 @@ function GlassChipImpl({ label, style }: GlassChipProps) {
     <View style={[styles.shadow, style]}>
       <Glass
         variant="clear"
-        intensity={28}
+        intensity={45}
         tint={GLASS_TINT}
         radius={Radius.pill}
         style={styles.chipBody}>

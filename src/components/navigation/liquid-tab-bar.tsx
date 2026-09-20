@@ -241,13 +241,13 @@ function LiquidTabBarImpl({
       <View style={styles.shadow}>
         <Glass
           variant="regular"
-          intensity={50}
+          intensity={65}
           radius={Radius.xl}
           // The native effect draws its own edge; a hairline on top of it reads
           // as a seam. The blur fallback still needs one to define the shape.
           bordered={!hasLiquidGlass}
           interactive
-          tint={hasLiquidGlass ? undefined : 'rgba(12, 12, 14, 0.55)'}
+          tint={hasLiquidGlass ? undefined : 'rgba(12, 12, 14, 0.68)'}
           style={styles.bar}>
           <Animated.View
             style={[

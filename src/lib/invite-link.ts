@@ -1,5 +1,7 @@
 import * as Linking from 'expo-linking';
 
+import { Env } from '@/lib/env';
+
 /**
  * Inviting someone to a movie/event/venue rides inside a plain chat message
  * as a deep link — there's no backend "invite" concept, so this is not a new
@@ -52,6 +54,25 @@ export function buildInviteLink(
   return Linking.createURL(`/${INVITE_ROUTE[kind]}/${id}`, {
     queryParams: opts?.openShowtimes ? { openShowtimes: '1' } : undefined,
   });
+}
+
+/**
+ * Public web equivalent for sharing *outside* the app (copy link / OS share
+ * sheet) — `buildInviteLink`'s `pazimomobile://` link only means anything on
+ * a device that already has the app installed, so it's the wrong thing to
+ * hand to Instagram/Telegram/clipboard.
+ *
+ * Only `event` has a confirmed public page on pazimo.com right now (verified
+ * against the live site as `/events/:shortId` — note *plural* `events`,
+ * unlike this app's own `/event/:id` route, and the raw `shortId`/`_id`, not
+ * the `slug` field). `movie`/`venue` have no public page yet — the cinema
+ * catalog page is keyed by cinema, not by an individual movie or refill
+ * venue — so those return `null` and callers should fall back to
+ * `buildInviteLink` until the web app grows one.
+ */
+export function buildPublicInviteLink(kind: InviteKind, id: string): string | null {
+  if (kind !== 'event') return null;
+  return `${Env.apiUrl}/events/${id}`;
 }
 
 export function parseInviteLink(text: string): ParsedInvite | null {

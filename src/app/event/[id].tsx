@@ -4,7 +4,7 @@ import { Image, type ImageLoadEventData } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -91,7 +91,7 @@ export default function EventDetailScreen() {
   const [authVisible, setAuthVisible] = useState(false);
   const [shareVisible, setShareVisible] = useState(false);
   const { events: wishlist } = useWishlist();
-  const { set: setWishlisted } = useSetWishlist();
+  const { set: setWishlisted, submitting: wishlistSubmitting } = useSetWishlist();
   const saved = Boolean(event) && wishlist.some((wishlisted) => wishlisted._id === event!._id);
   const [coverReady, setCoverReady] = useState(false);
   // The artwork's own proportions, so the poster frame can take its shape
@@ -142,6 +142,18 @@ export default function EventDetailScreen() {
       setAuthVisible(true);
     }
   }, [user]);
+
+  // Same auth gate as "Buy Now" — wishlisting requires a session too, and
+  // without this a signed-out tap just 401'd with no visible feedback.
+  const onToggleWishlist = useCallback(async () => {
+    if (!event) return;
+    if (!user) {
+      setAuthVisible(true);
+      return;
+    }
+    const ok = await setWishlisted(event._id, !saved);
+    if (!ok) Alert.alert('Could not update wishlist', 'Please try again.');
+  }, [event, user, saved, setWishlisted]);
 
   const onAuthenticated = useCallback(() => {
     // AuthSheet is still mid-close (its own slide/fade-out) when this fires —
@@ -377,7 +389,8 @@ export default function EventDetailScreen() {
             accessibilityState={{ selected: saved }}
             color={saved ? '#FB7185' : '#FFFFFF'}
             haptic
-            onPress={() => event && setWishlisted(event._id, !saved)}
+            disabled={wishlistSubmitting}
+            onPress={onToggleWishlist}
             blurTarget={backdropRef}
           />
           <GlassIconButton

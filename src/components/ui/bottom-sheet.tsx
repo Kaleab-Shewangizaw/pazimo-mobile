@@ -40,6 +40,20 @@ const DISMISS_VELOCITY = 1.2;
 const SPRING = { useNativeDriver: true, speed: 16, bounciness: 4 } as const;
 const FADE = { useNativeDriver: true, duration: 220 } as const;
 
+/**
+ * The dim/blur behind the sheet has to be the real screen the sheet was
+ * opened over — a static stand-in photo (what this used to render) hides
+ * whatever page and content the user was just looking at, which reads as
+ * the background being wiped out rather than dimmed. RN's `Modal` with
+ * `transparent` already composites over that real screen on both platforms,
+ * so nothing needs to be drawn here beyond a tint: `<Glass>` with no
+ * `blurTarget` genuinely blurs it on iOS (no target needed there — only
+ * Android's blur method requires one), and safely falls back to this tint
+ * alone on Android, same as every other untargeted `<Glass>` in the app.
+ */
+const BACKDROP_TINT = 'rgba(3, 3, 4, 0.72)';
+const SHEET_TINT = 'rgba(10, 10, 13, 0.42)';
+
 export function BottomSheet({
   visible,
   onClose,
@@ -153,7 +167,15 @@ export function BottomSheet({
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdrop }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdrop }]}>
+        <Glass
+          variant="regular"
+          intensity={70}
+          radius={0}
+          bordered={false}
+          tint={BACKDROP_TINT}
+          style={StyleSheet.absoluteFill}
+        />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
 
@@ -165,6 +187,7 @@ export function BottomSheet({
         <Glass
           variant="regular"
           intensity={80}
+          tint={SHEET_TINT}
           radius={Radius.xl}
           style={styles.sheet}>
           {/* Only the handle is a drag target — the rest of the sheet stays
@@ -191,7 +214,6 @@ export function BottomSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(2,2,3,0.6)' },
   sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // The bottom corners meet the screen edge, so rounding them would show the
   // page through two notches under the sheet.

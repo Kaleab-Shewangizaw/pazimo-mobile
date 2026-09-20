@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarInitials } from '@/components/shares/avatar-initials';
@@ -56,6 +56,29 @@ export default function ConversationScreen() {
   const insets = useSafeAreaInsets();
   const goBack = useGoBack('/shares');
   const scrollRef = useRef<ScrollView>(null);
+
+  // `KeyboardAvoidingView` + Android's manifest-level `adjustResize` isn't
+  // reliable on Android 15+ (edge-to-edge is enforced there, and RN's resize
+  // handling doesn't reach through it), so the composer's lift is measured
+  // from the keyboard itself instead — same technique as `ui/bottom-sheet.tsx`.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const shown = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // The keyboard covers exactly what the shrinking viewport would
+      // otherwise leave hidden — re-stick to the latest message as it opens,
+      // the same way Telegram's thread slides up with the keyboard.
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    const hidden = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   const { conversations, isLoading: sharesLoading } = useAllShareConversations();
   const existing = conversations.find((c) => c.counterpartyId === userId);
@@ -248,7 +271,11 @@ export default function ConversationScreen() {
         </ScrollView>
       )}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: (keyboardHeight > 0 ? keyboardHeight : insets.bottom) + Spacing.md },
+        ]}>
         <MessageComposer
           counterpartyId={counterparty._id}
           onAttach={() => setShareSheetVisible(true)}
@@ -356,7 +383,10 @@ const styles = StyleSheet.create({
   },
 
   body: { flex: 1 },
-  bodyContent: { paddingVertical: Spacing.lg, gap: Spacing.sm },
+  // `flexGrow` + `flex-end` is what makes a short thread sit against the
+  // bottom of the list (Telegram-style) instead of floating at the top with
+  // empty space below it once there's less content than the viewport.
+  bodyContent: { flexGrow: 1, justifyContent: 'flex-end', paddingVertical: Spacing.lg, gap: Spacing.sm },
 
   footer: {
     paddingHorizontal: Spacing.lg,
