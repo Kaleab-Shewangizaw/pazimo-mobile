@@ -9,16 +9,17 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#08080A",
     "ios": {
-      "icon": "./assets/expo.icon",
       "userInterfaceStyle": "dark",
-      "associatedDomains": ["applinks:pazimo.com"]
+      "associatedDomains": [
+        "applinks:pazimo.com"
+      ],
+      "bundleIdentifier": "com.kal-x.pazimomobile"
     },
     "android": {
       "userInterfaceStyle": "dark",
       "adaptiveIcon": {
-        "backgroundColor": "#08080A",
+        "backgroundColor": "#101B32",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -27,8 +28,17 @@
         {
           "autoVerify": true,
           "action": "VIEW",
-          "data": [{ "scheme": "https", "host": "pazimo.com", "pathPrefix": "/events/" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/events/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -41,13 +51,16 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#08080A",
-          "image": "./assets/images/pazimo-logo.png",
-          "imageWidth": 220,
+          "backgroundColor": "#101B32",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 384,
+          "resizeMode": "contain",
           "dark": {
-            "backgroundColor": "#08080A",
-            "image": "./assets/images/pazimo-logo.png",
-            "imageWidth": 220
+            "backgroundColor": "#101B32",
+            "image": "./assets/images/splash-icon.png"
+          },
+          "android": {
+            "imageWidth": 300
           }
         }
       ],
@@ -60,7 +73,10 @@
           "icon": "./assets/images/android-icon-monochrome.png",
           "color": "#08080A"
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
