@@ -46,7 +46,7 @@ function GlassHeaderImpl({
       <View style={styles.titles}>
         {showLogo ? (
           // The source PNG is gold — tinting flattens it to a white logotype.
-          <Image source={wordmark} style={styles.logo} contentFit="contain" tintColor="#FFFFFF" />
+          <Image source={wordmark} style={styles.logo} contentFit="contain" />
         ) : (
           <Text variant="heading" numberOfLines={1}>
             {title}
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   titles: { flex: 1 },
-  logo: { width: 108, height: 26, alignSelf: 'flex-start' },
+  logo: { width: 108, height: 30, alignSelf: 'flex-start' },
 });
 
 export const GlassHeader = memo(GlassHeaderImpl);
