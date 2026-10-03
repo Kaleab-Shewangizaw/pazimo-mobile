@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { memo, useCallback, useState } from 'react';
-import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { AuthSheet } from '@/components/account/auth-sheet';
 import { GlassChip, GlassIconButton } from '@/components/ui/glass-button';
@@ -19,12 +19,6 @@ import { formatPrice, isSoldOut, lowestPrice } from '@/lib/pricing';
 import { useSetWishlist, useWishlist } from '@/queries/events';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { Currency, PazimoEvent } from '@/types/api';
-
-/**
- * Android's stock BlurView only tints (no real blur) without this renderer.
- * Passed to the progressive-blur panel below.
- */
-const androidBlurMethod = Platform.OS === 'android' ? 'dimezisBlurView' : 'none';
 
 /** Cross-fade rather than a flash of empty box when art arrives from cache. */
 const IMAGE_TRANSITION = 180;
@@ -141,7 +135,6 @@ function EventCardImpl({ event, currency = 'ETB', layout = 'feed' }: EventCardPr
         <BlurView
           intensity={30}
           tint="dark"
-          experimentalBlurMethod={androidBlurMethod}
           style={StyleSheet.absoluteFill}
         />
       </MaskedView>
