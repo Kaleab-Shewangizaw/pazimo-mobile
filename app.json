@@ -11,7 +11,10 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "userInterfaceStyle": "dark",
-      "associatedDomains": ["applinks:pazimo.com"]
+      "associatedDomains": [
+        "applinks:pazimo.com"
+      ],
+      "bundleIdentifier": "com.kal-x.pazimomobile"
     },
     "android": {
       "userInterfaceStyle": "dark",
@@ -27,8 +30,17 @@
         {
           "autoVerify": true,
           "action": "VIEW",
-          "data": [{ "scheme": "https", "host": "pazimo.com", "pathPrefix": "/events/" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/events/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
