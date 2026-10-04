@@ -13,6 +13,7 @@ import {
 
 import { Glass, hasLiquidGlass } from '@/components/ui/glass';
 import { Touchable } from '@/components/ui/pressable';
+import { TAB_BAR_BLUR, TAB_BAR_TINT_FALLBACK, TAB_BAR_TINT_LIQUID } from '@/constants/appearance';
 import { TabBar } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -241,13 +242,13 @@ function LiquidTabBarImpl({
       <View style={styles.shadow}>
         <Glass
           variant="regular"
-          intensity={65}
+          intensity={TAB_BAR_BLUR}
           radius={Radius.xl}
           // The native effect draws its own edge; a hairline on top of it reads
           // as a seam. The blur fallback still needs one to define the shape.
           bordered={!hasLiquidGlass}
           interactive
-          tint={hasLiquidGlass ? undefined : 'rgba(12, 12, 14, 0.68)'}
+          tint={hasLiquidGlass ? TAB_BAR_TINT_LIQUID : TAB_BAR_TINT_FALLBACK}
           style={styles.bar}>
           <Animated.View
             style={[

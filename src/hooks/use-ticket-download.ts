@@ -1,9 +1,10 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import type Svg from 'react-native-svg';
 
+import { posterSize } from '@/components/ticket/ticket-poster';
 import type { Ticket } from '@/types/api';
 
 /**
@@ -17,9 +18,6 @@ import type { Ticket } from '@/types/api';
  * drawing, and this asks it to draw itself into a bitmap instead of onto the
  * screen.
  */
-
-/** Rasterised at 2× so the QR stays crisp when the image is zoomed or printed. */
-const SCALE = 2;
 
 /** Ceiling on the rasterise callback, which has no error channel of its own. */
 const RENDER_TIMEOUT_MS = 10_000;
@@ -36,16 +34,32 @@ function safeName(ticket: Ticket): string {
   return `pazimo-${slug || 'ticket'}-${ticket.ticketId}.png`;
 }
 
-async function rasterise(poster: Svg): Promise<string> {
+/**
+ * The native rasterisers disagree on what `options` means, and neither takes a
+ * scale — both already draw at the device's pixel density:
+ *
+ * - iOS requires numeric `width` and `height` whenever options are passed (it
+ *   logs "Invalid width or height" and never calls back otherwise). Without
+ *   options it falls back to the last on-screen draw, which an off-screen
+ *   poster may not have had, so the size is always given — in points, the
+ *   same units the poster is laid out in.
+ * - Android throws on missing keys, and treats `width`/`height` as the bitmap
+ *   size in pixels while still drawing at the view's own pixel size, so points
+ *   would crop the ticket. Passing nothing captures exactly the drawn view.
+ */
+function rasterOptions(ticket: Ticket) {
+  return Platform.OS === 'ios' ? posterSize(ticket) : undefined;
+}
+
+async function rasterise(poster: Svg, ticket: Ticket): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('render timed out')), RENDER_TIMEOUT_MS);
-    poster.toDataURL(
-      (data) => {
-        clearTimeout(timeout);
-        resolve(data);
-      },
-      { scale: SCALE },
-    );
+    poster.toDataURL((data) => {
+      clearTimeout(timeout);
+      // iOS calls back empty-handed when the drawing produced no image.
+      if (data) resolve(data);
+      else reject(new Error('empty render'));
+    }, rasterOptions(ticket));
   });
 }
 
@@ -81,7 +95,7 @@ export function useTicketDownload(ticket: Ticket | undefined) {
         Alert.alert('Not supported', 'This device cannot share files.');
         return;
       }
-      await saveAndShare(ticket, await rasterise(poster));
+      await saveAndShare(ticket, await rasterise(poster, ticket));
     } catch {
       Alert.alert('Could not save', 'We could not prepare that ticket image. Try again.');
     } finally {

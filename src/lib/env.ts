@@ -17,6 +17,12 @@ export const Env = {
   /** Backend origin, no trailing slash and no `/api` suffix. */
   apiUrl: apiUrl.replace(/\/+$/, ''),
   /**
+   * Public website origin for links shared outside the app. Separate from
+   * `apiUrl` so pointing the API at a local backend doesn't leak localhost
+   * links into shares.
+   */
+  webUrl: (process.env.EXPO_PUBLIC_WEB_URL || 'https://pazimo.com').replace(/\/+$/, ''),
+  /**
    * Deep link back into the app after an external payment gateway finishes.
    * Matches `expo.scheme` in app.json.
    */

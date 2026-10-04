@@ -1,11 +1,24 @@
 import { BlurTargetView, BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import { type RefObject, memo } from 'react';
+import { type RefObject, memo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
+
+import {
+  BACKGROUND_DEFAULT_BLUR_RADIUS,
+  BACKGROUND_DEFAULT_DIM,
+  BACKGROUND_FROST_INTENSITY,
+} from '@/constants/appearance';
+import { resolveImageUrl } from '@/lib/media';
+import { useAppBackground } from '@/queries/app-background';
 
 /**
  * The page backdrop from the reference design: a softly blurred photo under a
  * real sheet of frosted glass, with every panel floating above.
+ *
+ * The photo, its blur and the darkening wash are set by admins (web dashboard →
+ * App Background). The bundled photo and the defaults in
+ * constants/appearance.ts cover first launch, no active image, and a failed
+ * request.
  *
  * This is the one sanctioned full-screen BlurView in the app: it sits over a
  * static image, not over scrolling content, so the blur pass has nothing
@@ -13,8 +26,11 @@ import { Platform, StyleSheet, View } from 'react-native';
  */
 const BG = require('@/assets/images/bg.jpg');
 
-/** Final darkening pass so panels and text keep their contrast floor. */
-const GLASS_TINT = 'rgba(3, 3, 4, 0.749)';
+/**
+ * Picked once per launch, so with several active images each session gets one
+ * of them, and every screen in that session shows the same one.
+ */
+const SESSION_PICK = Math.random();
 
 /**
  * SDK 31+ only, matches the constant in `ui/glass.tsx`. The pre-31
@@ -32,6 +48,18 @@ export type AmbientBackgroundProps = {
 };
 
 function AmbientBackgroundImpl({ blurTarget }: AmbientBackgroundProps) {
+  const { data } = useAppBackground();
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  const active = data?.images.filter((image) => image.active) ?? [];
+  const picked = active.length ? active[Math.floor(SESSION_PICK * active.length)] : null;
+  const remoteUrl = resolveImageUrl(picked?.url);
+  const source = remoteUrl && remoteUrl !== failedUrl ? { uri: remoteUrl } : BG;
+
+  const blurRadius = data?.blurRadius ?? BACKGROUND_DEFAULT_BLUR_RADIUS;
+  // Final darkening pass so panels and text keep their contrast floor.
+  const dim = data?.dimOpacity ?? BACKGROUND_DEFAULT_DIM;
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* The target must wrap only the raw image, never the `BlurView` that
@@ -39,29 +67,32 @@ function AmbientBackgroundImpl({ blurTarget }: AmbientBackgroundProps) {
           itself. */}
       <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
         <Image
-          source={BG}
+          source={source}
+          // Holds the bundled photo on screen while a remote one downloads.
+          placeholder={BG}
+          placeholderContentFit="cover"
+          transition={300}
+          onError={() => setFailedUrl(remoteUrl)}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          blurRadius={16}
+          blurRadius={blurRadius}
           cachePolicy="memory-disk"
         />
       </BlurTargetView>
-      <BlurView
-        intensity={60}
-        tint="dark"
-        // Needs its own `blurTarget` too, same as every other BlurView here —
-        // without one it silently falls back to a flat tint on Android.
-        blurMethod={Platform.OS === 'android' ? ANDROID_BLUR : 'none'}
-        blurTarget={blurTarget}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={[StyleSheet.absoluteFill, styles.glass]} />
+      {BACKGROUND_FROST_INTENSITY > 0 ? (
+        <BlurView
+          intensity={BACKGROUND_FROST_INTENSITY}
+          tint="dark"
+          // Needs its own `blurTarget` too, same as every other BlurView here —
+          // without one it silently falls back to a flat tint on Android.
+          blurMethod={Platform.OS === 'android' ? ANDROID_BLUR : 'none'}
+          blurTarget={blurTarget}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(3, 3, 4, ${dim})` }]} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  glass: { backgroundColor: GLASS_TINT },
-});
 
 export const AmbientBackground = memo(AmbientBackgroundImpl);

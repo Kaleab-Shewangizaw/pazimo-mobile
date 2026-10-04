@@ -72,7 +72,7 @@ export function buildInviteLink(
  */
 export function buildPublicInviteLink(kind: InviteKind, id: string): string | null {
   if (kind !== 'event') return null;
-  return `${Env.apiUrl}/events/${id}`;
+  return `${Env.webUrl}/events/${id}`;
 }
 
 export function parseInviteLink(text: string): ParsedInvite | null {
