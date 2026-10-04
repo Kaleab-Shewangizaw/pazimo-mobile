@@ -6,6 +6,7 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.events.all, 'detail', id] as const,
   },
   categories: ['categories'] as const,
+  appBackground: ['app-background'] as const,
   wishlist: ['wishlist'] as const,
   tickets: {
     all: ['tickets'] as const,

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useScrollToTop } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@/api/client';
@@ -21,6 +22,7 @@ import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCollapsingHeader } from '@/hooks/use-collapsing-header';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { isSoldOut } from '@/lib/pricing';
@@ -42,9 +44,12 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<Animated.ScrollView>(null);
   // Tapping the active tab returns to the top of the page.
   useScrollToTop(scrollRef);
+
+  // Slides away while scrolling down the feed, returns on any scroll up.
+  const { scrollHandler, headerStyle } = useCollapsingHeader(insets.top + HEADER_CONTENT_HEIGHT);
 
   // What the header's glass controls sample on Android — the ambient backdrop,
   // which is static and therefore cheap to blur against.
@@ -140,6 +145,7 @@ export default function HomeScreen() {
         title="Pazimo"
         showLogo
         blurred={false}
+        animatedStyle={headerStyle}
         right={
           <View style={styles.headerActions}>
             <View>
@@ -181,8 +187,10 @@ export default function HomeScreen() {
         }
       />
 
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
@@ -281,7 +289,7 @@ export default function HomeScreen() {
             <FeaturedRail items={moreItems} loading={feed.isLoading || rsvp.isLoading} />
           </View>
         ) : null}
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }

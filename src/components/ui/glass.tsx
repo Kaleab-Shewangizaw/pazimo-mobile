@@ -3,6 +3,7 @@ import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'ex
 import { type ReactNode, type RefObject, memo } from 'react';
 import { Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
 
+import { GLASS_DEFAULT_BLUR } from '@/constants/appearance';
 import { Radius } from '@/constants/theme';
 import { useTheme, useThemeName } from '@/hooks/use-theme';
 
@@ -69,7 +70,7 @@ const ANDROID_BLUR = 'dimezisBlurViewSdk31Plus';
 function GlassImpl({
   children,
   variant = 'regular',
-  intensity = 55,
+  intensity = GLASS_DEFAULT_BLUR,
   radius = Radius.lg,
   bordered = true,
   tint,

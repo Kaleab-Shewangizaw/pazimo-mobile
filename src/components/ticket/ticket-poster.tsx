@@ -74,6 +74,35 @@ function wrap(text: string, size: number, maxWidth: number, maxLines: number): s
   return lines;
 }
 
+/**
+ * Where everything below the title sits. Everything stacks at a fixed rhythm,
+ * so the canvas height is derived rather than guessed — a three-line title
+ * grows the image instead of overflowing it. Shared with the download hook,
+ * which has to tell iOS the exact size to rasterise.
+ */
+function posterLayout(titleLineCount: number, rowCount: number) {
+  const titleTop = PAD + TITLE_SIZE;
+  const subtitleY = titleTop + titleLineCount * TITLE_LEADING + 6;
+  const referenceY = subtitleY + 44;
+  const plateY = referenceY + 44;
+  const perforationY = plateY + PLATE + 56;
+  const rowsTop = perforationY + 40;
+  const height = rowsTop + rowCount * ROW_HEIGHT + PAD;
+  return { titleTop, subtitleY, referenceY, plateY, perforationY, rowsTop, height };
+}
+
+const POSTER_ROWS = 3;
+
+function titleLinesFor(title: string): string[] {
+  return wrap(title, TITLE_SIZE, INNER - 40, 3);
+}
+
+/** The poster's drawn size in points, matching what `TicketPoster` renders. */
+export function posterSize(ticket: Ticket): { width: number; height: number } {
+  const { height } = posterLayout(titleLinesFor(ticket.event.title).length, POSTER_ROWS);
+  return { width: WIDTH, height };
+}
+
 export type TicketPosterProps = { ticket: Ticket };
 
 export const TicketPoster = forwardRef<Svg, TicketPosterProps>(function TicketPoster(
@@ -84,10 +113,7 @@ export const TicketPoster = forwardRef<Svg, TicketPosterProps>(function TicketPo
   // Encoding is the expensive part of drawing a QR; the glyph memoises its own,
   // so the module count is memoised here rather than recomputed every render.
   const modules = useMemo(() => qrModuleCount(payload), [payload]);
-  const titleLines = useMemo(
-    () => wrap(ticket.event.title, TITLE_SIZE, INNER - 40, 3),
-    [ticket.event.title],
-  );
+  const titleLines = useMemo(() => titleLinesFor(ticket.event.title), [ticket.event.title]);
 
   const venue =
     [ticket.event.location?.address, ticket.event.location?.city].filter(Boolean).join(', ') ||
@@ -105,17 +131,10 @@ export const TicketPoster = forwardRef<Svg, TicketPosterProps>(function TicketPo
     },
   ];
 
-  // Everything below the title stacks at a fixed rhythm, so the canvas height
-  // is derived rather than guessed — a three-line title grows the image instead
-  // of overflowing it.
-  const titleTop = PAD + TITLE_SIZE;
-  const titleBlock = titleLines.length * TITLE_LEADING;
-  const subtitleY = titleTop + titleBlock + 6;
-  const referenceY = subtitleY + 44;
-  const plateY = referenceY + 44;
-  const perforationY = plateY + PLATE + 56;
-  const rowsTop = perforationY + 40;
-  const height = rowsTop + rows.length * ROW_HEIGHT + PAD;
+  const { titleTop, subtitleY, referenceY, plateY, perforationY, rowsTop, height } = posterLayout(
+    titleLines.length,
+    rows.length,
+  );
 
   const plateX = (WIDTH - PLATE) / 2;
   const qrSize = PLATE * 0.8;

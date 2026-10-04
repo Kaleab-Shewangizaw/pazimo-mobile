@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
 import { type ReactNode, memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { type AnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glass } from '@/components/ui/glass';
 import { Text } from '@/components/ui/text';
+import { HEADER_BLUR } from '@/constants/appearance';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -21,6 +23,7 @@ function GlassHeaderImpl({
   right,
   showLogo = false,
   blurred = true,
+  animatedStyle,
 }: {
   title: string;
   /** A back button, on the one screen using this header that isn't a tab root — every other screen leaves this unset. */
@@ -37,6 +40,8 @@ function GlassHeaderImpl({
    * disc instead of picking up what is behind the header.
    */
   blurred?: boolean;
+  /** Drives a scroll-linked hide/show — see `useCollapsingHeader`. */
+  animatedStyle?: StyleProp<AnimatedStyle<ViewStyle>>;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -57,19 +62,21 @@ function GlassHeaderImpl({
     </View>
   );
 
-  if (!blurred) {
-    return <View style={[styles.container, { paddingTop: insets.top }]}>{content}</View>;
-  }
-
   return (
-    <Glass
-      variant="regular"
-      intensity={60}
-      radius={0}
-      bordered={false}
-      style={[styles.container, { paddingTop: insets.top }]}>
-      {content}
-    </Glass>
+    <Animated.View style={[styles.container, animatedStyle]}>
+      {blurred ? (
+        <Glass
+          variant="regular"
+          intensity={HEADER_BLUR}
+          radius={0}
+          bordered={false}
+          style={{ paddingTop: insets.top }}>
+          {content}
+        </Glass>
+      ) : (
+        <View style={{ paddingTop: insets.top }}>{content}</View>
+      )}
+    </Animated.View>
   );
 }
 

@@ -5,6 +5,7 @@ import { StyleSheet, type StyleProp, View, type ViewStyle } from 'react-native';
 import { Glass } from '@/components/ui/glass';
 import { Touchable, type TouchableProps } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_CONTROL_BLUR, GLASS_CONTROL_TINT } from '@/constants/appearance';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -32,7 +33,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
  * can't use these components — a text field, say — still land on the same
  * material instead of eyeballing their own.
  */
-export const GLASS_TINT = 'rgba(255, 255, 255, 0.24)';
+export const GLASS_TINT = GLASS_CONTROL_TINT;
 
 /** The lift that separates floating chrome from the page under it. */
 export const GLASS_SHADOW = {
@@ -130,7 +131,7 @@ function GlassButtonImpl({
       ) : (
         <Glass
           variant="clear"
-          intensity={45}
+          intensity={GLASS_CONTROL_BLUR}
           tint={GLASS_TINT}
           radius={Radius.pill}
           blurTarget={blurTarget}
@@ -165,7 +166,7 @@ function GlassIconButtonImpl({
     <Touchable accessibilityRole="button" pressedScale={0.88} style={[styles.shadow, style]} {...rest}>
       <Glass
         variant="clear"
-        intensity={45}
+        intensity={GLASS_CONTROL_BLUR}
         tint={GLASS_TINT}
         radius={Radius.pill}
         blurTarget={blurTarget}
@@ -189,7 +190,7 @@ function GlassChipImpl({ label, style }: GlassChipProps) {
     <View style={[styles.shadow, style]}>
       <Glass
         variant="clear"
-        intensity={45}
+        intensity={GLASS_CONTROL_BLUR}
         tint={GLASS_TINT}
         radius={Radius.pill}
         style={styles.chipBody}>
