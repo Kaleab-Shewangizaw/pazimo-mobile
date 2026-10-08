@@ -5,8 +5,9 @@ import { StyleSheet, type StyleProp, View, type ViewStyle } from 'react-native';
 import { Glass } from '@/components/ui/glass';
 import { Touchable, type TouchableProps } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { GLASS_CONTROL_BLUR, GLASS_CONTROL_TINT } from '@/constants/appearance';
+import { GLASS_CONTROL_TINT } from '@/constants/appearance';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -29,9 +30,10 @@ import { useTheme } from '@/hooks/use-theme';
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
- * Washed into the glass, not stacked on top of it. Exported so surfaces that
- * can't use these components — a text field, say — still land on the same
- * material instead of eyeballing their own.
+ * Washed into the glass, not stacked on top of it. This is the built-in
+ * default; surfaces that can't use these components — a text field, say —
+ * should take the live value from `useGlassStyle('buttons')` so they follow
+ * what admins set, and land on the same material as the buttons.
  */
 export const GLASS_TINT = GLASS_CONTROL_TINT;
 
@@ -79,6 +81,7 @@ function GlassButtonImpl({
   ...rest
 }: GlassButtonProps) {
   const theme = useTheme();
+  const glass = useGlassStyle('buttons');
   const solid = iconTone === 'solid';
   const m = metrics[size];
   const foreground = selected ? theme.onBrand : '#FFFFFF';
@@ -131,8 +134,8 @@ function GlassButtonImpl({
       ) : (
         <Glass
           variant="clear"
-          intensity={GLASS_CONTROL_BLUR}
-          tint={GLASS_TINT}
+          intensity={glass.blur}
+          tint={glass.tint}
           radius={Radius.pill}
           blurTarget={blurTarget}
           style={bodyStyle}>
@@ -162,12 +165,13 @@ function GlassIconButtonImpl({
   style,
   ...rest
 }: GlassIconButtonProps) {
+  const glass = useGlassStyle('buttons');
   return (
     <Touchable accessibilityRole="button" pressedScale={0.88} style={[styles.shadow, style]} {...rest}>
       <Glass
         variant="clear"
-        intensity={GLASS_CONTROL_BLUR}
-        tint={GLASS_TINT}
+        intensity={glass.blur}
+        tint={glass.tint}
         radius={Radius.pill}
         blurTarget={blurTarget}
         style={[styles.iconBody, { width: size, height: size }]}>
@@ -184,14 +188,19 @@ export type GlassChipProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** The same material as the buttons above, for a label that isn't pressable. */
+/**
+ * The same recipe as the buttons above, for a label that isn't pressable.
+ * Admins tune chips separately from buttons, since chips sit on busy cover
+ * art rather than on the page backdrop.
+ */
 function GlassChipImpl({ label, style }: GlassChipProps) {
+  const glass = useGlassStyle('chips');
   return (
     <View style={[styles.shadow, style]}>
       <Glass
         variant="clear"
-        intensity={GLASS_CONTROL_BLUR}
-        tint={GLASS_TINT}
+        intensity={glass.blur}
+        tint={glass.tint}
         radius={Radius.pill}
         style={styles.chipBody}>
         <Text variant="caption" style={styles.label} numberOfLines={1}>

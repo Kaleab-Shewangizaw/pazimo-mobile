@@ -1,8 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { connectSocket, disconnectSocket, subscribeTicketEvents } from '@/lib/socket';
+import { connectSocket, disconnectSocket, subscribeSocketStatus, subscribeTicketEvents } from '@/lib/socket';
 import { queryKeys } from '@/queries/keys';
+import { removeMessageFromCache, upsertMessageInCache } from '@/queries/messages';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 /**
@@ -32,8 +33,18 @@ function useShareTransferSocket() {
       // Checked first — none of the 'message:*' events start with
       // 'beverage:'/'cinema:' either, so they'd otherwise fall all the way
       // through to the trailing ticket-invalidation branch below.
-      if (event.type === 'message:new' || event.type === 'message:updated' || event.type === 'message:deleted') {
-        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all });
+      //
+      // The message itself goes straight into the open thread's cache, so it
+      // renders the instant it arrives; only the Chats list (preview, unread
+      // badge, ordering) is re-read from the server.
+      if (event.type === 'message:new' || event.type === 'message:updated') {
+        upsertMessageInCache(queryClient, event.payload, useAuthStore.getState().user?._id);
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
+        return;
+      }
+      if (event.type === 'message:deleted') {
+        removeMessageFromCache(queryClient, event.payload);
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
         return;
       }
       if (event.type.startsWith('beverage:')) {
@@ -48,6 +59,24 @@ function useShareTransferSocket() {
       queryClient.invalidateQueries({ queryKey: queryKeys.shares.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.tickets.transferable() });
+    });
+  }, [queryClient]);
+
+  // Anything sent while the socket was down (backgrounded app, dropped
+  // network, server restart) never arrives as an event — so every time it
+  // comes back live after the first time, re-read what those events would
+  // have updated.
+  useEffect(() => {
+    let wasLive = false;
+    return subscribeSocketStatus((status) => {
+      if (status !== 'live') return;
+      if (wasLive) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.shares.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.beverageShares.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.cinemaShares.all });
+      }
+      wasLive = true;
     });
   }, [queryClient]);
 }

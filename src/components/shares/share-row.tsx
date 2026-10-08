@@ -3,13 +3,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { AvatarInitials } from '@/components/shares/avatar-initials';
 import { InviteMessageCard } from '@/components/shares/invite-message-card';
+import { TransferCard } from '@/components/shares/transfer-card';
 import { Text } from '@/components/ui/text';
 import { Touchable } from '@/components/ui/pressable';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTimeLabel } from '@/lib/date';
 import { inviteChatPreview, parseInviteLink } from '@/lib/invite-link';
-import type { ShareItemViewModel, ShareKind } from '@/lib/share-item-view-model';
+import type { ShareItemViewModel } from '@/lib/share-item-view-model';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { ShareStatus } from '@/types/api';
 
@@ -19,24 +20,6 @@ const STATUS_LABEL: Record<ShareStatus, string> = {
   declined: 'Declined',
   cancelled: 'Cancelled',
   expired: 'Expired',
-};
-
-/** Same wording as the compose sheet's kind picker (`kind-picker-step.tsx`) — this is the eyebrow over the item's own name, not a fresh vocabulary for it. */
-const KIND_LABEL: Record<ShareKind, string> = {
-  TICKET: 'Event ticket',
-  BEVERAGE: 'Drink',
-  CINEMA_TICKET: 'Cinema ticket',
-  CINEMA_CONCESSION: 'Cinema snack',
-  MESSAGE: 'Message',
-};
-
-/** Translucent wash of each status color, same 12%-alpha convention as the danger icon fills in `chat-menu-sheet.tsx`. */
-const STATUS_TINT: Record<ShareStatus, string> = {
-  pending: 'rgba(255, 255, 255, 0.12)',
-  accepted: 'rgba(52, 211, 153, 0.12)',
-  declined: 'rgba(251, 113, 133, 0.12)',
-  cancelled: 'rgba(251, 113, 133, 0.12)',
-  expired: 'rgba(107, 107, 118, 0.12)',
 };
 
 export type ShareRowProps = {
@@ -49,12 +32,11 @@ export type ShareRowProps = {
 /**
  * One entry in the chat-like history: avatar and bubble swap sides for sent
  * vs received, same idea as a messaging app even though this is a flat list
- * rather than a live back-and-forth. Renders any share kind identically —
- * all it reads is `.lines`, already reduced to on-screen copy by whichever
- * `to*ViewModel` builder produced this share.
+ * rather than a live back-and-forth. Every transfer kind renders through the
+ * same `TransferCard`, which reads only `.lines`/`.art` — already reduced to
+ * on-screen copy by whichever `to*ViewModel` builder produced this share.
  */
 function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
-  const theme = useTheme();
   const myId = useAuthStore((s) => s.user?._id);
 
   // Computed unconditionally (before the MESSAGE early return below) so
@@ -84,18 +66,6 @@ function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
     [otherUser.firstName, otherUser.lastName].filter(Boolean).join(' ').trim() ||
     (otherUser.username ? `@${otherUser.username}` : 'Pazimo user');
 
-  // Pending borrows the app's existing "scarcity copy reads as white, not a
-  // hue" convention (see `warning` in constants/theme.ts) rather than an
-  // amber that would be the only warm color anywhere in this app.
-  const statusColor =
-    share.status === 'pending'
-      ? theme.brand
-      : share.status === 'accepted'
-        ? theme.success
-        : share.status === 'expired'
-          ? theme.textMuted
-          : theme.danger;
-
   return (
     <Touchable
       accessibilityRole="button"
@@ -104,38 +74,8 @@ function ShareRowImpl({ share, onPress, onLongPressMessage }: ShareRowProps) {
       pressedScale={0.98}
       style={[styles.row, sent ? styles.rowSent : styles.rowReceived]}>
       <AvatarInitials name={otherName} size={40} />
-      <View
-        style={[
-          styles.bubble,
-          { backgroundColor: sent ? 'rgba(255,255,255,0.08)' : theme.surfaceMuted, borderColor: theme.hairline },
-        ]}>
-        <View style={styles.bubbleHeader}>
-          <Text variant="label" color="textSecondary" style={styles.eyebrow}>
-            {KIND_LABEL[share.kind]}
-          </Text>
-          <Text variant="caption" color="textMuted">
-            {relativeTimeLabel(share.createdAt)}
-          </Text>
-        </View>
-        <Text variant="callout" numberOfLines={1} style={styles.itemTitle}>
-          {title}
-        </Text>
-        {detail ? (
-          <Text variant="small" color="textSecondary" numberOfLines={1}>
-            {detail}
-          </Text>
-        ) : null}
-        {share.message ? (
-          <Text variant="body" numberOfLines={2} style={[styles.message, { borderTopColor: theme.hairline }]}>
-            {share.message}
-          </Text>
-        ) : null}
-        <View style={[styles.statusChip, { backgroundColor: STATUS_TINT[share.status] }]}>
-          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-          <Text variant="caption" style={{ color: statusColor }}>
-            {STATUS_LABEL[share.status]}
-          </Text>
-        </View>
+      <View style={styles.transferWrap}>
+        <TransferCard share={share} sent={sent} title={title} detail={detail} />
       </View>
     </Touchable>
   );
@@ -199,11 +139,11 @@ function MessageBubble({
           onLongPress={() => onLongPress?.(share)}
           delayLongPress={300}
           pressedScale={0.98}
-          style={styles.messageBubbleWrap}>
+          style={invite ? styles.transferWrap : styles.messageBubbleWrap}>
           {bubble}
         </Touchable>
       ) : (
-        <View style={styles.messageBubbleWrap}>{bubble}</View>
+        <View style={invite ? styles.transferWrap : styles.messageBubbleWrap}>{bubble}</View>
       )}
     </View>
   );
@@ -213,37 +153,9 @@ const styles = StyleSheet.create({
   row: { alignItems: 'flex-end', gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   rowReceived: { flexDirection: 'row' },
   rowSent: { flexDirection: 'row-reverse' },
-  bubble: {
-    flex: 1,
-    borderRadius: Radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.lg,
-    gap: 4,
-  },
-  bubbleHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  eyebrow: { flexShrink: 1 },
-  itemTitle: { marginTop: 2 },
-  message: {
-    marginTop: Spacing.xs,
-    paddingTop: Spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  statusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  // Fixed rather than content-sized, so a thread of transfers stacks as a
+  // tidy column of equal-width stubs whatever each one's title length.
+  transferWrap: { width: '78%' },
   // A percentage `maxWidth` needs a determinate-width parent to resolve
   // against — `row` qualifies, but the sent path's `Touchable` (an otherwise
   // unstyled wrapper) doesn't, so the constraint has to live here, on

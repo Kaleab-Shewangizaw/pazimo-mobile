@@ -16,7 +16,7 @@ import { FilterSheet } from '@/components/discover/filter-sheet';
 import { EventCard } from '@/components/event/event-card';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Glass } from '@/components/ui/glass';
-import { GLASS_TINT, GlassIconButton } from '@/components/ui/glass-button';
+import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +25,7 @@ import { Text } from '@/components/ui/text';
 import { VenueRow } from '@/components/venue/venue-row';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
+import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { useCategories } from '@/queries/categories';
@@ -72,6 +73,7 @@ export default function DiscoverScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { tint: glassTint } = useGlassStyle('buttons');
   const params = useLocalSearchParams<{ category?: string }>();
 
   // What the floating controls sample on Android — the static ambient backdrop.
@@ -174,7 +176,7 @@ export default function DiscoverScreen() {
           <Glass
             variant="clear"
             intensity={28}
-            tint={GLASS_TINT}
+            tint={glassTint}
             radius={Radius.pill}
             blurTarget={backdropRef}
             style={styles.searchBar}>

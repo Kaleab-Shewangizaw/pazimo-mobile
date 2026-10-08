@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,12 +16,14 @@ import { SharedItemsSheet } from '@/components/shares/shared-items-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Glass } from '@/components/ui/glass';
-import { GLASS_SHADOW, GLASS_TINT, GlassIconButton } from '@/components/ui/glass-button';
+import { GLASS_SHADOW, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
+import { dismissConversationNotifications, setActiveConversation } from '@/lib/push-notifications';
 import { messageToViewModel, type ShareItemViewModel } from '@/lib/share-item-view-model';
 import {
   useClearConversation,
@@ -54,6 +56,7 @@ export default function ConversationScreen() {
   }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { tint: glassTint } = useGlassStyle('buttons');
   const goBack = useGoBack('/shares');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -84,6 +87,18 @@ export default function ConversationScreen() {
   const existing = conversations.find((c) => c.counterpartyId === userId);
   const { messages, isLoading: messagesLoading } = useConversationMessages(userId);
   const { submit: markRead } = useMarkConversationRead();
+
+  // While this thread is on screen, pushes about it are redundant — the
+  // notification handler hides their banner, a tap on one doesn't stack a
+  // second copy of this screen, and any already in the tray are cleared.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      setActiveConversation(userId);
+      dismissConversationNotifications(userId);
+      return () => setActiveConversation(null);
+    }, [userId]),
+  );
 
   // Clears this thread's Chats-list badge the moment it's opened, and again
   // whenever more of it loads (new messages arriving live, or paging into
@@ -215,7 +230,7 @@ export default function ConversationScreen() {
           onPress={() => setContactCardVisible(true)}
           pressedScale={0.97}
           style={styles.headerIdentityShadow}>
-          <Glass variant="clear" intensity={28} tint={GLASS_TINT} radius={Radius.pill} style={styles.headerIdentity}>
+          <Glass variant="clear" intensity={28} tint={glassTint} radius={Radius.pill} style={styles.headerIdentity}>
             <AvatarInitials name={name} size={36} />
             <View style={styles.headerTitles}>
               <Text variant="callout" numberOfLines={1}>

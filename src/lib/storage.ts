@@ -37,4 +37,6 @@ export const StorageKeys = {
   recentSearches: 'pazimo.search.recent',
   /** Ticket ids bought on this device — the guest fallback for `my-tickets`. */
   deviceTickets: 'pazimo.tickets.device',
+  /** This install's id for the backend's device registry — see lib/installation.ts. */
+  installationId: 'pazimo.installation.id',
 } as const;

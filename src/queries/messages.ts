@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { ApiError } from '@/api/client';
@@ -18,18 +24,80 @@ import {
   sendMessage,
   unblockUser,
 } from '@/api/messages';
+import { useSocketStatus } from '@/hooks/use-socket-status';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
+import type { DeletedMessageAck, Message, MessagesPage } from '@/types/api';
+
+/**
+ * How often an open chat re-reads its history while the socket isn't live —
+ * the safety net for a socket that can't connect (captive Wi-Fi, a proxy that
+ * drops websockets, a backgrounded app whose transport died). With the socket
+ * up this is off entirely and `message:*` events drive updates instead.
+ */
+const MESSAGES_FALLBACK_POLL_MS = 4000;
+const LIST_FALLBACK_POLL_MS = 15000;
+
+type MessagesCache = InfiniteData<MessagesPage, string | undefined>;
+
+function idOf(user: Message['sender'] | string): string {
+  return typeof user === 'string' ? user : user._id;
+}
+
+/**
+ * Writes a message straight into its thread's cached history — new ones at
+ * the head of the newest page (pages are newest-first), known ones replaced
+ * in place. This is what makes an incoming `message:new` show up instantly,
+ * rather than only after a refetch round-trip. A thread that was never loaded
+ * has no cache to write into, and doesn't need one: it fetches fresh on open.
+ */
+export function upsertMessageInCache(queryClient: QueryClient, message: Message, myId: string | undefined) {
+  const senderId = idOf(message.sender);
+  const counterpartyId = senderId === myId ? idOf(message.recipient) : senderId;
+  queryClient.setQueryData<MessagesCache>(queryKeys.conversations.messages(counterpartyId), (data) => {
+    if (!data?.pages.length) return data;
+    const known = data.pages.some((page) => page.messages.some((m) => m._id === message._id));
+    if (known) {
+      return {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          messages: page.messages.map((m) => (m._id === message._id ? message : m)),
+        })),
+      };
+    }
+    const [newest, ...older] = data.pages;
+    return { ...data, pages: [{ ...newest, messages: [message, ...newest.messages] }, ...older] };
+  });
+}
+
+/** A delete event carries only the id, not the thread — so this sweeps every cached thread for it. */
+export function removeMessageFromCache(queryClient: QueryClient, ack: DeletedMessageAck) {
+  queryClient.setQueriesData<MessagesCache>(
+    { queryKey: [...queryKeys.conversations.all, 'messages'] },
+    (data) =>
+      data && {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          messages: page.messages.filter((m) => m._id !== ack._id),
+        })),
+      },
+  );
+}
 
 /** The Chats tab's data source — backend-authoritative, unlike the derived per-share-domain grouping the thread screen still uses for item-transfer bubbles. */
 export function useConversationsList() {
   const token = useAuthStore((s) => s.token);
   const hydrated = useAuthStore((s) => s.hydrated);
 
+  const live = useSocketStatus() === 'live';
+
   const query = useQuery({
     queryKey: queryKeys.conversations.list(),
     queryFn: fetchConversations,
     enabled: hydrated && Boolean(token),
+    refetchInterval: live ? false : LIST_FALLBACK_POLL_MS,
   });
 
   return { ...query, conversations: query.data ?? [] };
@@ -44,6 +112,7 @@ const MESSAGES_PAGE_SIZE = 30;
  */
 export function useConversationMessages(counterpartyId: string | undefined) {
   const token = useAuthStore((s) => s.token);
+  const live = useSocketStatus() === 'live';
 
   const query = useInfiniteQuery({
     queryKey: queryKeys.conversations.messages(counterpartyId ?? ''),
@@ -52,6 +121,10 @@ export function useConversationMessages(counterpartyId: string | undefined) {
       fetchMessages(counterpartyId!, { before: pageParam, limit: MESSAGES_PAGE_SIZE }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: Boolean(token) && Boolean(counterpartyId),
+    // An open thread always reflects the server when it's shown again, even
+    // if a `message:new` was missed while the app sat in the background.
+    staleTime: 0,
+    refetchInterval: live ? false : MESSAGES_FALLBACK_POLL_MS,
     select: (data) => data.pages.flatMap((page) => page.messages).reverse(),
   });
 
@@ -95,6 +168,7 @@ export function useSendMessage() {
       setError(null);
       try {
         const message = await sendMessage(counterpartyId, text);
+        upsertMessageInCache(queryClient, message, useAuthStore.getState().user?._id);
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations.messages(counterpartyId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
         return message;

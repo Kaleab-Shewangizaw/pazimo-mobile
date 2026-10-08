@@ -11,7 +11,12 @@
  * and iOS before 26. Liquid Glass sets its own blur.
  */
 
-/** Liquid glass on buttons, pills and inputs (GlassIconButton, search fields, chat header). */
+/**
+ * Liquid glass on buttons, pills and inputs (GlassIconButton, search fields,
+ * chat header) and on chips (GlassChip). Admins set both in the web dashboard
+ * (Admin → App → Appearance) — see hooks/use-glass-style.ts; these are only
+ * used until the app has fetched those values, or if the request fails.
+ */
 export const GLASS_CONTROL_TINT = 'rgba(255, 255, 255, 0.24)';
 export const GLASS_CONTROL_BLUR = 45;
 
@@ -31,7 +36,7 @@ export const GLASS_DEFAULT_BLUR = 55;
 
 /**
  * Page backdrop (AmbientBackground). Blur and darkness are set by admins in
- * the web dashboard (Admin → App Background); these are only used until the
+ * the web dashboard (Admin → App → Appearance); these are only used until the
  * app has fetched those values, or if the request fails.
  */
 export const BACKGROUND_DEFAULT_BLUR_RADIUS = 16;

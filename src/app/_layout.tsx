@@ -14,6 +14,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
+import { AppHeartbeatBridge } from '@/hooks/use-app-heartbeat';
 import { PushNotificationsBridge } from '@/hooks/use-push-notifications';
 import { ShareTransferSocketBridge } from '@/hooks/use-share-transfer-socket';
 import { queryClient } from '@/lib/query-client';
@@ -77,6 +78,7 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <ShareTransferSocketBridge />
           <PushNotificationsBridge />
+          <AppHeartbeatBridge />
           <Stack
             screenOptions={{
               headerShown: false,

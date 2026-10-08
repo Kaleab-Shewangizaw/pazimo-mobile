@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
-import { fetchMe } from '@/api/auth';
+import { fetchMe, unregisterPushToken } from '@/api/auth';
 import { setAuthToken } from '@/api/client';
+import { getRegisteredPushToken, setRegisteredPushToken } from '@/lib/push-notifications';
 import { StorageKeys, secureStorage } from '@/lib/storage';
 import type { AuthPayload, User } from '@/types/api';
 
@@ -78,6 +79,18 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   signOut: async () => {
+    // Must go out while the session token is still attached — the endpoint
+    // is authenticated, and once the token's cleared below the request would
+    // 401 and this device would keep receiving the old account's pushes.
+    // Capped so a slow network never holds up signing out.
+    const pushToken = getRegisteredPushToken();
+    if (pushToken) {
+      setRegisteredPushToken(null);
+      await Promise.race([
+        unregisterPushToken(pushToken).catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    }
     setAuthToken(null);
     set({ user: null, token: null });
     await Promise.all([

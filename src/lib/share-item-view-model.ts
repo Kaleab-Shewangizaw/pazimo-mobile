@@ -1,3 +1,4 @@
+import { resolveImageUrl } from '@/lib/media';
 import type { BeverageShare, CinemaShare, Message, ShareUser, ShareStatus, TicketShare } from '@/types/api';
 
 /**
@@ -20,6 +21,22 @@ export type ShareItemViewModelLine = {
   quantity: number;
 };
 
+/**
+ * What the chat's transfer card draws above and around the item's name —
+ * read from the lead item only, the same one `ShareRow` titles the card with.
+ */
+export type ShareItemArt = {
+  /** Cover art, when the share's payload carries one directly (a movie poster). */
+  imageUrl?: string | null;
+  /** An event ticket's payload carries no cover — the card fetches it by this id instead. */
+  eventId?: string;
+  /** A drink/snack's own swatch color, for cards with no artwork at all. */
+  accentColor?: string | null;
+  /** ISO start time — the event's date or the screening's. */
+  startsAt?: string | null;
+  place?: string | null;
+};
+
 export type ShareItemViewModel = {
   kind: ShareKind;
   /** The share document's own id — what accept/decline/cancel act on. */
@@ -32,6 +49,8 @@ export type ShareItemViewModel = {
   respondedAt: string | null;
   expiresAt: string;
   lines: ShareItemViewModelLine[];
+  /** Absent for MESSAGE. */
+  art?: ShareItemArt;
   /** MESSAGE only — carried through from the `Message` it was built from. */
   editedAt?: string | null;
 };
@@ -76,6 +95,14 @@ export function ticketShareToViewModel(share: TicketShare): ShareItemViewModel {
           : `${item.ticket.ticketType} · ${item.quantity} admission${item.quantity > 1 ? 's' : ''}`,
       quantity: item.quantity,
     })),
+    art: share.items[0] && {
+      eventId: share.items[0].ticket.event._id,
+      startsAt: share.items[0].ticket.event.startDate,
+      place:
+        [share.items[0].ticket.event.location?.address, share.items[0].ticket.event.location?.city]
+          .filter(Boolean)
+          .join(', ') || null,
+    },
   };
 }
 
@@ -107,6 +134,17 @@ export function cinemaShareToViewModel(share: CinemaShare): ShareItemViewModel {
         quantity: item.quantity,
       };
     }),
+    art: (() => {
+      const lead = share.items[0]?.itemDetails;
+      if (!lead) return undefined;
+      return isConcession
+        ? { accentColor: lead.beverageColor, place: lead.cinema?.name }
+        : {
+            imageUrl: resolveImageUrl(lead.movie?.poster),
+            startsAt: lead.showtimeStartsAt,
+            place: [lead.cinema?.name, lead.hallName].filter(Boolean).join(' · ') || null,
+          };
+    })(),
   };
 }
 
@@ -131,5 +169,14 @@ export function beverageShareToViewModel(share: BeverageShare): ShareItemViewMod
         quantity: item.quantity,
       };
     }),
+    art: (() => {
+      const lead = share.items[0]?.saleDetails;
+      if (!lead) return undefined;
+      return {
+        accentColor: lead.beverage?.color,
+        startsAt: lead.event?.startDate,
+        place: lead.event?.title || lead.venue?.name,
+      };
+    })(),
   };
 }
