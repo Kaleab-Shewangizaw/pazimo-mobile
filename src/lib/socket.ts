@@ -43,9 +43,26 @@ type ShareTransferEvent =
 
 type Listener = (event: ShareTransferEvent) => void;
 
+/**
+ * `live` only once the server has acked `authenticate` — a connected but not
+ * yet authenticated socket isn't in the `user_<id>` room, so it receives
+ * nothing. Anything else means events can be missed, and the chat queries
+ * fall back to polling (see `useConversationMessages`).
+ */
+export type SocketStatus = 'offline' | 'connecting' | 'live';
+type StatusListener = (status: SocketStatus) => void;
+
 let socket: Socket | null = null;
 let currentToken: string | null = null;
+let status: SocketStatus = 'offline';
 const listeners = new Set<Listener>();
+const statusListeners = new Set<StatusListener>();
+
+function setStatus(next: SocketStatus) {
+  if (status === next) return;
+  status = next;
+  statusListeners.forEach((listen) => listen(next));
+}
 
 function authenticate() {
   if (socket && currentToken) {
@@ -63,14 +80,30 @@ function ensureSocket(): Socket {
     transports: ['websocket', 'polling'],
   });
 
-  socket.on('connect', authenticate);
-  socket.on('reconnect', authenticate);
+  // socket.io v4 fires `connect` on every reconnection too (`reconnect` is
+  // only emitted on the Manager, never the socket), so this one listener is
+  // what re-joins the user room after a dropped transport.
+  socket.on('connect', () => {
+    setStatus('connecting');
+    authenticate();
+  });
+  socket.on('disconnect', () => setStatus(currentToken ? 'connecting' : 'offline'));
+  socket.on('connect_error', (error) => {
+    setStatus(currentToken ? 'connecting' : 'offline');
+    if (__DEV__) console.warn('[socket] connect error:', error.message);
+  });
   socket.on('authenticated', (ack: { ok: boolean; message?: string }) => {
+    if (ack?.ok) {
+      setStatus('live');
+      return;
+    }
     // A rejected token (expired/invalid) won't fix itself by retrying with the
     // same value — drop the connection rather than let socket.io keep
     // reconnecting and re-sending it. The next real sign-in calls
     // `connectSocket` again with a fresh token.
-    if (!ack?.ok) socket?.disconnect();
+    if (__DEV__) console.warn('[socket] authenticate rejected:', ack?.message);
+    socket?.disconnect();
+    setStatus('offline');
   });
   socket.on('ticket:transfer', (payload: TicketTransferEvent) => {
     listeners.forEach((listen) => listen({ type: 'ticket:transfer', payload }));
@@ -108,8 +141,10 @@ export function connectSocket(token: string) {
   currentToken = token;
   const s = ensureSocket();
   if (s.connected) {
+    setStatus('connecting');
     authenticate();
   } else if (!s.active) {
+    setStatus('connecting');
     s.connect();
   }
 }
@@ -118,6 +153,17 @@ export function connectSocket(token: string) {
 export function disconnectSocket() {
   currentToken = null;
   socket?.disconnect();
+  setStatus('offline');
+}
+
+export function getSocketStatus(): SocketStatus {
+  return status;
+}
+
+/** Fires on every status change. Returns an unsubscribe function. */
+export function subscribeSocketStatus(listener: StatusListener): () => void {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
 }
 
 /** Subscribes to ticket transfer/receipt events. Returns an unsubscribe function. */
