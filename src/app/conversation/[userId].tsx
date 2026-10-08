@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
+import { dismissConversationNotifications, setActiveConversation } from '@/lib/push-notifications';
 import { messageToViewModel, type ShareItemViewModel } from '@/lib/share-item-view-model';
 import {
   useClearConversation,
@@ -86,6 +87,18 @@ export default function ConversationScreen() {
   const existing = conversations.find((c) => c.counterpartyId === userId);
   const { messages, isLoading: messagesLoading } = useConversationMessages(userId);
   const { submit: markRead } = useMarkConversationRead();
+
+  // While this thread is on screen, pushes about it are redundant — the
+  // notification handler hides their banner, a tap on one doesn't stack a
+  // second copy of this screen, and any already in the tray are cleared.
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      setActiveConversation(userId);
+      dismissConversationNotifications(userId);
+      return () => setActiveConversation(null);
+    }, [userId]),
+  );
 
   // Clears this thread's Chats-list badge the moment it's opened, and again
   // whenever more of it loads (new messages arriving live, or paging into
