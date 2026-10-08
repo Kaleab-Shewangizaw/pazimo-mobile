@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
+import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDateTime } from '@/lib/date';
 import type { InviteKind } from '@/lib/invite-link';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { useVenueBeverageCatalog } from '@/queries/beverages';
@@ -27,6 +29,12 @@ const KIND_ICON: Record<InviteKind, keyof typeof Ionicons.glyphMap> = {
   venue: 'location',
 };
 
+const KIND_LABEL: Record<InviteKind, string> = {
+  movie: 'Movie',
+  event: 'Event',
+  venue: 'Venue',
+};
+
 const KIND_CTA: Record<InviteKind, string> = {
   movie: 'Pick a showtime',
   event: 'View event',
@@ -39,6 +47,11 @@ const KIND_CTA: Record<InviteKind, string> = {
  * id — no new endpoints — and always renders tappable immediately, showing
  * "Loading…" for the title rather than waiting on the fetch to resolve
  * before becoming interactive.
+ *
+ * The artwork fills the whole card, edge to edge — the event's cover or the
+ * movie's poster at the same ratio the feed's event cards use — with the
+ * title and CTA laid over a scrim at the bottom. A venue has no artwork, so
+ * it gets a gradient with its icon in the same frame.
  */
 export function InviteMessageCard({ kind, id, openShowtimes, sent }: InviteMessageCardProps) {
   const theme = useTheme();
@@ -64,6 +77,11 @@ export function InviteMessageCard({ kind, id, openShowtimes, sent }: InviteMessa
         ? eventCoverUrl(eventQuery.data?.coverImages)
         : null;
 
+  const subtitle =
+    kind === 'event' && eventQuery.data
+      ? formatDateTime(eventQuery.data.startDate, eventQuery.data.startTime)
+      : null;
+
   const onPress = () => {
     if (kind === 'movie') {
       router.push({
@@ -83,42 +101,82 @@ export function InviteMessageCard({ kind, id, openShowtimes, sent }: InviteMessa
       accessibilityLabel={title ? `Open ${title}` : 'Open shared item'}
       onPress={onPress}
       pressedScale={0.98}
-      style={[
-        styles.card,
-        { backgroundColor: sent ? 'rgba(255,255,255,0.08)' : theme.surfaceMuted, borderColor: theme.hairline },
-      ]}>
+      style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.glassBorder }]}>
       {image ? (
-        <Image source={{ uri: image }} style={styles.image} contentFit="cover" />
+        <Image source={{ uri: image }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
       ) : (
-        <View style={[styles.image, styles.imageFallback, { backgroundColor: theme.background }]}>
-          <Ionicons name={KIND_ICON[kind]} size={20} color={theme.textMuted} />
-        </View>
+        <LinearGradient
+          colors={[sent ? theme.surfaceMuted : theme.surface, theme.backgroundElevated]}
+          style={[StyleSheet.absoluteFill, styles.fallback]}>
+          <Ionicons name={KIND_ICON[kind]} size={48} color={theme.textMuted} />
+        </LinearGradient>
       )}
-      <View style={styles.text}>
-        <Text variant="body" numberOfLines={1}>
-          {title ?? 'Loading…'}
-        </Text>
-        <Text variant="caption" color="brand">
-          {KIND_CTA[kind]}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.88)']}
+        locations={[0, 0.3, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={[styles.kindChip, { backgroundColor: theme.glassStrong }]}>
+        <Ionicons name={KIND_ICON[kind]} size={12} color={theme.text} />
+        <Text variant="label" style={styles.kindLabel}>
+          {KIND_LABEL[kind].toUpperCase()}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+
+      <View style={styles.overlay}>
+        <Text variant="title" numberOfLines={2} style={styles.title}>
+          {title ?? 'Loading…'}
+        </Text>
+        {subtitle ? (
+          <Text variant="small" numberOfLines={1} style={styles.subtitle}>
+            {subtitle}
+          </Text>
+        ) : null}
+        <View style={[styles.cta, { backgroundColor: theme.brand }]}>
+          <Text variant="small" style={[styles.ctaText, { color: theme.onBrand }]}>
+            {KIND_CTA[kind]}
+          </Text>
+          <Ionicons name="arrow-forward" size={14} color={theme.onBrand} />
+        </View>
+      </View>
     </Touchable>
   );
 }
 
-const IMAGE_SIZE = 48;
-
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+    width: '100%',
+    aspectRatio: AspectRatio.poster,
     borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.sm,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
   },
-  image: { width: IMAGE_SIZE, height: IMAGE_SIZE, borderRadius: Radius.md },
-  imageFallback: { alignItems: 'center', justifyContent: 'center' },
-  text: { flex: 1, gap: 2 },
+  fallback: { alignItems: 'center', justifyContent: 'center' },
+  kindChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    margin: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  kindLabel: { fontSize: 10 },
+  overlay: { padding: Spacing.md, gap: 4 },
+  title: { color: '#FFFFFF' },
+  subtitle: { color: 'rgba(255,255,255,0.8)' },
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+  },
+  ctaText: { fontFamily: FontFamily.bold },
 });
