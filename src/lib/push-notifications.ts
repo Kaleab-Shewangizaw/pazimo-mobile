@@ -78,6 +78,32 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 }
 
+export type PushPermission = 'granted' | 'denied' | 'undetermined';
+
+/**
+ * The current permission and, when granted, this device's token — *without*
+ * prompting. For the device heartbeat, which runs for guests too: the app only
+ * asks for permission after sign-in (see `usePushNotifications`), and a guest
+ * who already granted it keeps their token reachable by admin campaigns.
+ */
+export async function getPushStateSilently(): Promise<{
+  permission: PushPermission;
+  token: string | null;
+}> {
+  if (!Device.isDevice) return { permission: 'undetermined', token: null };
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    const permission: PushPermission =
+      status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined';
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (permission !== 'granted' || !projectId) return { permission, token: null };
+    const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+    return { permission, token: data };
+  } catch {
+    return { permission: 'undetermined', token: null };
+  }
+}
+
 /** Fires when the user taps a notification (foreground, background, or from a cold start's initial response). Returns an unsubscribe function. */
 export function addNotificationTapListener(
   onTap: (data: Record<string, unknown>) => void,

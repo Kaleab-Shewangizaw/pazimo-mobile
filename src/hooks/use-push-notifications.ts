@@ -1,14 +1,18 @@
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef } from 'react';
 
+import { recordCampaignOpen } from '@/api/app';
 import { registerPushToken, unregisterPushToken } from '@/api/auth';
+import { reportAppHeartbeat } from '@/hooks/use-app-heartbeat';
 import { addNotificationTapListener, registerForPushNotificationsAsync } from '@/lib/push-notifications';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 /**
  * Registers this device's Expo push token with the backend once signed in,
- * and deep-links a tapped notification to the conversation it's about — the
- * push counterpart to `use-share-transfer-socket.ts`'s in-app updates.
+ * and deep-links a tapped notification: a conversation for the pushes users'
+ * activity triggers (the counterpart to `use-share-transfer-socket.ts`'s
+ * in-app updates), an event or link for admin campaigns.
  */
 function usePushNotifications() {
   const router = useRouter();
@@ -42,6 +46,9 @@ function usePushNotifications() {
       registerPushToken(pushToken).catch((error) => {
         console.error('Failed to register push token:', error.message);
       });
+      // The heartbeat on sign-in may have run before permission was granted;
+      // send one now so admin campaigns can reach this device too.
+      reportAppHeartbeat();
     });
 
     return () => {
@@ -51,9 +58,22 @@ function usePushNotifications() {
 
   useEffect(() => {
     return addNotificationTapListener((data) => {
-      // Every push this app sends carries `counterpartyId` (see
-      // pushService's callers) — a message, a ticket/drink/cinema share, or
-      // a response to one, all resolve to "open this conversation."
+      // Admin campaigns and test pushes from the dashboard (Admin → App).
+      if (data.type === 'campaign' || data.type === 'test') {
+        if (typeof data.campaignId === 'string') {
+          recordCampaignOpen(data.campaignId).catch(() => {});
+        }
+        if (typeof data.eventId === 'string' && data.eventId) {
+          router.push(`/event/${data.eventId}`);
+        } else if (typeof data.url === 'string' && /^https:\/\//i.test(data.url)) {
+          WebBrowser.openBrowserAsync(data.url).catch(() => {});
+        }
+        return;
+      }
+
+      // Every other push carries `counterpartyId` (see pushService's
+      // callers) — a message, a ticket/drink/cinema share, or a response to
+      // one, all resolve to "open this conversation."
       if (typeof data.counterpartyId === 'string' && data.counterpartyId) {
         router.push({ pathname: '/conversation/[userId]', params: { userId: data.counterpartyId } });
       }
