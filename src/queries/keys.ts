@@ -79,6 +79,10 @@ export const queryKeys = {
     contactsList: () => [...queryKeys.conversations.all, 'contacts-list'] as const,
     blocked: () => [...queryKeys.conversations.all, 'blocked'] as const,
   },
+  notifications: {
+    all: ['notifications'] as const,
+    list: () => [...queryKeys.notifications.all, 'list'] as const,
+  },
   account: {
     notificationPreferences: ['account', 'notification-preferences'] as const,
   },

@@ -1098,3 +1098,27 @@ export type RefillOrderSummary = {
   title: string;
   createdAt: string;
 };
+
+/* ---------------------------- notification inbox ---------------------------- */
+
+/** Same values as a push payload's `data.type` — what a tap routes on. */
+export type AppNotificationKind = 'ticket-share' | 'beverage-share' | 'cinema-share' | 'campaign';
+
+/** One row of the bell's inbox — `GET /app/notifications`. */
+export type AppNotification = {
+  _id: string;
+  kind: AppNotificationKind;
+  title: string;
+  body: string;
+  /** The push payload it went out with (plus `notificationId`) — see `lib/notification-routing.ts`. */
+  data: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+};
+
+/** One page, newest-first. `unreadCount` is the whole inbox's, not just this page's. */
+export type NotificationsPage = {
+  notifications: AppNotification[];
+  unreadCount: number;
+  nextCursor: string | null;
+};

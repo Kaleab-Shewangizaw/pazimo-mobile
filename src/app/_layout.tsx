@@ -89,6 +89,7 @@ export default function RootLayout() {
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="shares" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="account/menu" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="account/edit" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="account/wishlist" options={{ animation: 'slide_from_right' }} />
