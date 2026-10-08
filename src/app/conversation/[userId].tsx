@@ -16,10 +16,11 @@ import { SharedItemsSheet } from '@/components/shares/shared-items-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Glass } from '@/components/ui/glass';
-import { GLASS_SHADOW, GLASS_TINT, GlassIconButton } from '@/components/ui/glass-button';
+import { GLASS_SHADOW, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
 import { messageToViewModel, type ShareItemViewModel } from '@/lib/share-item-view-model';
@@ -54,6 +55,7 @@ export default function ConversationScreen() {
   }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { tint: glassTint } = useGlassStyle('buttons');
   const goBack = useGoBack('/shares');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -215,7 +217,7 @@ export default function ConversationScreen() {
           onPress={() => setContactCardVisible(true)}
           pressedScale={0.97}
           style={styles.headerIdentityShadow}>
-          <Glass variant="clear" intensity={28} tint={GLASS_TINT} radius={Radius.pill} style={styles.headerIdentity}>
+          <Glass variant="clear" intensity={28} tint={glassTint} radius={Radius.pill} style={styles.headerIdentity}>
             <AvatarInitials name={name} size={36} />
             <View style={styles.headerTitles}>
               <Text variant="callout" numberOfLines={1}>

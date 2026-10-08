@@ -16,7 +16,7 @@ import { useAppBackground } from '@/queries/app-background';
  * real sheet of frosted glass, with every panel floating above.
  *
  * The photo, its blur and the darkening wash are set by admins (web dashboard →
- * App Background). The bundled photo and the defaults in
+ * App → Appearance). The bundled photo and the defaults in
  * constants/appearance.ts cover first launch, no active image, and a failed
  * request.
  *
