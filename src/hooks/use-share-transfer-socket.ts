@@ -47,6 +47,8 @@ function useShareTransferSocket() {
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
         return;
       }
+      // Every share event below also wrote a row to the bell's inbox server-side.
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
       if (event.type.startsWith('beverage:')) {
         queryClient.invalidateQueries({ queryKey: queryKeys.beverageShares.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.refill.all });
@@ -75,6 +77,7 @@ function useShareTransferSocket() {
         queryClient.invalidateQueries({ queryKey: queryKeys.shares.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.beverageShares.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.cinemaShares.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
       }
       wasLive = true;
     });

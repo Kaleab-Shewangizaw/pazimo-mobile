@@ -63,7 +63,7 @@ export function useUpdateProfile() {
   const [error, setError] = useState<string | null>(null);
 
   const submit = useCallback(
-    async (input: { firstName: string; lastName?: string }) => {
+    async (input: Parameters<typeof updateProfile>[0]) => {
       setSubmitting(true);
       setError(null);
       try {
@@ -71,7 +71,7 @@ export function useUpdateProfile() {
         await setUser(user);
         return true;
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not update your name. Try again.');
+        setError(err instanceof ApiError ? err.message : 'Could not update your profile. Try again.');
         return false;
       } finally {
         setSubmitting(false);
