@@ -100,6 +100,9 @@ function usePushNotifications() {
           queryClient.invalidateQueries({ queryKey: queryKeys.cinemaShares.all });
           queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
           break;
+        case 'achievement':
+          queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all });
+          break;
       }
     });
   }, [queryClient]);
