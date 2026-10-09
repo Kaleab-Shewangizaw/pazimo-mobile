@@ -102,6 +102,7 @@ export default function RootLayout() {
             <Stack.Screen name="refill/event/[eventId]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="refill/venue/[venueId]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="refill/orders" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="rewards/index" options={{ animation: 'slide_from_right' }} />
             {/* Fades rather than slides, and cannot be swiped away: the poll
                 running on this screen is what issues the ticket, so leaving it
                 by accident mid-payment has a real cost. */}
