@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -175,8 +174,6 @@ export default function RecapScreen() {
 
   return (
     <View style={styles.screen}>
-      <LinearGradient colors={['#0B0B10', '#141020', '#08080A']} style={StyleSheet.absoluteFill} />
-
       <View style={[styles.topBar, { paddingTop: insets.top + Spacing.sm, height: insets.top + TOP_BAR }]}>
         <View style={styles.topRow}>
           <Touchable accessibilityRole="button" accessibilityLabel="Close" onPress={goBack} pressedScale={0.9} style={styles.iconButton}>
@@ -255,10 +252,11 @@ export default function RecapScreen() {
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md, height: insets.bottom + BOTTOM_BAR }]}>
         {recap.data?.drinkGate === 'birthdate-required' ? (
           <Touchable accessibilityRole="button" onPress={() => setBirthDateVisible(true)} style={styles.gate}>
-            <Ionicons name="gift-outline" size={16} color="#FFD166" />
+            <Ionicons name="gift-outline" size={16} color="#FFFFFF" />
             <Text variant="caption" style={styles.gateText}>
               Add your birthday to unlock your drink stats
             </Text>
+            <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.5)" />
           </Touchable>
         ) : null}
         {ready ? (
@@ -333,7 +331,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,209,102,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  gateText: { color: '#FFD166' },
+  gateText: { color: '#FFFFFF' },
 });

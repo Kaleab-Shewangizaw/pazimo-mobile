@@ -1,3 +1,6 @@
+import type { Ionicons } from '@expo/vector-icons';
+import type { Href } from 'expo-router';
+
 import type { PointsSource, RecapPeriodType } from '@/types/api';
 
 export const SOURCE_LABEL: Record<PointsSource, string> = {
@@ -6,6 +9,15 @@ export const SOURCE_LABEL: Record<PointsSource, string> = {
   EVENT_BEVERAGE: 'Drinks at events',
   VENUE_BEVERAGE: 'Drinks at venues',
   CINEMA_CONCESSION: 'Cinema snacks',
+};
+
+/** Each way of earning, with the part of the app where you do it. */
+export const SOURCE_LOOK: Record<PointsSource, { icon: keyof typeof Ionicons.glyphMap; href: Href }> = {
+  EVENT_TICKET: { icon: 'ticket', href: '/(tabs)/discover' },
+  CINEMA_TICKET: { icon: 'film', href: '/(tabs)/cinema' },
+  EVENT_BEVERAGE: { icon: 'beer', href: '/(tabs)/refill' },
+  VENUE_BEVERAGE: { icon: 'wine', href: '/(tabs)/refill' },
+  CINEMA_CONCESSION: { icon: 'fast-food', href: '/(tabs)/cinema' },
 };
 
 // Recap periods are East Africa Time calendar months/years on the server
