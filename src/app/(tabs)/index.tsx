@@ -32,6 +32,7 @@ import { useCinemaShares } from '@/queries/cinema-shares';
 import { categoryIdOf } from '@/queries/discover';
 import { useEventFeed } from '@/queries/events';
 import { useConversationsList } from '@/queries/messages';
+import { useUnreadNotificationCount } from '@/queries/notifications';
 import { useRsvpFeed } from '@/queries/rsvp';
 import { useTicketShares } from '@/queries/ticket-shares';
 
@@ -74,6 +75,9 @@ export default function HomeScreen() {
     incomingBeverageShares.length > 0 ||
     incomingCinemaShares.length > 0 ||
     hasUnreadMessages;
+  // Only what's actually unread in the inbox — the dot used to be drawn
+  // unconditionally, before the bell had anything behind it.
+  const unreadNotifications = useUnreadNotificationCount();
 
   // The API has no category *or* featured filter on any event route, so both
   // run client-side over whatever pages have been fetched so far — same stopgap
@@ -151,20 +155,23 @@ export default function HomeScreen() {
             <View>
               <GlassIconButton
                 icon="notifications-outline"
-                accessibilityLabel="Notifications"
+                accessibilityLabel={
+                  unreadNotifications > 0
+                    ? `Notifications, ${unreadNotifications} unread`
+                    : 'Notifications'
+                }
                 blurTarget={backdropRef}
-                // Presentational for now — there is no notifications route or
-                // feed yet, so this has nowhere to go (same caveat as the
-                // save hearts).
-                onPress={() => {}}
+                onPress={() => router.push('/notifications')}
               />
-              <View
-                style={[
-                  styles.badge,
-                  { backgroundColor: theme.danger, borderColor: theme.background },
-                ]}
-                pointerEvents="none"
-              />
+              {unreadNotifications > 0 ? (
+                <View
+                  style={[
+                    styles.badge,
+                    { backgroundColor: theme.danger, borderColor: theme.background },
+                  ]}
+                  pointerEvents="none"
+                />
+              ) : null}
             </View>
             <View>
               <GlassIconButton

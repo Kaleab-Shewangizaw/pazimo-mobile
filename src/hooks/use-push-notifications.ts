@@ -1,20 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRootNavigationState, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef } from 'react';
 
-import { recordCampaignOpen } from '@/api/app';
 import { registerPushToken } from '@/api/auth';
 import { reportAppHeartbeat } from '@/hooks/use-app-heartbeat';
 import {
   addNotificationReceivedListener,
   addNotificationTapListener,
   addPushTokenChangeListener,
-  getActiveConversation,
   registerForPushNotificationsAsync,
   setRegisteredPushToken,
 } from '@/lib/push-notifications';
+import { openNotificationTarget } from '@/lib/notification-routing';
 import { queryKeys } from '@/queries/keys';
+import { useMarkNotificationsRead } from '@/queries/notifications';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 /**
@@ -29,6 +28,7 @@ import { useAuthStore } from '@/stores/use-auth-store';
 function usePushNotifications() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { submit: markRead } = useMarkNotificationsRead();
   const token = useAuthStore((s) => s.token);
   const hydrated = useAuthStore((s) => s.hydrated);
   // A tap that cold-starts the app is delivered before the navigator has
@@ -79,6 +79,9 @@ function usePushNotifications() {
   // makes the new message or share appear without a manual refresh.
   useEffect(() => {
     return addNotificationReceivedListener((data) => {
+      if (data.type !== 'message') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      }
       switch (data.type) {
         case 'message':
           queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all });
@@ -104,32 +107,15 @@ function usePushNotifications() {
   useEffect(() => {
     if (!navigationReady) return;
     return addNotificationTapListener((data) => {
-      // Admin campaigns and test pushes from the dashboard (Admin → App).
-      if (data.type === 'campaign' || data.type === 'test') {
-        if (typeof data.campaignId === 'string') {
-          recordCampaignOpen(data.campaignId).catch(() => {});
-        }
-        if (typeof data.eventId === 'string' && data.eventId) {
-          router.push(`/event/${data.eventId}`);
-        } else if (typeof data.url === 'string' && /^https:\/\//i.test(data.url)) {
-          WebBrowser.openBrowserAsync(data.url).catch(() => {});
-        }
-        return;
+      // The inbox row this push was saved as is now seen too.
+      if (typeof data.notificationId === 'string') {
+        markRead({ ids: [data.notificationId] });
+      } else if (data.type === 'campaign' && typeof data.campaignId === 'string') {
+        markRead({ campaignId: data.campaignId });
       }
-
-      // Every other push carries `counterpartyId` (see pushService's
-      // callers) — a message, a ticket/drink/cinema share, or a response to
-      // one, all resolve to "open this conversation." Already looking at it?
-      // Then there's nowhere to go — pushing would stack a duplicate screen.
-      const counterpartyId = data.counterpartyId;
-      if (typeof counterpartyId !== 'string' || !counterpartyId) return;
-      if (getActiveConversation() === counterpartyId) return;
-      // A signed-out device shouldn't still be getting these, but a push
-      // already in the tray from before sign-out can still be tapped.
-      if (!useAuthStore.getState().token) return;
-      router.push({ pathname: '/conversation/[userId]', params: { userId: counterpartyId } });
+      openNotificationTarget(router, data);
     });
-  }, [navigationReady, router]);
+  }, [navigationReady, router, markRead]);
 }
 
 /** Mount once, anywhere inside the router — see `src/app/_layout.tsx`. Renders nothing. */
