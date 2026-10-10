@@ -1,13 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { revokeOtherSessions, revokeSession } from '@/api/auth';
+import { ApiError } from '@/api/client';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DeviceRow, deviceName } from '@/components/ui/device-row';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { HeaderBackButton } from '@/components/ui/header-back-button';
-import { ListCard } from '@/components/ui/list-row';
+import { ListCard, ListRow } from '@/components/ui/list-row';
 import { OtpInput } from '@/components/ui/otp-input';
 import { Touchable } from '@/components/ui/pressable';
 import { SectionHeader } from '@/components/ui/section';
@@ -15,12 +20,25 @@ import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { relativeTimeLabel } from '@/lib/date';
 import {
+  useAccountSessions,
   useSendPhoneVerifyOtp,
   useUpdateOtpPreference,
   useVerifyPhoneOtp,
 } from '@/queries/account';
+import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
+import type { AccountSession } from '@/types/api';
+
+/** "iOS 18.2 · Pazimo 1.4.0 · Active 5 min ago" — what tells two phones apart at a glance. */
+function sessionSubtitle(session: AccountSession): string {
+  const parts: string[] = [];
+  if (session.osVersion) parts.push(`${session.platform === 'ios' ? 'iOS' : session.platform === 'android' ? 'Android' : ''} ${session.osVersion}`.trim());
+  if (session.appVersion) parts.push(`Pazimo ${session.appVersion}`);
+  parts.push(session.current ? 'Online' : `Active ${relativeTimeLabel(session.lastSeenAt)}`);
+  return parts.join(' · ');
+}
 
 /**
  * Phone verification and the login-code (2FA) toggle it unlocks. Every
@@ -39,6 +57,30 @@ export default function SecurityScreen() {
     submitting: togglingOtp,
     error: toggleError,
   } = useUpdateOtpPreference();
+
+  const queryClient = useQueryClient();
+  const sessions = useAccountSessions();
+  const current = sessions.data?.find((session) => session.current);
+  const others = sessions.data?.filter((session) => !session.current) ?? [];
+  const [ending, setEnding] = useState<AccountSession | 'all' | null>(null);
+  const [endingBusy, setEndingBusy] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const confirmEnd = useCallback(async () => {
+    if (!ending) return;
+    setEndingBusy(true);
+    setSessionError(null);
+    try {
+      if (ending === 'all') await revokeOtherSessions();
+      else await revokeSession(ending.id);
+    } catch (err) {
+      setSessionError(err instanceof ApiError ? err.message : 'We couldn’t end that session. Try again.');
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.account.sessions });
+      setEndingBusy(false);
+      setEnding(null);
+    }
+  }, [ending, queryClient]);
 
   const [maskedDestination, setMaskedDestination] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -168,7 +210,74 @@ export default function SecurityScreen() {
             ) : null}
           </ListCard>
         </View>
+
+        <View>
+          <SectionHeader title="Active sessions" />
+          <ListCard>
+            {sessions.isLoading ? (
+              <ActivityIndicator color="#FFFFFF" style={styles.loading} />
+            ) : current ? (
+              <DeviceRow
+                platform={current.platform}
+                title={deviceName(current.platform, current.deviceModel)}
+                subtitle={sessionSubtitle(current)}
+                current
+              />
+            ) : (
+              <Text variant="small" color="textSecondary" style={styles.loading}>
+                {sessions.isError ? 'Couldn’t load your sessions. Go back and open this screen again.' : 'This device'}
+              </Text>
+            )}
+            {others.length ? (
+              <ListRow
+                icon="hand-left-outline"
+                label="Terminate all other sessions"
+                danger
+                onPress={() => setEnding('all')}
+              />
+            ) : null}
+          </ListCard>
+          <Text variant="caption" color={sessionError ? 'danger' : 'textMuted'} style={styles.footnote}>
+            {sessionError ?? 'Signs you out on every device except this one.'}
+          </Text>
+        </View>
+
+        {others.length ? (
+          <View>
+            <SectionHeader title="Other sessions" />
+            <ListCard>
+              {others.map((session) => (
+                <DeviceRow
+                  key={session.id}
+                  platform={session.platform}
+                  title={deviceName(session.platform, session.deviceModel)}
+                  subtitle={sessionSubtitle(session)}
+                  onPress={() => setEnding(session)}
+                />
+              ))}
+            </ListCard>
+            <Text variant="caption" color="textMuted" style={styles.footnote}>
+              Tap a session to sign that device out.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={Boolean(ending)}
+        title={ending === 'all' ? 'Terminate all other sessions?' : 'Terminate this session?'}
+        message={
+          ending === 'all'
+            ? 'Every other device signed in to your account will be signed out.'
+            : ending
+              ? `${deviceName(ending.platform, ending.deviceModel)} will be signed out of your account.`
+              : undefined
+        }
+        confirmLabel={endingBusy ? 'Terminating…' : 'Terminate'}
+        destructive
+        onConfirm={confirmEnd}
+        onCancel={() => setEnding(null)}
+      />
     </View>
   );
 }
@@ -187,4 +296,6 @@ const styles = StyleSheet.create({
   verifyBlock: { paddingVertical: Spacing.lg, gap: Spacing.md },
   linkCenter: { alignSelf: 'center' },
   toggleError: { paddingBottom: Spacing.md },
+  loading: { paddingVertical: Spacing.lg },
+  footnote: { marginTop: Spacing.sm, paddingHorizontal: Spacing.xs },
 });

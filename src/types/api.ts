@@ -1241,6 +1241,22 @@ export type WalletSummary = {
   today?: { spent: number; deposited: number };
 };
 
+/** `GET /wallet/devices` — a phone the wallet works on, named from what that install last reported. */
+export type WalletDevice = {
+  /** The install id — what `DELETE /wallet/devices/:id` takes. */
+  id: string;
+  current: boolean;
+  platform: 'ios' | 'android' | 'web' | 'unknown';
+  deviceModel: string | null;
+  osVersion: string | null;
+  appVersion: string | null;
+  addedAt: string;
+  lastUsedAt: string;
+  lastSeenAt: string | null;
+  /** Set while a newly added phone is still in its cool-off. */
+  spendAllowedAfter: string | null;
+};
+
 export type WalletEntry = {
   id: string;
   kind: 'deposit' | 'payment' | 'refund' | 'adjustment';
@@ -1288,4 +1304,17 @@ export type WalletPayResult = {
   needsReview: boolean;
   total: number;
   currency: 'ETB';
+};
+
+/** `GET /auth/sessions` — one signed-in device of the account. */
+export type AccountSession = {
+  id: string;
+  current: boolean;
+  platform: 'ios' | 'android' | 'web' | 'unknown';
+  deviceModel: string | null;
+  osVersion: string | null;
+  appVersion: string | null;
+  ip: string | null;
+  signedInAt: string;
+  lastSeenAt: string;
 };

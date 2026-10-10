@@ -85,11 +85,13 @@ export const queryKeys = {
   },
   account: {
     notificationPreferences: ['account', 'notification-preferences'] as const,
+    sessions: ['account', 'sessions'] as const,
   },
   wallet: {
     all: ['wallet'] as const,
     mine: () => [...queryKeys.wallet.all, 'mine'] as const,
     statement: () => [...queryKeys.wallet.all, 'statement'] as const,
+    devices: () => [...queryKeys.wallet.all, 'devices'] as const,
   },
   rewards: {
     all: ['rewards'] as const,
