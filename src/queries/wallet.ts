@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
-import { fetchWallet, fetchWalletStatement } from '@/api/wallet';
+import { fetchWallet, fetchWalletDevices, fetchWalletStatement } from '@/api/wallet';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
 
@@ -30,4 +30,14 @@ export function useWalletStatement(enabled: boolean) {
     enabled: signedIn && enabled,
   });
   return { ...query, entries: query.data?.pages.flatMap((page) => page.entries) ?? [] };
+}
+
+/** The phones this wallet works on. Only for a wallet this phone may open. */
+export function useWalletDevices(enabled: boolean) {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: queryKeys.wallet.devices(),
+    queryFn: fetchWalletDevices,
+    enabled: signedIn && enabled,
+  });
 }

@@ -1,8 +1,9 @@
-import { getData, postData, postRaw } from '@/api/client';
+import { deleteRaw, getData, postData, postRaw } from '@/api/client';
 import { getInstallationId } from '@/lib/installation';
 import type {
   PaymentInitiateRequest,
   WalletDeposit,
+  WalletDevice,
   WalletDepositMethod,
   WalletOtpSent,
   WalletPayFields,
@@ -22,6 +23,16 @@ async function deviceHeaders() {
 
 export async function fetchWallet(): Promise<WalletSummary> {
   return getData<WalletSummary>('/wallet', await deviceHeaders());
+}
+
+export async function fetchWalletDevices(): Promise<WalletDevice[]> {
+  const data = await getData<{ devices: WalletDevice[] }>('/wallet/devices', await deviceHeaders());
+  return data.devices;
+}
+
+/** Takes another phone off the wallet. The server refuses the phone asking. */
+export async function removeWalletDevice(installationId: string): Promise<void> {
+  await deleteRaw(`/wallet/devices/${encodeURIComponent(installationId)}`, await deviceHeaders());
 }
 
 export async function fetchWalletStatement(before?: string): Promise<WalletStatementPage> {

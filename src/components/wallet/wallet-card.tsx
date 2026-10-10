@@ -106,7 +106,6 @@ function WalletCardImpl({
         />
 
         <View style={styles.topRow}>
-          <Image source={wordmark} style={styles.logo} contentFit="contain" accessibilityLabel="Pazimo" />
           {frozen ? (
             <View style={styles.frozenPill}>
               <Ionicons name="snow" size={12} color="#FFFFFF" />
@@ -115,6 +114,7 @@ function WalletCardImpl({
           ) : (
             <Text style={styles.kind}>WALLET</Text>
           )}
+          <Image source={wordmark} style={styles.logo} contentFit="contain" accessibilityLabel="Pazimo" />
         </View>
 
         <View style={styles.chipRow}>

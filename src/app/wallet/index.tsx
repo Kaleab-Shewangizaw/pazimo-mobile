@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,11 +22,19 @@ import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useFreezeWallet } from '@/hooks/use-freeze-wallet';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
+import { formatPrice } from '@/lib/pricing';
 import { untilLabel } from '@/lib/wallet';
 import { useMyWallet } from '@/queries/wallet';
 import { displayName, useAuthStore } from '@/stores/use-auth-store';
 
 type IconName = keyof typeof Ionicons.glyphMap;
+
+/** Everywhere the wallet is accepted — each opens that part of the app. */
+const USES: { icon: IconName; label: string; href: Href }[] = [
+  { icon: 'ticket-outline', label: 'Events', href: '/(tabs)/discover' },
+  { icon: 'film-outline', label: 'Cinema', href: '/(tabs)/cinema' },
+  { icon: 'beer-outline', label: 'Drinks', href: '/(tabs)/refill' },
+];
 
 /**
  * Pazimo Wallet: the card, adding money, and the way into Activity and
@@ -50,7 +58,9 @@ export default function WalletScreen() {
   const [agreed, setAgreed] = useState(false);
 
   const topPadding = insets.top + HEADER_CONTENT_HEIGHT + Spacing.xl;
-  const showMenu = Boolean(data && (data.enabled || data.exists));
+  // The ready wallet has its own Manage button; the menu is only for the
+  // states without one (before setup, and on a phone not yet verified).
+  const showMenu = Boolean(data && (data.enabled || data.exists) && !(data.exists && data.device?.verified));
 
   const renderBody = () => {
     if (!data) return null;
@@ -164,6 +174,10 @@ export default function WalletScreen() {
         : null
       : { icon: 'add', label: 'Add money', onPress: () => setDepositOpen(true) };
 
+    const spent = data.today?.spent ?? 0;
+    const dailyLimit = data.limits.dailySpendLimit;
+    const spentShare = dailyLimit > 0 ? Math.min(1, spent / dailyLimit) : 0;
+
     const actions: { icon: IconName; label: string; onPress: () => void }[] = [
       ...(primary ? [primary] : []),
       { icon: 'receipt-outline', label: 'Activity', onPress: () => router.push('/wallet/activity') },
@@ -219,6 +233,75 @@ export default function WalletScreen() {
             ))}
           </View>
         ) : null}
+
+        {frozen ? null : (
+          <View style={[styles.panel, { borderColor: theme.glassBorder, backgroundColor: theme.surface }]}>
+            <View style={styles.panelHead}>
+              <Text variant="label" color="textSecondary">
+                TODAY
+              </Text>
+              <Text variant="caption" color="textMuted">
+                Resets at midnight
+              </Text>
+            </View>
+            <View style={styles.stats}>
+              <View style={styles.flex}>
+                <Text variant="caption" color="textMuted">
+                  Spent
+                </Text>
+                <Text variant="title">{formatPrice(spent, 'ETB')}</Text>
+              </View>
+              <View style={[styles.statDivider, { backgroundColor: theme.hairline }]} />
+              <View style={styles.flex}>
+                <Text variant="caption" color="textMuted">
+                  Added
+                </Text>
+                <Text variant="title">{formatPrice(data.today?.deposited ?? 0, 'ETB')}</Text>
+              </View>
+            </View>
+            <View
+              style={[styles.track, { backgroundColor: theme.surfaceMuted }]}
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: 100, now: Math.round(spentShare * 100) }}
+              accessibilityLabel="Daily spending limit used">
+              <View style={[styles.fill, { width: `${spentShare * 100}%`, backgroundColor: theme.text }]} />
+            </View>
+            <Text variant="caption" color="textMuted">
+              {formatPrice(Math.max(0, dailyLimit - spent), 'ETB')} left of your {formatPrice(dailyLimit, 'ETB')} daily
+              spending limit
+            </Text>
+          </View>
+        )}
+
+        <View>
+          <Text variant="label" color="textSecondary" style={styles.sectionLabel}>
+            PAY WITH YOUR WALLET
+          </Text>
+          <View style={styles.uses}>
+            {USES.map((use) => (
+              <Touchable
+                key={use.label}
+                accessibilityRole="button"
+                accessibilityLabel={use.label}
+                onPress={() => router.push(use.href)}
+                style={[styles.use, { borderColor: theme.glassBorder, backgroundColor: theme.surface }]}>
+                <Ionicons name={use.icon} size={24} color={theme.text} />
+                <Text variant="small" style={styles.actionLabel}>
+                  {use.label}
+                </Text>
+              </Touchable>
+            ))}
+          </View>
+        </View>
+
+
+        <View style={styles.footer}>
+          <Ionicons name="shield-checkmark-outline" size={14} color={theme.textMuted} />
+          <Text variant="caption" color="textMuted">
+            Protected by your PIN and tied to this phone
+          </Text>
+        </View>
       </>
     );
   };
@@ -303,6 +386,29 @@ const styles = StyleSheet.create({
   action: { alignItems: 'center', gap: Spacing.sm, minWidth: 76 },
   actionDisc: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontFamily: FontFamily.bold },
+
+  sectionLabel: { marginBottom: Spacing.sm, paddingHorizontal: Spacing.xs },
+  panel: {
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stats: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
+  statDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 3 },
+  uses: { flexDirection: 'row', gap: Spacing.md },
+  use: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs },
 
   notice: {
     borderRadius: Radius.lg,
