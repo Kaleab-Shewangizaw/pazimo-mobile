@@ -114,6 +114,10 @@ export type User = {
   isPhoneVerified?: boolean;
   /** Self-serve login 2FA — requires `isPhoneVerified` first. Toggle via `updateOtpPreference`. */
   otpEnabled?: boolean;
+  /** `YYYY-MM-DD…` ISO date, set once via `updateProfile` — gates drink stats in the recap. */
+  birthDate?: string | null;
+  /** Reward points total — see `GET /rewards/me` for the full picture. */
+  score?: number;
   tickets?: string[];
   wishlist?: string[];
 };
@@ -819,16 +823,16 @@ export type CinemaCheckoutStartRequest = CinemaCheckoutBasket & {
   phoneNumber: string;
   customerName: string;
   customerEmail?: string;
-  method: PaymentMethodId;
+  method: PaymentMethodId | 'wallet';
   origin?: string;
-};
+} & Partial<Omit<WalletPayFields, 'method'>>;
 
 export type CinemaCheckoutStartResponse = {
   transactionId: string;
   /** Only set for Chapa web checkout (cards). Null for a direct-charge prompt. */
   checkoutUrl: string | null;
   provider: string;
-  action: 'redirect' | 'prompt';
+  action: 'redirect' | 'prompt' | 'paid' | 'failed';
   total: number;
   currency: 'ETB';
   /** So the payment screen can react if the seat hold lapses before paying finishes. */
@@ -1051,16 +1055,16 @@ export type RefillCheckoutRequest = {
   phoneNumber: string;
   customerName: string;
   customerEmail?: string;
-  method: PaymentMethodId;
+  method: PaymentMethodId | 'wallet';
   origin?: string;
-};
+} & Partial<Omit<WalletPayFields, 'method'>>;
 
 /** `POST .../checkout` response — starts a Chapa payment, same shape as `CinemaCheckoutStartResponse`. */
 export type RefillCheckoutStartResponse = {
   transactionId: string;
   checkoutUrl: string | null;
   provider: string;
-  action: 'redirect' | 'prompt';
+  action: 'redirect' | 'prompt' | 'paid' | 'failed';
   total: number;
   currency: Currency;
 };
@@ -1102,7 +1106,12 @@ export type RefillOrderSummary = {
 /* ---------------------------- notification inbox ---------------------------- */
 
 /** Same values as a push payload's `data.type` — what a tap routes on. */
-export type AppNotificationKind = 'ticket-share' | 'beverage-share' | 'cinema-share' | 'campaign';
+export type AppNotificationKind =
+  | 'ticket-share'
+  | 'beverage-share'
+  | 'cinema-share'
+  | 'campaign'
+  | 'achievement';
 
 /** One row of the bell's inbox — `GET /app/notifications`. */
 export type AppNotification = {
@@ -1121,4 +1130,162 @@ export type NotificationsPage = {
   notifications: AppNotification[];
   unreadCount: number;
   nextCursor: string | null;
+};
+
+/* --------------------------------- rewards --------------------------------- */
+
+export type PointsSource =
+  | 'EVENT_TICKET'
+  | 'CINEMA_TICKET'
+  | 'EVENT_BEVERAGE'
+  | 'VENUE_BEVERAGE'
+  | 'CINEMA_CONCESSION';
+
+export type MedalTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+
+export type Medal = {
+  id: string;
+  name: string;
+  description: string;
+  threshold: number;
+  tier: MedalTier;
+  /** `/uploads/…` path, or null to draw the tier's default medal. */
+  image: string | null;
+  color: string | null;
+  unlockedAt: string | null;
+};
+
+/** `GET /rewards/me` — the score badge and the medal shelf. */
+export type MyRewards = {
+  score: number;
+  next: (Medal & { remaining: number }) | null;
+  achievements: Medal[];
+  /** Per source, the current rate — null when that kind of purchase earns nothing. */
+  earning: Record<PointsSource, { amount: number; points: number } | null>;
+  birthDateSet: boolean;
+};
+
+export type PointsHistoryItem = {
+  id: string;
+  source: PointsSource;
+  amount: number;
+  points: number;
+  earnedAt: string;
+};
+
+export type PointsHistoryPage = { items: PointsHistoryItem[]; nextCursor: string | null };
+
+export type RecapPeriodType = 'month' | 'year';
+
+/** One admin-designed card, already filled with this user's numbers server-side. */
+export type RecapCard = {
+  id: string;
+  stat: string;
+  layout: 'big-number' | 'hero-image' | 'poster';
+  background: {
+    type: 'gradient' | 'image';
+    colors: string[];
+    angle: number;
+    image: string | null;
+    overlayOpacity: number;
+  };
+  textColor: string;
+  accentColor: string;
+  font: 'rounded' | 'system' | 'serif';
+  eyebrow: string;
+  headline: string;
+  caption: string;
+  value: string;
+  image: string | null;
+};
+
+/** `GET /rewards/recap` */
+export type Recap = {
+  period: { type: RecapPeriodType; key: string; label: string };
+  firstName: string;
+  /** Drink cards are withheld until a birth date is set, and below the admin's age limit. */
+  drinkGate: 'ok' | 'birthdate-required' | 'underage';
+  hasActivity: boolean;
+  totals: { spent: number; pointsEarned: number; score: number; nightsOut: number };
+  cards: RecapCard[];
+};
+
+/* ------------------------------------------------------------------ *
+ * Pazimo Wallet (backend: /api/wallet, and method "wallet" on checkouts)
+ * ------------------------------------------------------------------ */
+
+export type WalletDepositMethod = 'telebirr' | 'cbebirr' | 'mpesa' | 'awashbirr' | 'boa_ussd' | 'card';
+
+/** `GET /wallet` — the wallet as seen from this phone. `exists: false` until setup finishes. */
+export type WalletSummary = {
+  enabled: boolean;
+  exists: boolean;
+  status: 'pending' | 'active' | 'frozen' | null;
+  limits: {
+    maxBalance: number;
+    minDeposit: number;
+    maxDeposit: number;
+    dailyDepositLimit: number;
+    dailySpendLimit: number;
+  };
+  depositMethods: WalletDepositMethod[];
+  maxPinAttempts: number;
+  id?: string;
+  currency?: 'ETB';
+  balance?: number;
+  pinSet?: boolean;
+  pinLockedUntil?: string | null;
+  spendBlockedUntil?: string | null;
+  frozen?: { at: string; by: 'user' | 'admin' | 'system'; canUnfreeze: boolean } | null;
+  device?: { verified: boolean; spendAllowedAfter: string | null };
+  today?: { spent: number; deposited: number };
+};
+
+export type WalletEntry = {
+  id: string;
+  kind: 'deposit' | 'payment' | 'refund' | 'adjustment';
+  amount: number;
+  balanceAfter: number;
+  description: string | null;
+  reference: string | null;
+  occurredAt: string;
+};
+
+export type WalletStatementPage = { entries: WalletEntry[]; nextCursor: string | null };
+
+export type WalletDeposit = {
+  id: string;
+  txRef: string;
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
+  amount: number;
+  method: WalletDepositMethod | null;
+  checkoutUrl: string | null;
+  failureReason: string | null;
+  createdAt: string;
+  paidAt: string | null;
+  /** Only on the status poll: the balance after this deposit. */
+  balance?: number | null;
+  action?: 'redirect' | 'prompt';
+};
+
+export type WalletOtpSent = { maskedPhone: string | null; expiresInSeconds: number };
+
+/** What a checkout adds to its body to pay from the wallet. */
+export type WalletPayFields = {
+  method: 'wallet';
+  walletPin: string;
+  installationId: string;
+  idempotencyKey: string;
+};
+
+/** Every checkout answers a wallet payment the same way (backend walletCheckout.describeResult). */
+export type WalletPayResult = {
+  transactionId: string;
+  provider: 'wallet';
+  action: 'paid' | 'failed';
+  status: string;
+  refunded: boolean;
+  needsReview: boolean;
+  total: number;
+  currency: 'ETB';
 };

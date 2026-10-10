@@ -86,4 +86,15 @@ export const queryKeys = {
   account: {
     notificationPreferences: ['account', 'notification-preferences'] as const,
   },
+  wallet: {
+    all: ['wallet'] as const,
+    mine: () => [...queryKeys.wallet.all, 'mine'] as const,
+    statement: () => [...queryKeys.wallet.all, 'statement'] as const,
+  },
+  rewards: {
+    all: ['rewards'] as const,
+    mine: () => [...queryKeys.rewards.all, 'mine'] as const,
+    history: () => [...queryKeys.rewards.all, 'history'] as const,
+    recap: (period: string, key: string) => [...queryKeys.rewards.all, 'recap', period, key] as const,
+  },
 } as const;

@@ -5,9 +5,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
+import { OtpInput } from '@/components/ui/otp-input';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import type { WalletOption } from '@/hooks/use-wallet-checkout';
 import { useTheme } from '@/hooks/use-theme';
 import { type PaymentMethod, phoneProblem } from '@/lib/payment-methods';
 import { formatPrice } from '@/lib/pricing';
@@ -53,6 +55,12 @@ export type PaymentStepProps = {
   submitting: boolean;
   error?: string | null;
   onPay: () => void;
+  /**
+   * Pazimo Wallet, when it is offered for this order (see
+   * `useWalletCheckout`). Choosing it swaps the phone field for the PIN pad:
+   * nothing is pushed to a phone, the money moves the moment the PIN is right.
+   */
+  wallet?: WalletOption | null;
 };
 
 function PaymentStepImpl({
@@ -69,10 +77,12 @@ function PaymentStepImpl({
   submitting,
   error,
   onPay,
+  wallet,
 }: PaymentStepProps) {
   const theme = useTheme();
   const method = methods.find((m) => m.id === selectedMethod) ?? null;
   const isCard = currency === 'USD';
+  const walletChosen = Boolean(wallet?.selected);
 
   const nameError = details.fullName.trim().length >= 2 ? null : 'Enter the name on the ticket.';
   const phoneError = phoneProblem(details.phone, currency, method);
@@ -90,9 +100,50 @@ function PaymentStepImpl({
         <Text variant="caption" color="textSecondary">
           {isCard ? 'Pay with card' : 'Pay with'}
         </Text>
+        {wallet ? (
+          <Touchable
+            accessibilityRole="radio"
+            accessibilityState={{ selected: walletChosen }}
+            accessibilityLabel={`Pazimo Wallet, balance ${formatPrice(wallet.balance, 'ETB')}${wallet.blocker ? `. ${wallet.blocker}` : ''}`}
+            accessibilityHint={wallet.blocker && wallet.actionLabel ? `Opens your wallet to ${wallet.actionLabel.toLowerCase()}` : undefined}
+            onPress={wallet.onSelect}
+            haptic
+            pressedScale={0.97}
+            style={[
+              styles.walletOption,
+              {
+                backgroundColor: walletChosen ? theme.brandTint : 'rgba(255,255,255,0.05)',
+                borderColor: walletChosen ? 'rgba(255,255,255,0.85)' : theme.glassBorder,
+                borderWidth: walletChosen ? 1.5 : StyleSheet.hairlineWidth,
+              },
+            ]}>
+            <View style={[styles.walletIcon, { backgroundColor: theme.brandTint }]}>
+              <Ionicons name="wallet" size={18} color={theme.text} />
+            </View>
+            <View style={styles.walletText}>
+              <Text variant="body" style={styles.walletName}>
+                Pazimo Wallet
+              </Text>
+              <Text variant="caption" color={wallet.blocker ? 'textMuted' : 'textSecondary'} numberOfLines={2}>
+                {wallet.blocker ?? `Balance ${formatPrice(wallet.balance, 'ETB')}`}
+              </Text>
+            </View>
+            {wallet.blocker && wallet.actionLabel ? (
+              <Text variant="caption" style={styles.walletAction}>
+                {wallet.actionLabel}
+              </Text>
+            ) : (
+              <Ionicons
+                name={walletChosen ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={walletChosen ? theme.text : theme.textMuted}
+              />
+            )}
+          </Touchable>
+        ) : null}
         <View style={styles.methodRow}>
           {methods.map((option) => {
-            const active = option.id === selectedMethod;
+            const active = !walletChosen && option.id === selectedMethod;
             return (
               <Touchable
                 key={option.id}
@@ -145,6 +196,25 @@ function PaymentStepImpl({
             error={showErrors ? nameError : null}
           />
         )}
+        {walletChosen && wallet ? (
+          <View style={styles.pinBlock}>
+            <Text variant="caption" color="textSecondary">
+              Wallet PIN
+            </Text>
+            <OtpInput
+              value={wallet.pin}
+              onChangeText={wallet.onChangePin}
+              secure
+              autoFocus
+              accessibilityLabel="Wallet PIN, 6 digits"
+            />
+            {wallet.pinError ? (
+              <Text variant="small" color="danger" accessibilityLiveRegion="polite">
+                {wallet.pinError}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
         <Field
           label={knownAs ? 'Phone to pay from' : 'Phone number'}
           value={details.phone}
@@ -157,6 +227,7 @@ function PaymentStepImpl({
           error={showErrors ? phoneError : null}
           hint={isCard ? undefined : 'The payment prompt goes to this number.'}
         />
+        )}
         {knownAs ? null : (
           <Field
             label="Email (optional)"
@@ -179,17 +250,25 @@ function PaymentStepImpl({
       ) : null}
 
       <Button
-        label={submitting ? 'Starting payment' : `Pay ${formatPrice(total, currency)}`}
+        label={
+          submitting
+            ? walletChosen
+              ? 'Paying'
+              : 'Starting payment'
+            : `Pay ${formatPrice(total, currency)}${walletChosen ? ' from wallet' : ''}`
+        }
         loading={submitting}
-        disabled={!selectedMethod}
+        disabled={walletChosen ? (wallet?.pin.length ?? 0) < 6 : !selectedMethod}
         size="lg"
         onPress={onPay}
       />
 
       <Text variant="caption" color="textMuted" style={styles.legal}>
-        {isCard
-          ? 'You will be taken to a secure checkout to enter your card.'
-          : 'Approve the prompt on your phone to finish paying.'}
+        {walletChosen
+          ? 'Paid instantly from your Pazimo Wallet.'
+          : isCard
+            ? 'You will be taken to a secure checkout to enter your card.'
+            : 'Approve the prompt on your phone to finish paying.'}
       </Text>
     </View>
   );
@@ -239,6 +318,25 @@ const styles = StyleSheet.create({
   },
   logo: { width: '100%', height: '100%' },
   methodName: { textAlign: 'center' },
+  walletOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: Radius.md,
+  },
+  walletIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  walletText: { flex: 1, gap: 2 },
+  walletName: { fontFamily: FontFamily.bold },
+  walletAction: { fontFamily: FontFamily.bold, textDecorationLine: 'underline' },
+  pinBlock: { gap: Spacing.sm },
   error: { textAlign: 'center' },
   legal: { textAlign: 'center' },
 });

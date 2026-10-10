@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -10,11 +11,16 @@ import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { GlassIconButton } from '@/components/ui/glass-button';
 import { ListCard, ListRow } from '@/components/ui/list-row';
+import { Touchable } from '@/components/ui/pressable';
 import { EmptyState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatPrice } from '@/lib/pricing';
+import { formatPoints } from '@/lib/rewards';
+import { useMyRewards } from '@/queries/rewards';
+import { useMyWallet } from '@/queries/wallet';
 import { useMyTickets } from '@/queries/tickets';
 import { displayName, needsEmail, useAuthStore } from '@/stores/use-auth-store';
 import type { User } from '@/types/api';
@@ -35,6 +41,8 @@ export default function ProfileScreen() {
 
   const user = useAuthStore((s) => s.user);
   const { tickets } = useMyTickets();
+  const { data: rewards } = useMyRewards();
+  const { data: wallet } = useMyWallet();
 
   const [authVisible, setAuthVisible] = useState(false);
   const [addEmailVisible, setAddEmailVisible] = useState(false);
@@ -103,9 +111,41 @@ export default function ProfileScreen() {
                   {user.phoneNumber}
                 </Text>
               ) : null}
+              <Touchable
+                accessibilityRole="button"
+                accessibilityLabel={`Score ${rewards?.score ?? 0} points. Open rewards`}
+                onPress={() => router.push('/rewards')}
+                pressedScale={0.95}
+                style={[styles.scorePill, { borderColor: theme.glassBorder }]}>
+                <Ionicons name="trophy" size={14} color="#FFD166" />
+                <Text variant="small" style={styles.scoreText}>
+                  {formatPoints(rewards?.score ?? user.score ?? 0)}
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={theme.textSecondary} />
+              </Touchable>
             </View>
 
             <ListCard>
+              {wallet?.enabled || wallet?.exists ? (
+                <ListRow
+                  icon="wallet-outline"
+                  label="Wallet"
+                  value={
+                    wallet.exists
+                      ? wallet.status === 'frozen'
+                        ? 'Frozen'
+                        : formatPrice(wallet.balance ?? 0, 'ETB')
+                      : 'Set up'
+                  }
+                  onPress={() => router.push('/wallet')}
+                />
+              ) : null}
+              <ListRow
+                icon="trophy-outline"
+                label="Rewards & recap"
+                value={rewards ? `${formatPoints(rewards.score)} pts` : undefined}
+                onPress={() => router.push('/rewards')}
+              />
               <ListRow
                 icon="ticket-outline"
                 label="My tickets"
@@ -177,4 +217,17 @@ const styles = StyleSheet.create({
   initial: { color: '#FFFFFF' },
 
   note: { textAlign: 'center' },
+
+  scorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,209,102,0.10)',
+  },
+  scoreText: { color: '#FFFFFF', fontFamily: FontFamily.bold },
 });

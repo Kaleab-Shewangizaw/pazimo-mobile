@@ -26,6 +26,20 @@ export function openNotificationTarget(router: Router, data: Record<string, unkn
     return;
   }
 
+  // A medal unlocked — straight to the shelf it's now on.
+  if (data.type === 'achievement') {
+    if (!useAuthStore.getState().token) return;
+    router.push('/rewards');
+    return;
+  }
+
+  // Pazimo Wallet alerts (deposit, payment, refund, freeze, new phone).
+  if (data.type === 'wallet') {
+    if (!useAuthStore.getState().token) return;
+    router.push('/wallet');
+    return;
+  }
+
   // Every other push carries `counterpartyId` (see pushService's callers) —
   // a message, a ticket/drink/cinema share, or a response to one, all
   // resolve to "open this conversation." Already looking at it? Then there's
