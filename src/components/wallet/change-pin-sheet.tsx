@@ -135,6 +135,7 @@ export function ChangePinSheet({
             onChangeText={onChange}
             secure
             autoFocus
+            refocusOn={error}
             accessibilityLabel={PROMPT[step]}
           />
           {error ? (

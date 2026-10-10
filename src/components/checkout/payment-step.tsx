@@ -206,6 +206,7 @@ function PaymentStepImpl({
               onChangeText={wallet.onChangePin}
               secure
               autoFocus
+              refocusOn={wallet.pinError}
               accessibilityLabel="Wallet PIN, 6 digits"
             />
             {wallet.pinError ? (

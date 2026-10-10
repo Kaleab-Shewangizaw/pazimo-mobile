@@ -1,5 +1,5 @@
-import { memo, useRef } from 'react';
-import { Platform, StyleSheet, TextInput, View } from 'react-native';
+import { memo, useCallback, useEffect, useRef } from 'react';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 import { Radius } from '@/constants/theme';
@@ -15,6 +15,11 @@ const CODE_LENGTH = 6;
  *
  * `secure` turns it into a PIN pad (the wallet PIN): dots instead of digits,
  * and no SMS autofill — a PIN must never be offered from a text message.
+ *
+ * Taps go through a Pressable rather than straight to the input: after a
+ * `Keyboard.dismiss()` (every Pay button does one) Android can leave the input
+ * focused with the keyboard hidden, and tapping an already-focused input never
+ * brings the keyboard back — the pad just looked dead after a wrong PIN.
  */
 function OtpInputImpl({
   value,
@@ -22,18 +27,37 @@ function OtpInputImpl({
   autoFocus,
   secure,
   accessibilityLabel,
+  refocusOn,
 }: {
   value: string;
   onChangeText: (code: string) => void;
   autoFocus?: boolean;
   secure?: boolean;
   accessibilityLabel?: string;
+  /** Brings the keyboard back whenever this changes to something truthy — pass the field's error. */
+  refocusOn?: unknown;
 }) {
   const theme = useTheme();
   const inputRef = useRef<TextInput>(null);
 
+  const focus = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    if (input.isFocused()) {
+      // Focused but keyboard hidden: re-focusing alone is a no-op, so cycle it.
+      input.blur();
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      input.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (refocusOn) focus();
+  }, [refocusOn, focus]);
+
   return (
-    <View style={styles.wrap}>
+    <Pressable style={styles.wrap} onPress={focus} accessible={false}>
       {Array.from({ length: CODE_LENGTH }).map((_, index) => {
         const digit = value[index] ?? '';
         const isCursor = index === value.length;
@@ -67,9 +91,10 @@ function OtpInputImpl({
         maxLength={CODE_LENGTH}
         autoFocus={autoFocus}
         style={[StyleSheet.absoluteFill, styles.hiddenInput]}
+        pointerEvents="none"
         caretHidden
       />
-    </View>
+    </Pressable>
   );
 }
 

@@ -263,7 +263,7 @@ export function WalletCodeSheet({
             <Text variant="body" color="textSecondary">
               Enter the 6-digit code we sent{maskedPhone ? ` to ${maskedPhone}` : ''}.
             </Text>
-            <OtpInput value={code} onChangeText={onCode} autoFocus accessibilityLabel="SMS code, 6 digits" />
+            <OtpInput value={code} onChangeText={onCode} autoFocus refocusOn={error} accessibilityLabel="SMS code, 6 digits" />
             <Button
               label={resendIn > 0 ? `Send a new code in ${resendCountdown(resendIn)}` : 'Send a new code'}
               variant="ghost"
@@ -277,7 +277,7 @@ export function WalletCodeSheet({
               Choose a 6-digit wallet PIN. You’ll enter it every time you pay. Don’t use your phone’s
               unlock code or your birthday.
             </Text>
-            <OtpInput value={pin} onChangeText={onPin} secure autoFocus accessibilityLabel="New wallet PIN, 6 digits" />
+            <OtpInput value={pin} onChangeText={onPin} secure autoFocus refocusOn={error} accessibilityLabel="New wallet PIN, 6 digits" />
           </>
         ) : (
           <>
