@@ -17,8 +17,10 @@ import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatPrice } from '@/lib/pricing';
 import { formatPoints } from '@/lib/rewards';
 import { useMyRewards } from '@/queries/rewards';
+import { useMyWallet } from '@/queries/wallet';
 import { useMyTickets } from '@/queries/tickets';
 import { displayName, needsEmail, useAuthStore } from '@/stores/use-auth-store';
 import type { User } from '@/types/api';
@@ -40,6 +42,7 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const { tickets } = useMyTickets();
   const { data: rewards } = useMyRewards();
+  const { data: wallet } = useMyWallet();
 
   const [authVisible, setAuthVisible] = useState(false);
   const [addEmailVisible, setAddEmailVisible] = useState(false);
@@ -123,6 +126,20 @@ export default function ProfileScreen() {
             </View>
 
             <ListCard>
+              {wallet?.enabled || wallet?.exists ? (
+                <ListRow
+                  icon="wallet-outline"
+                  label="Wallet"
+                  value={
+                    wallet.exists
+                      ? wallet.status === 'frozen'
+                        ? 'Frozen'
+                        : formatPrice(wallet.balance ?? 0, 'ETB')
+                      : 'Set up'
+                  }
+                  onPress={() => router.push('/wallet')}
+                />
+              ) : null}
               <ListRow
                 icon="trophy-outline"
                 label="Rewards & recap"

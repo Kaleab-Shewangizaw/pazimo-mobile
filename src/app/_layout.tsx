@@ -107,6 +107,10 @@ export default function RootLayout() {
             <Stack.Screen name="refill/venue/[venueId]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="refill/orders" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="rewards/index" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="wallet/index" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="wallet/activity" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="wallet/settings" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="wallet/terms" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="rewards/recap" options={{ animation: 'fade_from_bottom' }} />
             {/* Fades rather than slides, and cannot be swiped away: the poll
                 running on this screen is what issues the ticket, so leaving it
