@@ -823,16 +823,16 @@ export type CinemaCheckoutStartRequest = CinemaCheckoutBasket & {
   phoneNumber: string;
   customerName: string;
   customerEmail?: string;
-  method: PaymentMethodId;
+  method: PaymentMethodId | 'wallet';
   origin?: string;
-};
+} & Partial<Omit<WalletPayFields, 'method'>>;
 
 export type CinemaCheckoutStartResponse = {
   transactionId: string;
   /** Only set for Chapa web checkout (cards). Null for a direct-charge prompt. */
   checkoutUrl: string | null;
   provider: string;
-  action: 'redirect' | 'prompt';
+  action: 'redirect' | 'prompt' | 'paid' | 'failed';
   total: number;
   currency: 'ETB';
   /** So the payment screen can react if the seat hold lapses before paying finishes. */
@@ -1055,16 +1055,16 @@ export type RefillCheckoutRequest = {
   phoneNumber: string;
   customerName: string;
   customerEmail?: string;
-  method: PaymentMethodId;
+  method: PaymentMethodId | 'wallet';
   origin?: string;
-};
+} & Partial<Omit<WalletPayFields, 'method'>>;
 
 /** `POST .../checkout` response — starts a Chapa payment, same shape as `CinemaCheckoutStartResponse`. */
 export type RefillCheckoutStartResponse = {
   transactionId: string;
   checkoutUrl: string | null;
   provider: string;
-  action: 'redirect' | 'prompt';
+  action: 'redirect' | 'prompt' | 'paid' | 'failed';
   total: number;
   currency: Currency;
 };
@@ -1208,4 +1208,84 @@ export type Recap = {
   hasActivity: boolean;
   totals: { spent: number; pointsEarned: number; score: number; nightsOut: number };
   cards: RecapCard[];
+};
+
+/* ------------------------------------------------------------------ *
+ * Pazimo Wallet (backend: /api/wallet, and method "wallet" on checkouts)
+ * ------------------------------------------------------------------ */
+
+export type WalletDepositMethod = 'telebirr' | 'cbebirr' | 'mpesa' | 'awashbirr' | 'boa_ussd' | 'card';
+
+/** `GET /wallet` — the wallet as seen from this phone. `exists: false` until setup finishes. */
+export type WalletSummary = {
+  enabled: boolean;
+  exists: boolean;
+  status: 'pending' | 'active' | 'frozen' | null;
+  limits: {
+    maxBalance: number;
+    minDeposit: number;
+    maxDeposit: number;
+    dailyDepositLimit: number;
+    dailySpendLimit: number;
+  };
+  depositMethods: WalletDepositMethod[];
+  maxPinAttempts: number;
+  id?: string;
+  currency?: 'ETB';
+  balance?: number;
+  pinSet?: boolean;
+  pinLockedUntil?: string | null;
+  spendBlockedUntil?: string | null;
+  frozen?: { at: string; by: 'user' | 'admin' | 'system'; canUnfreeze: boolean } | null;
+  device?: { verified: boolean; spendAllowedAfter: string | null };
+  today?: { spent: number; deposited: number };
+};
+
+export type WalletEntry = {
+  id: string;
+  kind: 'deposit' | 'payment' | 'refund' | 'adjustment';
+  amount: number;
+  balanceAfter: number;
+  description: string | null;
+  reference: string | null;
+  occurredAt: string;
+};
+
+export type WalletStatementPage = { entries: WalletEntry[]; nextCursor: string | null };
+
+export type WalletDeposit = {
+  id: string;
+  txRef: string;
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
+  amount: number;
+  method: WalletDepositMethod | null;
+  checkoutUrl: string | null;
+  failureReason: string | null;
+  createdAt: string;
+  paidAt: string | null;
+  /** Only on the status poll: the balance after this deposit. */
+  balance?: number | null;
+  action?: 'redirect' | 'prompt';
+};
+
+export type WalletOtpSent = { maskedPhone: string | null; expiresInSeconds: number };
+
+/** What a checkout adds to its body to pay from the wallet. */
+export type WalletPayFields = {
+  method: 'wallet';
+  walletPin: string;
+  installationId: string;
+  idempotencyKey: string;
+};
+
+/** Every checkout answers a wallet payment the same way (backend walletCheckout.describeResult). */
+export type WalletPayResult = {
+  transactionId: string;
+  provider: 'wallet';
+  action: 'paid' | 'failed';
+  status: string;
+  refunded: boolean;
+  needsReview: boolean;
+  total: number;
+  currency: 'ETB';
 };
