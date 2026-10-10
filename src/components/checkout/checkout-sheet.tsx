@@ -15,6 +15,7 @@ import {
 
 import { ApiError } from '@/api/client';
 import { initiateTicketPayment, providerFor } from '@/api/payments';
+import { payTicketWithWallet } from '@/api/wallet';
 import { type BuyerDetails, PaymentStep } from '@/components/checkout/payment-step';
 import { TierStep } from '@/components/checkout/tier-step';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
@@ -22,6 +23,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useWalletCheckout } from '@/hooks/use-wallet-checkout';
 import {
   checkoutEmail,
   formatPhoneForPayment,
@@ -134,6 +136,8 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
     [edits, accountName, user],
   );
 
+  const walletCheckout = useWalletCheckout({ total, currency: activeCurrency });
+
   const [slide] = useState(() => new Animated.Value(0));
   const [grow] = useState(() => new Animated.Value(0));
   const [heights, setHeights] = useState<[number, number]>([0, 0]);
@@ -168,13 +172,61 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
 
   const close = useCallback(() => {
     Keyboard.dismiss();
+    walletCheckout.deselect();
     onClose();
     // Left until after the dismissal animation so the sheet doesn't visibly
     // snap back to step one on its way off screen.
     setTimeout(reset, 260);
-  }, [onClose, reset]);
+  }, [onClose, reset, walletCheckout]);
+
+  const onPayWithWallet = useCallback(async () => {
+    if (!selectedTier) return;
+    Keyboard.dismiss();
+    setSubmitting(true);
+    setError(null);
+
+    const orderId = `pzm_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    try {
+      const result = await walletCheckout.pay((fields) =>
+        payTicketWithWallet({
+          ...fields,
+          currency: activeCurrency,
+          paymentReason: `Ticket Purchase - ${event.title}`,
+          // Only the account's contact number; nothing is pushed to it.
+          phoneNumber: user?.phoneNumber ?? formatPhoneForPayment(details.phone, activeCurrency, 'CHAPA'),
+          orderId,
+          ticketDetails: {
+            ticketId: orderId,
+            eventId: event._id,
+            ticketTypeId: selectedTier._id,
+            quantity,
+            userId: user?._id,
+            fullName: details.fullName.trim() || accountName,
+            email: checkoutEmail(details.email, user?.email),
+          },
+        }),
+      );
+      setSubmitting(false);
+      if (!result) return;
+
+      walletCheckout.deselect();
+      onClose();
+      setTimeout(reset, 260);
+      // Already paid and issued — the checkout screen finds it PAID on its
+      // first poll and shows the ticket.
+      router.push(`/checkout/${result.transactionId}`);
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof ApiError ? err.message : 'We could not complete that payment. Try again.');
+      queryClient.invalidateQueries({ queryKey: queryKeys.events.all });
+    }
+  }, [accountName, activeCurrency, details, event, onClose, quantity, queryClient, reset, router, selectedTier, user, walletCheckout]);
 
   const onPay = useCallback(async () => {
+    if (walletCheckout.selected) {
+      await onPayWithWallet();
+      return;
+    }
     if (!selectedTier || !method) return;
 
     setShowErrors(true);
@@ -256,6 +308,8 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
     router,
     selectedTier,
     user,
+    walletCheckout.selected,
+    onPayWithWallet,
   ]);
 
   const travel = width * TRAVEL;
@@ -344,7 +398,11 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
           <PaymentStep
             methods={methods}
             selectedMethod={method}
-            onSelectMethod={setPicked}
+            onSelectMethod={(id) => {
+              walletCheckout.deselect();
+              setPicked(id);
+            }}
+            wallet={walletCheckout.option}
             details={details}
             onChangeDetails={setEdits}
             knownAs={knownAs}
