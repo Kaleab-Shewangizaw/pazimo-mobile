@@ -15,7 +15,7 @@ import { Text } from '@/components/ui/text';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { localEthiopianDigits } from '@/lib/payment-methods';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { DEPOSIT_METHODS } from '@/lib/wallet';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
@@ -67,11 +67,11 @@ export function DepositSheet({
     : !Number.isFinite(value) || value <= 0
       ? 'Enter an amount.'
       : value < wallet.limits.minDeposit
-        ? `The smallest deposit is ${formatPrice(wallet.limits.minDeposit, 'ETB')}.`
+        ? `The smallest deposit is ${formatMoney(wallet.limits.minDeposit, 'ETB')}.`
         : value > wallet.limits.maxDeposit
-          ? `The largest deposit is ${formatPrice(wallet.limits.maxDeposit, 'ETB')}.`
+          ? `The largest deposit is ${formatMoney(wallet.limits.maxDeposit, 'ETB')}.`
           : value > room
-            ? `Your wallet can hold ${formatPrice(room, 'ETB')} more.`
+            ? `Your wallet can hold ${formatMoney(room, 'ETB')} more.`
             : null;
 
   const localPhone = localEthiopianDigits(phoneValue);
@@ -182,7 +182,7 @@ export function DepositSheet({
             placeholder="500"
             keyboardType="decimal-pad"
             error={amountError}
-            hint={`${formatPrice(wallet.limits.minDeposit, 'ETB')} – ${formatPrice(Math.min(wallet.limits.maxDeposit, room), 'ETB')}`}
+            hint={`${formatMoney(wallet.limits.minDeposit, 'ETB')} – ${formatMoney(Math.min(wallet.limits.maxDeposit, room), 'ETB')}`}
           />
           <View style={styles.chips}>
             {QUICK_AMOUNTS.filter((q) => q <= Math.min(wallet.limits.maxDeposit, room)).map((q) => (
@@ -265,7 +265,7 @@ export function DepositSheet({
           ) : null}
 
           <Button
-            label={value > 0 ? `Add ${formatPrice(value, 'ETB')}` : 'Add money'}
+            label={value > 0 ? `Add ${formatMoney(value, 'ETB')}` : 'Add money'}
             size="lg"
             loading={busy}
             disabled={!method || !amount || Boolean(amountError) || Boolean(phoneError)}
@@ -279,7 +279,7 @@ export function DepositSheet({
         <View style={[styles.body, styles.centerBlock]}>
           <ActivityIndicator size="large" color="#FFFFFF" />
           <Text variant="heading" style={styles.center}>
-            {formatPrice(phase.deposit.amount, 'ETB')}
+            {formatMoney(phase.deposit.amount, 'ETB')}
           </Text>
           <Text variant="body" color="textSecondary" style={styles.center}>
             {phase.deposit.checkoutUrl
@@ -297,7 +297,7 @@ export function DepositSheet({
           />
           <Text variant="heading" style={styles.center}>
             {phase.deposit.status === 'PAID'
-              ? `${formatPrice(phase.deposit.amount, 'ETB')} added`
+              ? `${formatMoney(phase.deposit.amount, 'ETB')} added`
               : phase.deposit.status === 'PENDING'
                 ? 'Still waiting for Chapa'
                 : 'Payment didn’t go through'}
@@ -305,7 +305,7 @@ export function DepositSheet({
           <Text variant="body" color="textSecondary" style={styles.center}>
             {phase.deposit.status === 'PAID'
               ? phase.deposit.balance != null
-                ? `Your balance is ${formatPrice(phase.deposit.balance, 'ETB')}.`
+                ? `Your balance is ${formatMoney(phase.deposit.balance, 'ETB')}.`
                 : 'It’s in your wallet.'
               : phase.deposit.status === 'PENDING'
                 ? 'If you approved it, it will show up in your wallet shortly — we keep checking.'

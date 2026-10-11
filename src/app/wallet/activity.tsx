@@ -12,7 +12,7 @@ import { FontFamily, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTimeLabel } from '@/lib/date';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { ENTRY_LOOK } from '@/lib/wallet';
 import { useMyWallet, useWalletStatement } from '@/queries/wallet';
 import type { WalletEntry } from '@/types/api';
@@ -31,7 +31,7 @@ export default function WalletActivityScreen() {
   const renderEntry = ({ item: entry }: { item: WalletEntry }) => {
     const look = ENTRY_LOOK[entry.kind];
     const credit = entry.amount > 0;
-    const amount = formatPrice(Math.abs(entry.amount), 'ETB');
+    const amount = formatMoney(Math.abs(entry.amount), 'ETB');
     return (
       <View
         style={styles.row}
@@ -45,7 +45,7 @@ export default function WalletActivityScreen() {
             {entry.description || look.label}
           </Text>
           <Text variant="caption" color="textMuted">
-            {relativeTimeLabel(entry.occurredAt)} · balance {formatPrice(entry.balanceAfter, 'ETB')}
+            {relativeTimeLabel(entry.occurredAt)} · balance {formatMoney(entry.balanceAfter, 'ETB')}
           </Text>
         </View>
         <Text variant="body" style={[styles.amount, credit ? { color: theme.success } : null]}>

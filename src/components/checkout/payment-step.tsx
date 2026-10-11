@@ -12,7 +12,7 @@ import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import type { WalletOption } from '@/hooks/use-wallet-checkout';
 import { useTheme } from '@/hooks/use-theme';
 import { type PaymentMethod, phoneProblem } from '@/lib/payment-methods';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney, formatPrice } from '@/lib/pricing';
 import type { Currency, PaymentMethodId } from '@/types/api';
 
 /**
@@ -104,7 +104,7 @@ function PaymentStepImpl({
           <Touchable
             accessibilityRole="radio"
             accessibilityState={{ selected: walletChosen }}
-            accessibilityLabel={`Pazimo Wallet, balance ${formatPrice(wallet.balance, 'ETB')}${wallet.blocker ? `. ${wallet.blocker}` : ''}`}
+            accessibilityLabel={`Pazimo Wallet, balance ${formatMoney(wallet.balance, 'ETB')}${wallet.blocker ? `. ${wallet.blocker}` : ''}`}
             accessibilityHint={wallet.blocker && wallet.actionLabel ? `Opens your wallet to ${wallet.actionLabel.toLowerCase()}` : undefined}
             onPress={wallet.onSelect}
             haptic
@@ -125,7 +125,7 @@ function PaymentStepImpl({
                 Pazimo Wallet
               </Text>
               <Text variant="caption" color={wallet.blocker ? 'textMuted' : 'textSecondary'} numberOfLines={2}>
-                {wallet.blocker ?? `Balance ${formatPrice(wallet.balance, 'ETB')}`}
+                {wallet.blocker ?? `Balance ${formatMoney(wallet.balance, 'ETB')}`}
               </Text>
             </View>
             {wallet.blocker && wallet.actionLabel ? (

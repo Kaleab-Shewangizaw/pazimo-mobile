@@ -19,7 +19,7 @@ import { WalletCodeSheet } from '@/components/wallet/wallet-code-sheet';
 import { Spacing } from '@/constants/theme';
 import { useFreezeWallet } from '@/hooks/use-freeze-wallet';
 import { relativeTimeLabel } from '@/lib/date';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { untilLabel } from '@/lib/wallet';
 import { queryKeys } from '@/queries/keys';
 import { useMyWallet, useWalletDevices } from '@/queries/wallet';
@@ -69,7 +69,7 @@ export default function WalletSettingsScreen() {
     return parts.join(' · ');
   };
   const frozen = data?.status === 'frozen';
-  const etb = (amount: number) => formatPrice(amount, 'ETB');
+  const etb = (amount: number) => formatMoney(amount, 'ETB');
 
   return (
     <View style={styles.screen}>

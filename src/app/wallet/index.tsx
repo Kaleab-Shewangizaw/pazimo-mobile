@@ -22,7 +22,7 @@ import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useFreezeWallet } from '@/hooks/use-freeze-wallet';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { untilLabel } from '@/lib/wallet';
 import { useMyWallet } from '@/queries/wallet';
 import { displayName, useAuthStore } from '@/stores/use-auth-store';
@@ -249,14 +249,14 @@ export default function WalletScreen() {
                 <Text variant="caption" color="textMuted">
                   Spent
                 </Text>
-                <Text variant="title">{formatPrice(spent, 'ETB')}</Text>
+                <Text variant="title">{formatMoney(spent, 'ETB')}</Text>
               </View>
               <View style={[styles.statDivider, { backgroundColor: theme.hairline }]} />
               <View style={styles.flex}>
                 <Text variant="caption" color="textMuted">
                   Added
                 </Text>
-                <Text variant="title">{formatPrice(data.today?.deposited ?? 0, 'ETB')}</Text>
+                <Text variant="title">{formatMoney(data.today?.deposited ?? 0, 'ETB')}</Text>
               </View>
             </View>
             <View
@@ -268,7 +268,7 @@ export default function WalletScreen() {
               <View style={[styles.fill, { width: `${spentShare * 100}%`, backgroundColor: theme.text }]} />
             </View>
             <Text variant="caption" color="textMuted">
-              {formatPrice(Math.max(0, dailyLimit - spent), 'ETB')} left of your {formatPrice(dailyLimit, 'ETB')} daily
+              {formatMoney(Math.max(0, dailyLimit - spent), 'ETB')} left of your {formatMoney(dailyLimit, 'ETB')} daily
               spending limit
             </Text>
           </View>

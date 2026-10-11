@@ -8,7 +8,7 @@ import Svg, { Defs, Line, Rect, Stop, LinearGradient as SvgGradient, RadialGradi
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { FontFamily, Spacing } from '@/constants/theme';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 
 /** ISO/IEC 7810 ID-1 — the shape of every bank card, so it reads as one at a glance. */
 const CARD_RATIO = 85.6 / 53.98;
@@ -85,7 +85,7 @@ function WalletCardImpl({
 }) {
   const [hidden, setHidden] = useState(false);
   const lastFour = (walletId ?? '').slice(-4).toUpperCase().padStart(4, '0');
-  const amount = formatPrice(balance, 'ETB');
+  const amount = formatMoney(balance, 'ETB');
 
   return (
     <View style={styles.shadow}>

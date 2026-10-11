@@ -17,7 +17,7 @@ import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { formatPoints } from '@/lib/rewards';
 import { useMyRewards } from '@/queries/rewards';
 import { useMyWallet } from '@/queries/wallet';
@@ -134,7 +134,7 @@ export default function ProfileScreen() {
                     wallet.exists
                       ? wallet.status === 'frozen'
                         ? 'Frozen'
-                        : formatPrice(wallet.balance ?? 0, 'ETB')
+                        : formatMoney(wallet.balance ?? 0, 'ETB')
                       : 'Set up'
                   }
                   onPress={() => router.push('/wallet')}

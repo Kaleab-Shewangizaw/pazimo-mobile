@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { generateIdempotencyKey } from '@/lib/idempotency';
 import { getInstallationId } from '@/lib/installation';
-import { formatPrice } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { queryKeys } from '@/queries/keys';
 import { useMyWallet } from '@/queries/wallet';
 import type { Currency, WalletPayFields, WalletPayResult } from '@/types/api';
@@ -75,7 +75,7 @@ export function useWalletCheckout({ total, currency }: { total: number; currency
     } else if (wallet.spendBlockedUntil) {
       blocker = 'Wallet payments resume soon after your PIN reset.';
     } else if (balance < total) {
-      blocker = `Not enough in your wallet (${formatPrice(balance, 'ETB')}).`;
+      blocker = `Not enough in your wallet (${formatMoney(balance, 'ETB')}).`;
       actionLabel = 'Add money';
     }
   }
