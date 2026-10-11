@@ -32,7 +32,7 @@ import { useTheme } from '@/hooks/use-theme';
  * screen rather than crossfading between a notice and a ticket.
  */
 
-const REVEAL_DURATION = 900;
+const REVEAL_DURATION = 450;
 
 const FAILURE_COPY: Record<
   string,
@@ -101,20 +101,13 @@ export default function CinemaOrderScreen() {
             <Animated.View
               style={{
                 flex: 1,
+                // A plain crossfade — no 3D turn. The card used to flip in
+                // on a perspective rotateY, which sliced visibly across the
+                // screen as it turned.
                 opacity: reveal.interpolate({
-                  inputRange: [0.5, 0.62],
+                  inputRange: [0.3, 1],
                   outputRange: [0, 1],
                 }),
-                transform: [
-                  { perspective: 1200 },
-                  {
-                    rotateY: reveal.interpolate({
-                      inputRange: [0.5, 1],
-                      outputRange: ['-90deg', '0deg'],
-                      extrapolate: 'clamp',
-                    }),
-                  },
-                ],
               }}
             >
               {body}
@@ -180,21 +173,7 @@ function WaitingOverlay({
         ]}
       >
         <Animated.View
-          style={[
-            styles.card,
-            {
-              transform: [
-                { perspective: 1200 },
-                {
-                  rotateY: reveal.interpolate({
-                    inputRange: [0, 0.5],
-                    outputRange: ['0deg', '90deg'],
-                    extrapolate: 'clamp',
-                  }),
-                },
-              ],
-            },
-          ]}
+          style={styles.card}
         >
           <TicketFrame
             fill
