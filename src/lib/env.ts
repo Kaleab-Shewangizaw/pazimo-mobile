@@ -27,4 +27,14 @@ export const Env = {
    * Matches `expo.scheme` in app.json.
    */
   scheme: 'pazimomobile',
+  /**
+   * Store listings handed out in SMS invitations (see `lib/app-invite.ts`).
+   * Play's URL is derived from `android.package` in app.json, so it needs no
+   * config; the App Store's carries a numeric id only known once the listing
+   * exists, so iOS links are left out of invites until this is set.
+   */
+  appStoreUrl: process.env.EXPO_PUBLIC_APP_STORE_URL || null,
+  playStoreUrl:
+    process.env.EXPO_PUBLIC_PLAY_STORE_URL ||
+    'https://play.google.com/store/apps/details?id=com.kal_x.pazimomobile',
 } as const;

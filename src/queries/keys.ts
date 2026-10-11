@@ -79,6 +79,10 @@ export const queryKeys = {
     contactsList: () => [...queryKeys.conversations.all, 'contacts-list'] as const,
     blocked: () => [...queryKeys.conversations.all, 'blocked'] as const,
   },
+  // Deliberately not under `conversations.all`: every incoming message
+  // invalidates that whole tree, and this one re-reads the phone's address
+  // book and uploads it to be matched — far too heavy to redo per message.
+  addressBook: ['address-book'] as const,
   notifications: {
     all: ['notifications'] as const,
     list: () => [...queryKeys.notifications.all, 'list'] as const,

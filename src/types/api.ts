@@ -306,6 +306,9 @@ export type ContactCard = {
 /** A row from `GET /conversations/contacts` — everyone this account has added. */
 export type ContactSummary = ShareUser;
 
+/** A row from `POST /conversations/contacts/match` — `phone` is the number exactly as the app sent it. */
+export type ContactMatch = { phone: string; user: ShareUser };
+
 /** A row from `GET /conversations/blocked`. */
 export type BlockedUser = ShareUser & { blockedAt: string };
 

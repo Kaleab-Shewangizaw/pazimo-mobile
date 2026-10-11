@@ -204,16 +204,16 @@ export default function SharesScreen() {
               <EmptyState
                 icon="paper-plane-outline"
                 title="No chats yet"
-                message="Search for someone or start a new chat to message a friend."
-                actionLabel="Find someone"
-                onAction={() => setNewChatVisible(true)}
+                message="See which of your contacts are on Pazimo, or invite them to join."
+                actionLabel="Find friends"
+                onAction={() => router.push('/new-chat')}
               />
             )
           }
         />
       )}
 
-      {user ? <NewChatFab onPress={() => setNewChatVisible(true)} /> : null}
+      {user ? <NewChatFab onPress={() => router.push('/new-chat')} /> : null}
 
       <NewChatSheet
         visible={newChatVisible}

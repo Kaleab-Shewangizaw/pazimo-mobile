@@ -2,6 +2,7 @@ import { deleteData, deleteRaw, getData, patchData, postData, postRaw } from '@/
 import type {
   BlockedUser,
   ContactCard,
+  ContactMatch,
   ContactSummary,
   ConversationSummary,
   DeletedMessageAck,
@@ -77,6 +78,17 @@ export function removeContact(counterpartyId: string): Promise<ContactCard> {
 export function fetchContacts(): Promise<ContactSummary[]> {
   return getData<ContactSummary[]>('/conversations/contacts');
 }
+
+/**
+ * Which of these address-book numbers belong to a Pazimo account. Each match
+ * echoes its number exactly as sent, so it pairs straight back to the device
+ * contact it came from. Capped server-side at `CONTACT_MATCH_CHUNK` per call.
+ */
+export function matchContacts(phones: string[]): Promise<ContactMatch[]> {
+  return postData<ContactMatch[]>('/conversations/contacts/match', { phones });
+}
+
+export const CONTACT_MATCH_CHUNK = 1000;
 
 export function fetchBlockedUsers(): Promise<BlockedUser[]> {
   return getData<BlockedUser[]>('/conversations/blocked');
