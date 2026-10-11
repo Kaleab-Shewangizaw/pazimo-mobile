@@ -1084,6 +1084,8 @@ export type RefillOrderSale = {
   status: 'confirmed' | 'refunded';
   redeemedAt?: string | null;
   soldAt: string;
+  /** The drink itself — its (usually background-removed) image and color. */
+  beverage?: { _id: string; image?: string | null; color?: string | null } | null;
 };
 
 /** `GET .../refill/orders/:transactionId` — everything one paid order produced. */
@@ -1099,7 +1101,11 @@ export type RefillOrder = {
 export type RefillOrderSummary = {
   transactionId: string;
   channel: 'EVENT' | 'VENUE';
-  status: PaymentStatus;
+  /**
+   * The raw `Payment.status` — which spells a settled payment `PAID`, not the
+   * `COMPLETED` the payment-status poll maps it to.
+   */
+  status: PaymentStatus | 'PAID';
   total: number;
   currency: Currency;
   title: string;

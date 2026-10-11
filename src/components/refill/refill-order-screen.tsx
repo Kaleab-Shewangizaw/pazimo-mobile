@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type ReactNode, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RefillOrderView } from '@/components/refill/refill-order-view';
@@ -57,9 +57,10 @@ export function RefillOrderScreen({ order, onDone, children }: RefillOrderScreen
         </Touchable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {children ? children(body) : body}
-      </ScrollView>
+      {/* Not a scroll view: the ticket fills exactly the space between the
+          header and Done, and lays itself out to fit (see RefillOrderView) —
+          the whole ticket, barcode included, is visible at once. */}
+      <View style={styles.content}>{children ? children(body) : body}</View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
         <Button label="Done" size="lg" onPress={onDone} style={styles.done} />
@@ -86,8 +87,8 @@ const styles = StyleSheet.create({
   },
   headerButtonDisabled: { opacity: 0.35 },
 
-  content: { paddingTop: Spacing.sm, paddingBottom: Spacing.xxxl },
-  single: { paddingHorizontal: Spacing.lg },
+  content: { flex: 1, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
+  single: { flex: 1, paddingHorizontal: Spacing.lg },
 
   footer: { paddingHorizontal: Spacing.lg },
   done: { width: '100%' },
