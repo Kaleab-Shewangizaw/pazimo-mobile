@@ -1,10 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
+import { DrinkArt } from '@/components/refill/drink-art';
+import {
+  insetGeometry,
+  ticketEdgePath,
+  ticketPath,
+  type TicketGeometry,
+} from '@/components/ticket/ticket-path';
 import { Text } from '@/components/ui/text';
-import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate, relativeTimeLabel } from '@/lib/date';
 import { eventCoverUrl } from '@/lib/media';
@@ -46,15 +55,37 @@ const STATUS_TINT: Record<ShareStatus, string> = {
   expired: 'rgba(107, 107, 118, 0.14)',
 };
 
-/** Tickets and screenings get a poster-like band; drinks and snacks a shorter swatch. */
+/** Tickets and screenings get a poster-like band; drinks and snacks room for the whole product shot. */
 const ART_HEIGHT: Record<TransferKind, number> = {
   TICKET: 140,
   CINEMA_TICKET: 140,
-  BEVERAGE: 104,
-  CINEMA_CONCESSION: 104,
+  // Tall enough to show the whole drink above its name.
+  BEVERAGE: 168,
+  CINEMA_CONCESSION: 168,
 };
 
+/** The tear row's height — and the diameter of each half-circle bite in it. */
 const NOTCH = 14;
+/** Border thickness of the silhouette's edge. */
+const EDGE = 1;
+
+/** Kept clear under a drink's image for the title and detail lines. */
+const DRINK_TITLE_SPACE = 48;
+
+/** Theme token per kind — see `transfer*` in constants/theme. */
+const KIND_ACCENT: Record<TransferKind, ThemeColor> = {
+  TICKET: 'transferTicket',
+  BEVERAGE: 'transferBeverage',
+  CINEMA_TICKET: 'transferCinemaTicket',
+  CINEMA_CONCESSION: 'transferCinemaConcession',
+};
+
+/** `#RRGGBB` + alpha (0–1) → `#RRGGBBAA`. */
+function withAlpha(hex: string, alpha: number): string {
+  return `${hex}${Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, '0')}`;
+}
 
 const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -78,10 +109,15 @@ export type TransferCardProps = {
  * A ticket/seat/drink/snack transfer in the chat — drawn as a stub rather than
  * a text bubble: artwork (cover, poster, or the drink's own color) over the
  * item's name, a perforated tear line, then when/where and the transfer's
- * status. Purely presentational; `ShareRow` owns the press handling.
+ * status. Monochrome like the rest of the app: a plain dark stub with a
+ * hairline edge, its kind marked only by a quiet accent on its label and
+ * note (see `transfer*` in constants/theme). A drink sits on a clear
+ * background — its own cutout, nothing painted behind it. Purely
+ * presentational; `ShareRow` owns the press handling.
  */
 export function TransferCard({ share, sent, title, detail }: TransferCardProps) {
   const theme = useTheme();
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const kind = share.kind as TransferKind;
   const art = share.art;
 
@@ -89,7 +125,8 @@ export function TransferCard({ share, sent, title, detail }: TransferCardProps) 
   // with every other screen that shows this event.
   const { data: event } = useEvent(kind === 'TICKET' ? art?.eventId : undefined);
   const imageUrl = art?.imageUrl ?? (kind === 'TICKET' ? eventCoverUrl(event?.coverImages) : null);
-  const accent = art?.accentColor || null;
+  const kindColor = theme[KIND_ACCENT[kind]];
+  const isDrink = kind === 'BEVERAGE' || kind === 'CINEMA_CONCESSION';
 
   const when = startsAtLabel(kind, art?.startsAt);
   const place = art?.place;
@@ -105,36 +142,75 @@ export function TransferCard({ share, sent, title, detail }: TransferCardProps) 
           ? theme.textMuted
           : theme.danger;
 
+  // The stub's silhouette — its paper, its border, and two real half-circle
+  // bites at the tear line — drawn as one SVG shape rather than a bordered
+  // View with background-colored circles laid over its edges. Those circles
+  // only *pretended* to be holes: on Android the View's border is painted on
+  // top of its children, so the border ran straight across every "bite".
+  // Here the bites are cut out of the shape itself (whatever is behind the
+  // card shows through), and the border stops where each bite begins.
+  const artHeight = ART_HEIGHT[kind];
+  const geometry: TicketGeometry = {
+    width: size.width,
+    height: size.height,
+    radius: Radius.lg,
+    tearY: artHeight + NOTCH / 2,
+    notch: NOTCH / 2,
+  };
+  const edge = insetGeometry(geometry, EDGE / 2);
+
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.glassBorder }]}>
-      <View style={[styles.art, { height: ART_HEIGHT[kind] }]}>
-        {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+    <View
+      style={styles.card}
+      onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
+      {size.width > 0 ? (
+        <Svg width={size.width} height={size.height} style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Path d={ticketPath(geometry)} fill={theme.surface} />
+          <Path
+            d={ticketEdgePath(edge)}
+            transform={`translate(${EDGE / 2}, ${EDGE / 2})`}
+            fill="none"
+            stroke={theme.glassBorder}
+            strokeWidth={EDGE}
+          />
+        </Svg>
+      ) : null}
+      <View style={[styles.art, { height: artHeight }]}>
+        {isDrink ? (
+          // A drink's own (usually background-removed) image, whole and
+          // floating in the space above the title — not cropped to fill.
+          <DrinkArt
+            imageUrl={art?.productImageUrl}
+            height={ART_HEIGHT[kind] - DRINK_TITLE_SPACE}
+            fallbackIcon={KIND_ICON[kind]}
+            style={styles.drinkArt}
+          />
+        ) : imageUrl ? (
+          <>
+            <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+            {/* Only over real photos — legibility for the chip and title. */}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.35)', 'transparent', theme.scrim]}
+              locations={[0, 0.35, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </>
         ) : (
-          <LinearGradient
-            colors={[accent ?? theme.surfaceMuted, theme.backgroundElevated]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[StyleSheet.absoluteFill, styles.artFallback]}>
-            <Ionicons name={KIND_ICON[kind]} size={44} color="rgba(255,255,255,0.28)" />
-          </LinearGradient>
+          <View style={[StyleSheet.absoluteFill, styles.artFallback, { backgroundColor: theme.surfaceMuted }]}>
+            <Ionicons name={KIND_ICON[kind]} size={40} color={withAlpha(kindColor, 0.6)} />
+          </View>
         )}
-        <LinearGradient
-          colors={['rgba(0,0,0,0.35)', 'transparent', theme.scrim]}
-          locations={[0, 0.35, 1]}
-          style={StyleSheet.absoluteFill}
-        />
 
         <View style={styles.artTop}>
-          <View style={[styles.kindChip, { backgroundColor: theme.glassStrong }]}>
-            <Ionicons name={KIND_ICON[kind]} size={12} color={theme.text} />
+          <View style={[styles.chip, { backgroundColor: theme.glassStrong, borderColor: theme.glassBorder }]}>
+            <Ionicons name={KIND_ICON[kind]} size={12} color={kindColor} />
             <Text variant="label" style={styles.kindLabel}>
               {KIND_LABEL[kind].toUpperCase()}
             </Text>
           </View>
           {count > 1 ? (
-            <View style={[styles.countChip, { backgroundColor: theme.brand }]}>
-              <Text variant="label" style={{ color: theme.onBrand }}>
+            <View style={[styles.chip, { backgroundColor: theme.glassStrong, borderColor: theme.glassBorder }]}>
+              <Text variant="label" style={styles.kindLabel}>
                 ×{count}
               </Text>
             </View>
@@ -154,9 +230,7 @@ export function TransferCard({ share, sent, title, detail }: TransferCardProps) 
       </View>
 
       <View style={styles.perforation}>
-        <View style={[styles.notch, styles.notchLeft, { backgroundColor: theme.background, borderColor: theme.glassBorder }]} />
         <View style={[styles.dashes, { borderColor: theme.glassBorder }]} />
-        <View style={[styles.notch, styles.notchRight, { backgroundColor: theme.background, borderColor: theme.glassBorder }]} />
       </View>
 
       <View style={styles.body}>
@@ -164,7 +238,7 @@ export function TransferCard({ share, sent, title, detail }: TransferCardProps) 
         {place ? <InfoLine icon="location-outline" text={place} /> : null}
 
         {share.message ? (
-          <View style={[styles.note, { borderLeftColor: theme.glassBorder }]}>
+          <View style={[styles.note, { borderLeftColor: kindColor }]}>
             <Text variant="small" color="textSecondary" numberOfLines={3}>
               “{share.message}”
             </Text>
@@ -184,6 +258,7 @@ export function TransferCard({ share, sent, title, detail }: TransferCardProps) 
         </View>
 
         {incomingPending ? (
+          // The app's one primary button style — white, dark text.
           <View style={[styles.cta, { backgroundColor: theme.brand }]}>
             <Text variant="small" style={[styles.ctaText, { color: theme.onBrand }]}>
               Tap to accept or decline
@@ -209,30 +284,36 @@ function InfoLine({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: 
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: Radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
+  // No background, border or clipping here — the SVG silhouette is the
+  // card's paper and edge (see `TransferCard`).
+  card: {},
 
-  art: { justifyContent: 'space-between' },
+  // Rounded on top only, to sit inside the silhouette's top corners.
+  art: {
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+  },
   artFallback: { alignItems: 'center', justifyContent: 'center' },
+  drinkArt: { position: 'absolute', top: 0, left: 0, right: 0 },
   artTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing.sm,
   },
-  kindChip: {
+  // Smoked glass with a hairline — the kind shows in its icon's tint only.
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  kindLabel: { fontSize: 10 },
-  countChip: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.pill },
+  kindLabel: { fontSize: 10, color: '#FFFFFF' },
   artBottom: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, gap: 2 },
   title: { color: '#FFFFFF' },
   detailOnArt: { color: 'rgba(255,255,255,0.78)' },
@@ -245,15 +326,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
   },
-  notch: {
-    position: 'absolute',
-    width: NOTCH,
-    height: NOTCH,
-    borderRadius: NOTCH / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  notchLeft: { left: -NOTCH / 2 },
-  notchRight: { right: -NOTCH / 2 },
 
   body: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md, paddingTop: 2, gap: 6 },
   infoLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
