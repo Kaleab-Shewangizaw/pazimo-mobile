@@ -2,8 +2,18 @@ import { getData } from '@/api/client';
 import type { MyRewards, PointsHistoryPage, Recap, RecapPeriodType } from '@/types/api';
 
 /** Score, the medal shelf (earned and still locked), and what earns points right now. */
-export function fetchMyRewards(): Promise<MyRewards> {
-  return getData<MyRewards>('/rewards/me');
+export async function fetchMyRewards(): Promise<MyRewards> {
+  const data = await getData<MyRewards>('/rewards/me');
+  // Accounts that have never earned have no `score` stored, so the server
+  // sends none (and a null `remaining`) — that's a score of 0, not NaN.
+  const score = Number(data.score) || 0;
+  return {
+    ...data,
+    score,
+    next: data.next
+      ? { ...data.next, remaining: Number.isFinite(data.next.remaining) ? data.next.remaining : Math.max(0, data.next.threshold - score) }
+      : null,
+  };
 }
 
 /** Purchases that earned points, newest first, cursor-paginated by award id. */

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,17 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
-import { Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing, type Theme } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
-import { formatTicketDate } from '@/lib/date';
 import { formatPrice } from '@/lib/pricing';
 import { useMyRefillOrders } from '@/queries/beverages';
-import type { PaymentStatus, RefillOrderSummary } from '@/types/api';
+import type { RefillOrderSummary } from '@/types/api';
 
 const HEADER_HEIGHT = 44;
 const SKELETON_ROWS = [0, 1, 2];
+const SHOWN_STATUSES = new Set<RefillOrderSummary['status']>(['PAID', 'COMPLETED', 'PENDING']);
 
 /**
  * Every drink order this account has paid for, event or venue — the answer
@@ -36,12 +36,17 @@ export default function RefillOrdersScreen() {
   const router = useRouter();
   const goBack = useGoBack('/(tabs)/refill');
 
-  const { orders, isLoading, refetch } = useMyRefillOrders();
+  const { orders: allOrders, isLoading, refetch } = useMyRefillOrders();
+  // Only orders that actually bought something (or are still settling) — a
+  // failed or cancelled payment produced no drinks, so there's nothing in it
+  // to collect and nothing to open.
+  const orders = useMemo(() => allOrders.filter((order) => SHOWN_STATUSES.has(order.status)), [allOrders]);
   const { refreshing, onRefresh } = useRefresh(refetch);
 
   const openOrder = useCallback(
     (order: RefillOrderSummary) => {
-      router.push(`/refill/order/${order.transactionId}`);
+      // `from` tells the order screen to come back here on Done.
+      router.push({ pathname: '/refill/order/[txn]', params: { txn: order.transactionId, from: 'orders' } });
     },
     [router],
   );
@@ -59,7 +64,10 @@ export default function RefillOrdersScreen() {
           style={styles.headerButton}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </Touchable>
-        <Text variant="callout">Your orders</Text>
+        <Text variant="title" style={styles.headerTitle}>
+          Your orders
+        </Text>
+        <View style={styles.headerButton} />
       </View>
 
       {isLoading ? (
@@ -91,52 +99,85 @@ export default function RefillOrdersScreen() {
 
 function OrderRow({ order, onPress }: { order: RefillOrderSummary; onPress: (order: RefillOrderSummary) => void }) {
   const theme = useTheme();
+  const status = orderStatus(order.status, theme);
+  const atVenue = order.channel === 'VENUE';
 
   return (
-    <Touchable accessibilityRole="button" accessibilityLabel={order.title} onPress={() => onPress(order)} pressedScale={0.98}>
+    <Touchable
+      accessibilityRole="button"
+      accessibilityLabel={`${order.title}, ${formatPrice(order.total, order.currency)}, ${status.label}`}
+      onPress={() => onPress(order)}
+      pressedScale={0.98}>
       <Surface tone="raised" style={styles.row}>
         <View style={[styles.icon, { backgroundColor: theme.brandTint }]}>
-          <Ionicons name="beer" size={17} color={theme.text} />
+          <Ionicons name={atVenue ? 'storefront-outline' : 'beer-outline'} size={20} color={theme.text} />
         </View>
+
         <View style={styles.rowText}>
           <Text variant="callout" numberOfLines={1}>
             {order.title}
           </Text>
           <Text variant="caption" color="textSecondary" numberOfLines={1}>
-            {formatTicketDate(order.createdAt)}
+            {atVenue ? 'Venue' : 'Event'} · {formatOrderDate(order.createdAt)}
           </Text>
+          <View style={[styles.statusPill, { backgroundColor: status.tint }]}>
+            <Ionicons name={status.icon} size={12} color={status.color} />
+            <Text variant="caption" style={[styles.statusText, { color: status.color }]}>
+              {status.label}
+            </Text>
+          </View>
         </View>
+
         <View style={styles.rowEnd}>
-          <Text variant="callout">{formatPrice(order.total, order.currency)}</Text>
-          <StatusLabel status={order.status} />
+          <Text variant="callout" style={styles.price}>
+            {formatPrice(order.total, order.currency)}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
         </View>
       </Surface>
     </Touchable>
   );
 }
 
-function StatusLabel({ status }: { status: PaymentStatus }) {
-  const theme = useTheme();
-  const { label, color } =
-    status === 'COMPLETED'
-      ? { label: 'Paid', color: theme.success }
-      : status === 'PENDING'
-        ? { label: 'Pending', color: theme.textMuted }
-        : status === 'CANCELLED'
-          ? { label: 'Cancelled', color: theme.textMuted }
-          : { label: 'Failed', color: theme.danger };
+type StatusLook = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  tint: string;
+};
 
-  return (
-    <Text variant="caption" style={{ color }}>
-      {label}
-    </Text>
-  );
+/**
+ * `Payment.status` straight from the backend: a settled payment is `PAID`
+ * there. `COMPLETED` is what the payment-status poll maps that to, so both
+ * read as paid — anything unrecognised was the bug where every successful
+ * order showed "Failed".
+ */
+function orderStatus(status: RefillOrderSummary['status'], theme: Theme): StatusLook {
+  switch (status) {
+    case 'PAID':
+    case 'COMPLETED':
+      return { label: 'Paid', icon: 'checkmark-circle', color: theme.success, tint: 'rgba(52,211,153,0.14)' };
+    case 'PENDING':
+      return { label: 'Processing', icon: 'time-outline', color: theme.textSecondary, tint: 'rgba(161,161,170,0.14)' };
+    case 'CANCELLED':
+      return { label: 'Cancelled', icon: 'close-circle-outline', color: theme.textSecondary, tint: 'rgba(161,161,170,0.14)' };
+    default:
+      return { label: 'Failed', icon: 'alert-circle-outline', color: theme.danger, tint: 'rgba(251,113,133,0.14)' };
+  }
+}
+
+function formatOrderDate(iso: string): string {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+  const date = when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${time}`;
 }
 
 function OrderSkeleton() {
   return (
     <Surface tone="raised" style={styles.row}>
-      <Skeleton width={38} height={38} radius={Radius.pill} />
+      <Skeleton width={44} height={44} radius={Radius.md} />
       <View style={styles.rowText}>
         <Skeleton width="60%" height={16} />
         <Skeleton width="40%" height={12} />
@@ -157,19 +198,31 @@ const styles = StyleSheet.create({
   headerButton: {
     width: HEADER_HEIGHT,
     height: HEADER_HEIGHT,
-    marginLeft: -Spacing.sm,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  list: { padding: Spacing.lg, gap: Spacing.sm },
+  headerTitle: { flex: 1, textAlign: 'center' },
+  list: { padding: Spacing.lg, gap: Spacing.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.sm + 2,
+    padding: Spacing.md,
   },
-  icon: { width: 38, height: 38, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
-  rowText: { flex: 1, gap: 3 },
-  rowEnd: { alignItems: 'flex-end', gap: 3 },
+  icon: { width: 44, height: 44, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  rowText: { flex: 1, gap: 4 },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 2,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+  },
+  statusText: { fontWeight: '600' },
+  rowEnd: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  price: { fontWeight: '700' },
 });

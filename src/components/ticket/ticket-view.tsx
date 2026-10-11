@@ -5,7 +5,7 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { DetailRow } from '@/components/ticket/detail-row';
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
-import { QrPlate } from '@/components/ticket/qr-plate';
+import { PLATE_COLOR, QrPlate, QrSlot } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -19,7 +19,7 @@ import type { Ticket } from '@/types/api';
 /**
  * The ticket itself — the artefact the whole purchase exists to produce.
  *
- * The QR sits on a white plate rather than on the dark card. That is not a
+ * The QR sits on a light plate rather than on the dark card. That is not a
  * styling choice: scanners key off the light/dark contrast of the quiet zone,
  * and a code inverted onto a dark surface is markedly harder to read at an
  * angle, in the dark, through a phone screen at a door.
@@ -112,11 +112,21 @@ function TicketViewImpl({
             Show this QR code at the event entrance
           </Text>
 
-          <View style={styles.plateWrap}>
-            <QrPlate size={plate}>
-              <PazimoQr value={payload} size={plate * QR_SHARE} />
-            </QrPlate>
-          </View>
+          {fill ? (
+            <QrSlot max={plate}>
+              {(size) => (
+                <QrPlate size={size}>
+                  <PazimoQr value={payload} size={size * QR_SHARE} background={PLATE_COLOR} />
+                </QrPlate>
+              )}
+            </QrSlot>
+          ) : (
+            <View style={styles.plateWrap}>
+              <QrPlate size={plate}>
+                <PazimoQr value={payload} size={plate * QR_SHARE} background={PLATE_COLOR} />
+              </QrPlate>
+            </View>
+          )}
 
           {ticket.purchaseQuantity > 1 ? (
             <Text variant="small" color="textSecondary" style={styles.centered}>
@@ -167,14 +177,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
+    paddingTop: Spacing.lg,
     // Clears the perforation, which is drawn on this block's bottom edge.
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.lg,
   },
-  // When the card fills the screen, its content has to fill that space too —
-  // otherwise the title and QR cluster at the top and leave a dead gap above
-  // the tear line.
-  stubFilled: { flex: 1, justifyContent: 'center' },
+  // When the card fills the screen, the QR slot takes whatever height the
+  // text leaves, so the whole ticket fits without scrolling.
+  stubFilled: { flex: 1 },
   eyebrow: { textAlign: 'center', marginBottom: 2 },
   title: {
     color: '#FFFFFF',
@@ -208,9 +217,9 @@ const styles = StyleSheet.create({
   },
 
   details: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
 });
 

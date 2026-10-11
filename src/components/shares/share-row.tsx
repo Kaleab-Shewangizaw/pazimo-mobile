@@ -34,7 +34,7 @@ export type ShareRowProps = {
 };
 
 /**
- * One entry in the chat-like history: bubbles sit right (mine, white) or
+ * One entry in the chat-like history: bubbles sit right (mine, blue) or
  * left (theirs, graphite) — color and side alone say who sent it, same idea as a messaging app even though this is a flat list
  * rather than a live back-and-forth. Every transfer kind renders through the
  * same `TransferCard`, which reads only `.lines`/`.art` — already reduced to
@@ -161,7 +161,7 @@ function MessageBubble({
       };
 
   const textColor = sent ? theme.onBubbleSent : theme.text;
-  const metaColor = sent ? 'rgba(10, 10, 11, 0.5)' : theme.textMuted;
+  const metaColor = sent ? theme.bubbleSentMeta : theme.textMuted;
   const linkColor = sent ? theme.linkOnBubbleSent : theme.link;
 
   const textBubble = inviteOnly ? null : (

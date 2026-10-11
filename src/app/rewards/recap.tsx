@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -130,6 +129,19 @@ export default function RecapScreen() {
   }, [capture]);
 
   const save = useCallback(async () => {
+    // Loaded on tap, not at the top of the file: `expo-media-library`'s entry
+    // point requires its native module the moment it's imported, and Expo
+    // Router loads every route file at startup in development — so a build
+    // without that module (Expo Go) crashed on launch, not just here. Where
+    // it's missing, the share sheet's own "Save image" does the same job.
+    let MediaLibrary: typeof import('expo-media-library');
+    try {
+      MediaLibrary = await import('expo-media-library');
+    } catch {
+      await share();
+      return;
+    }
+
     setBusy('save');
     try {
       const { granted } = await MediaLibrary.requestPermissionsAsync(true, ['photo']);
@@ -147,7 +159,7 @@ export default function RecapScreen() {
     } finally {
       setBusy(null);
     }
-  }, [capture]);
+  }, [capture, share]);
 
   const onBirthDateSaved = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.rewards.all });

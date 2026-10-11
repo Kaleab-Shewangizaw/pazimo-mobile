@@ -33,7 +33,7 @@ import { useTheme } from '@/hooks/use-theme';
  * best-effort `cancelPayment` the ticket flow uses, not a bespoke endpoint.
  */
 
-const REVEAL_DURATION = 900;
+const REVEAL_DURATION = 450;
 
 const FAILURE_COPY: Record<
   string,
@@ -46,7 +46,7 @@ const FAILURE_COPY: Record<
 };
 
 export default function RefillOrderScreenRoute() {
-  const { txn } = useLocalSearchParams<{ txn: string }>();
+  const { txn, from } = useLocalSearchParams<{ txn: string; from?: string }>();
   const router = useRouter();
 
   const { phase, order, message } = useRefillOrderWatcher(txn);
@@ -97,7 +97,17 @@ export default function RefillOrderScreenRoute() {
     leave();
   }, [txn, leave]);
 
-  const done = useCallback(() => router.replace('/(tabs)/refill'), [router]);
+  // Done always lands on Your orders — where this drink lives from now on.
+  // Opened from that list, just step back to it; arriving fresh from a
+  // payment, swap this screen for the list so Back from there goes to Refill
+  // rather than into the finished checkout again.
+  const done = useCallback(() => {
+    if (from === 'orders' && router.canGoBack()) router.back();
+    else router.replace('/refill/orders');
+  }, [router, from]);
+
+  // A failed payment has no order to show — "Browse drinks" heads back to Refill.
+  const browse = useCallback(() => router.replace('/(tabs)/refill'), [router]);
 
   return (
     <View style={styles.screen}>
@@ -107,20 +117,13 @@ export default function RefillOrderScreenRoute() {
             <Animated.View
               style={{
                 flex: 1,
+                // A plain crossfade — no 3D turn. The card used to flip in
+                // on a perspective rotateY, which sliced visibly across the
+                // screen as it turned.
                 opacity: reveal.interpolate({
-                  inputRange: [0.5, 0.62],
+                  inputRange: [0.3, 1],
                   outputRange: [0, 1],
                 }),
-                transform: [
-                  { perspective: 1200 },
-                  {
-                    rotateY: reveal.interpolate({
-                      inputRange: [0.5, 1],
-                      outputRange: ['-90deg', '0deg'],
-                      extrapolate: 'clamp',
-                    }),
-                  },
-                ],
               }}
             >
               {body}
@@ -136,7 +139,7 @@ export default function RefillOrderScreenRoute() {
           message={message}
           onCancel={abandon}
           onLeave={leave}
-          onDone={done}
+          onDone={browse}
         />
       ) : null}
     </View>
@@ -186,21 +189,7 @@ function WaitingOverlay({
         ]}
       >
         <Animated.View
-          style={[
-            styles.card,
-            {
-              transform: [
-                { perspective: 1200 },
-                {
-                  rotateY: reveal.interpolate({
-                    inputRange: [0, 0.5],
-                    outputRange: ['0deg', '90deg'],
-                    extrapolate: 'clamp',
-                  }),
-                },
-              ],
-            },
-          ]}
+          style={styles.card}
         >
           <TicketFrame
             fill

@@ -303,3 +303,66 @@ export function tearLinePath(input: TicketGeometry): string {
   return [`M ${g.notch} ${g.tearY}`, `H ${g.width - g.notch}`].join(' ');
 }
 
+
+/**
+ * The silhouette's EDGE, for stroking — `ticketPath`'s outline minus the two
+ * notch arcs. Two open runs (top half, bottom half) that stop exactly where
+ * each notch begins, so the edge light/border never traces around the
+ * half-circle cut-outs; the bites read as clean holes, not outlined rings.
+ */
+export function ticketEdgePath(input: TicketGeometry): string {
+  const g = normalizeGeometry(input);
+
+  const { width: w, height: h, radius: r, tearY: y, notch: n } = g;
+
+  if (w <= 0 || h <= 0) {
+    return '';
+  }
+
+  return [
+    // Top half: left notch's upper end → up, across the top, → right notch's upper end.
+    `M 0 ${y - n}`,
+    `V ${r}`,
+    `A ${r} ${r} 0 0 1 ${r} 0`,
+    `H ${w - r}`,
+    `A ${r} ${r} 0 0 1 ${w} ${r}`,
+    `V ${y - n}`,
+
+    // Bottom half: right notch's lower end → down, across the bottom, → left notch's lower end.
+    `M ${w} ${y + n}`,
+    `V ${h - r}`,
+    `A ${r} ${r} 0 0 1 ${w - r} ${h}`,
+    `H ${r}`,
+    `A ${r} ${r} 0 0 1 0 ${h - r}`,
+    `V ${y + n}`,
+  ].join(' ');
+}
+
+/**
+ * The ticket's visible THICKNESS: the sliver between its bottom edge and the
+ * same edge pushed `depth` down — what you'd see of a card's side when it
+ * sits on a table. Only the bottom contour contributes (the sides shifted
+ * straight down land on themselves), so it never overlaps the face itself,
+ * which matters because a glass face is see-through.
+ */
+export function ticketLipPath(input: TicketGeometry, depth: number): string {
+  const g = normalizeGeometry(input);
+
+  const { width: w, height: h, radius: r } = g;
+
+  if (w <= 0 || h <= 0 || depth <= 0) {
+    return '';
+  }
+
+  return [
+    `M 0 ${h - r}`,
+    `A ${r} ${r} 0 0 0 ${r} ${h}`,
+    `H ${w - r}`,
+    `A ${r} ${r} 0 0 0 ${w} ${h - r}`,
+    `V ${h - r + depth}`,
+    `A ${r} ${r} 0 0 1 ${w - r} ${h + depth}`,
+    `H ${r}`,
+    `A ${r} ${r} 0 0 1 0 ${h - r + depth}`,
+    'Z',
+  ].join(' ');
+}

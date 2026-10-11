@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   // `flexGrow` (not `flex`) — a content container only ever grows past its
   // content's natural size, so a tall ticket still scrolls instead of being
   // clipped to the viewport.
-  content: { flexGrow: 1, paddingTop: Spacing.sm, paddingBottom: Spacing.xxxl },
+  content: { flexGrow: 1, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
   bodyFlex: { flex: 1 },
   single: { flex: 1, paddingHorizontal: Spacing.lg },
 

@@ -1,4 +1,6 @@
+import { Image } from 'expo-image';
 import { memo, useId, useMemo } from 'react';
+import { View } from 'react-native';
 import Svg, {
   Circle,
   ClipPath,
@@ -19,6 +21,11 @@ import { encodeQr } from '@/lib/qr';
  * `<Circle>`. A level-H code for a ticket payload is around 37×37, so the naive
  * version mounts well over a thousand native views for one image — enough to be
  * felt on the reveal animation. One path draws the same pixels as one node.
+ *
+ * The mark in the middle is the exception: `PazimoQr` lays it over the code as
+ * a real image sized in points. Drawn as an SVG `<Image>` it sits in module
+ * coordinates — a few units wide — and native rasterises it at that size
+ * before the viewBox scales it up ~8×, which is what made it blurry.
  */
 
 const MARK = require('@/assets/images/pazimo-mark.png');
@@ -94,6 +101,8 @@ export type QrGlyphProps = {
   color?: string;
   /** Plate behind the mark; match the surface the code sits on. */
   background?: string;
+  /** Draws the mark inside the SVG. Off when the caller overlays it sharper itself. */
+  mark?: boolean;
 };
 
 /**
@@ -101,7 +110,7 @@ export type QrGlyphProps = {
  * drawing. Callers are responsible for the transform that places and scales it,
  * and for the quiet zone around it.
  */
-function QrGlyphImpl({ value, color = '#0A0A0B', background = '#FFFFFF' }: QrGlyphProps) {
+function QrGlyphImpl({ value, color = '#0A0A0B', background = '#FFFFFF', mark = true }: QrGlyphProps) {
   const { dots, finders, logo } = useQrGeometry(value);
   // Two codes can be mounted at once (the visible one and the export poster),
   // and a duplicate clip-path id would make one of them mask against the other.
@@ -149,15 +158,17 @@ function QrGlyphImpl({ value, color = '#0A0A0B', background = '#FFFFFF' }: QrGly
         rx={logo.side * 0.28}
         fill={background}
       />
-      <SvgImage
-        x={logo.x + markInset}
-        y={logo.y + markInset}
-        width={logo.side - markInset * 2}
-        height={logo.side - markInset * 2}
-        href={MARK}
-        preserveAspectRatio="xMidYMid slice"
-        clipPath={`url(#${clipId})`}
-      />
+      {mark ? (
+        <SvgImage
+          x={logo.x + markInset}
+          y={logo.y + markInset}
+          width={logo.side - markInset * 2}
+          height={logo.side - markInset * 2}
+          href={MARK}
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={`url(#${clipId})`}
+        />
+      ) : null}
     </G>
   );
 }
@@ -169,13 +180,31 @@ export type PazimoQrProps = QrGlyphProps & {
   size: number;
 };
 
-/** The standalone code, sized in points. */
+/** The standalone code, sized in points, with the mark overlaid at full resolution. */
 function PazimoQrImpl({ value, size, ...rest }: PazimoQrProps) {
-  const { count } = useQrGeometry(value);
+  const { count, logo } = useQrGeometry(value);
+  const scale = size / count;
+  const inset = logo.side * MARK_INSET;
+  const markSide = (logo.side - inset * 2) * scale;
+
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${count} ${count}`}>
-      <QrGlyph value={value} {...rest} />
-    </Svg>
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size} viewBox={`0 0 ${count} ${count}`}>
+        <QrGlyph value={value} {...rest} mark={false} />
+      </Svg>
+      <Image
+        source={MARK}
+        contentFit="cover"
+        style={{
+          position: 'absolute',
+          left: (logo.x + inset) * scale,
+          top: (logo.y + inset) * scale,
+          width: markSide,
+          height: markSide,
+          borderRadius: logo.side * 0.22 * scale,
+        }}
+      />
+    </View>
   );
 }
 

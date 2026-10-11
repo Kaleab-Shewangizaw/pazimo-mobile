@@ -14,7 +14,12 @@ import type {
  * so there is no `/cinema-shares/search` or `/cinema-shares/contacts` here.
  */
 
-export type CinemaShareItemInput = { itemId: string; quantity: number };
+/**
+ * `seatKeys` sends only those seats of a cinema ticket — the backend splits
+ * them off into a new ticket for the recipient on accept. Omitted, the whole
+ * ticket goes.
+ */
+export type CinemaShareItemInput = { itemId: string; quantity: number; seatKeys?: string[] };
 
 export async function createCinemaShare(payload: {
   toUserId: string;

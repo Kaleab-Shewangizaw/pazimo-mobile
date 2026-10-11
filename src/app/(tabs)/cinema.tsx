@@ -331,9 +331,11 @@ export default function CinemaScreen() {
           <PosterDeck
             entries={entries}
             width={stage.width - Spacing.lg * 2}
-            // The card sizes itself off its own 2:3 poster aspect ratio; this
-            // just keeps it from overflowing a short screen.
-            maxHeight={stage.height}
+            // The card grows to fill this height (up to a capped aspect ratio); this
+            // just keeps it from overflowing a short screen. The measured height
+            // includes the stage's own bottom padding, so take that back out or
+            // the card runs under the tab bar.
+            maxHeight={stage.height - bottomPadding - Spacing.md}
             onIndexChange={setCard}
             onOpen={(entry) =>
               router.push({
@@ -437,10 +439,10 @@ const styles = StyleSheet.create({
   },
 
   // Horizontal padding shrinks the stage on both sides so the deck floats
-  // off the screen edges. Centered rather than stretched: the deck sizes
-  // itself off the poster's own aspect ratio, so this is what gives it the
-  // generous dark space above and below that a stretched card wouldn't have.
-  stage: { flex: 1, paddingHorizontal: Spacing.lg, justifyContent: 'center', alignItems: 'center' },
+  // off the screen edges. Pinned to the top rather than centred: the deck
+  // already reserves its own headroom for the peeking posters, so any spare
+  // height on a tall screen goes below the card instead of above it.
+  stage: { flex: 1, paddingHorizontal: Spacing.lg, justifyContent: 'flex-start', alignItems: 'center' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   list: { paddingHorizontal: Spacing.lg, gap: Spacing.md },

@@ -47,15 +47,30 @@ const palette = {
   happyHour: '#FBBF24',
 
   /**
-   * Chat bubbles: mine are the solid white brand fill, theirs a raised
-   * graphite — the two sides read apart at a glance, no avatars needed.
+   * Chat bubbles: mine a deep royal blue, theirs a raised graphite — the two
+   * sides read apart at a glance (no avatars needed) without a bright white
+   * block breaking up the dark screen.
    */
-  bubbleSent: white.full,
-  onBubbleSent: '#0A0A0B',
+  bubbleSent: '#2B4C8C',
+  onBubbleSent: '#FFFFFF',
+  bubbleSentMeta: 'rgba(255, 255, 255, 0.62)',
   bubbleReceived: '#26262C',
-  /** Tappable links in message text — the one place blue appears, because that's what a link looks like everywhere else. */
+  /** Tappable links in message text — blue, because that's what a link looks like everywhere else. */
   link: '#7CC4FF',
-  linkOnBubbleSent: '#0B5FCC',
+  /** Lighter still on the blue sent bubble, where `link` would sink in. */
+  linkOnBubbleSent: '#CFE6FF',
+
+  /**
+   * One quiet accent per kind of thing sent in chat — dusty lavender event
+   * tickets, sage drinks, dusty rose movie seats, honey snacks. Desaturated
+   * on purpose: they mark a card's kind in small touches (its label's icon
+   * and dot, its note's rule) on an otherwise monochrome card, never as
+   * fills or washes that fight the dark theme.
+   */
+  transferTicket: '#A79BDB',
+  transferBeverage: '#8DBBAE',
+  transferCinemaTicket: '#D6939B',
+  transferCinemaConcession: '#D4B37E',
 
   /** Scrim under text laid over cover art. */
   scrim: 'rgba(0, 0, 0, 0.62)',

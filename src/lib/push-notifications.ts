@@ -1,6 +1,7 @@
+import { isRunningInExpoGo } from 'expo';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsModule from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 
 /**
@@ -13,6 +14,21 @@ import { AppState, Platform } from 'react-native';
  * either isn't available yet, so a team member on Expo Go, a simulator, or a
  * checkout that hasn't run `eas init` never crashes on this.
  */
+
+/**
+ * `expo-notifications`, or `null` where it can't run at all. Expo Go on
+ * Android (SDK 53+) throws the moment the package is even *imported* — its
+ * push-token auto-registration runs at module load — so a static import
+ * crashed the whole app on launch there. Loaded lazily instead, and every
+ * function below treats `null` as "push isn't available here": the same
+ * silent no-op this file already promises for simulators and missing EAS
+ * ids. A development build (or iOS Expo Go) gets the real module.
+ */
+const Notifications: typeof NotificationsModule | null =
+  Platform.OS === 'android' && isRunningInExpoGo()
+    ? null
+    : // eslint-disable-next-line @typescript-eslint/no-require-imports -- deliberately lazy; see above.
+      (require('expo-notifications') as typeof NotificationsModule);
 
 /**
  * The conversation currently on screen, if any — set by the conversation
@@ -43,7 +59,7 @@ function isForActiveConversation(data: Record<string, unknown> | undefined): boo
 // both suppress a notification's UI entirely while the app is in the
 // foreground, which would make this feature look broken to anyone testing
 // it with the app open. The one exception is the chat you're looking at.
-Notifications.setNotificationHandler({
+Notifications?.setNotificationHandler({
   handleNotification: async (notification) => {
     const show = !isForActiveConversation(notification.request.content.data);
     return {
@@ -58,7 +74,7 @@ Notifications.setNotificationHandler({
 const ANDROID_CHANNEL_ID = 'default';
 
 async function ensureAndroidChannel() {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android' || !Notifications) return;
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
     name: 'Default',
     importance: Notifications.AndroidImportance.MAX,
@@ -98,6 +114,7 @@ export function setRegisteredPushToken(token: string | null) {
  * rest of the app.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
+  if (!Notifications) return null;
   if (!Device.isDevice) {
     console.warn('Push notifications need a physical device — simulators/emulators cannot register.');
     return null;
@@ -142,7 +159,7 @@ export async function getPushStateSilently(): Promise<{
   permission: PushPermission;
   token: string | null;
 }> {
-  if (!Device.isDevice) return { permission: 'undetermined', token: null };
+  if (!Notifications || !Device.isDevice) return { permission: 'undetermined', token: null };
   try {
     const { status } = await Notifications.getPermissionsAsync();
     const permission: PushPermission =
@@ -167,19 +184,21 @@ export async function getPushStateSilently(): Promise<{
 export function addNotificationTapListener(
   onTap: (data: Record<string, unknown>) => void,
 ): () => void {
+  if (!Notifications) return () => {};
+  const N = Notifications;
   const handled = new Set<string>();
-  const handle = (response: Notifications.NotificationResponse) => {
-    if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+  const handle = (response: NotificationsModule.NotificationResponse) => {
+    if (response.actionIdentifier !== N.DEFAULT_ACTION_IDENTIFIER) return;
     const id = response.notification.request.identifier;
     if (handled.has(id)) return;
     handled.add(id);
     onTap(response.notification.request.content.data ?? {});
-    Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    N.clearLastNotificationResponseAsync().catch(() => {});
   };
 
-  const subscription = Notifications.addNotificationResponseReceivedListener(handle);
+  const subscription = N.addNotificationResponseReceivedListener(handle);
   let cancelled = false;
-  Notifications.getLastNotificationResponseAsync()
+  N.getLastNotificationResponseAsync()
     .then((response) => {
       if (!cancelled && response) handle(response);
     })
@@ -195,6 +214,7 @@ export function addNotificationTapListener(
 export function addNotificationReceivedListener(
   onReceive: (data: Record<string, unknown>) => void,
 ): () => void {
+  if (!Notifications) return () => {};
   const subscription = Notifications.addNotificationReceivedListener((notification) => {
     onReceive(notification.request.content.data ?? {});
   });
@@ -207,18 +227,21 @@ export function addNotificationReceivedListener(
  * unsubscribe function.
  */
 export function addPushTokenChangeListener(onChange: () => void): () => void {
+  if (!Notifications) return () => {};
   const subscription = Notifications.addPushTokenListener(() => onChange());
   return () => subscription.remove();
 }
 
 /** Clears any delivered notifications about one conversation — called when it's opened, since they've now been seen. */
 export async function dismissConversationNotifications(counterpartyId: string): Promise<void> {
+  if (!Notifications) return;
+  const N = Notifications;
   try {
-    const presented = await Notifications.getPresentedNotificationsAsync();
+    const presented = await N.getPresentedNotificationsAsync();
     await Promise.all(
       presented
         .filter((n) => n.request.content.data?.counterpartyId === counterpartyId)
-        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
+        .map((n) => N.dismissNotificationAsync(n.request.identifier)),
     );
   } catch {
     // Cosmetic — a stale notification left in the tray is harmless.

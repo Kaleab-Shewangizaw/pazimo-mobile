@@ -3,13 +3,14 @@ import { Image } from 'expo-image';
 import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { cinemaTicketQrUrl } from '@/api/cinema-checkout';
 import { DetailRow } from '@/components/ticket/detail-row';
-import { QrPlate } from '@/components/ticket/qr-plate';
+import { PazimoQr } from '@/components/ticket/pazimo-qr';
+import { PLATE_COLOR, QrPlate, QrSlot } from '@/components/ticket/qr-plate';
 import { TicketFrame } from '@/components/ticket/ticket-frame';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
+import { isSeatedOrder, orderSeatLabels } from '@/lib/cinema-seats';
 import { resolveImageUrl } from '@/lib/media';
 import { formatPrice } from '@/lib/pricing';
 import type { CinemaOrder } from '@/types/api';
@@ -24,7 +25,14 @@ import type { CinemaOrder } from '@/types/api';
  * card, in a grid when there's more than one, with the showtime/cinema/price
  * shown once instead of repeated per seat, and the order's snacks listed
  * alongside rather than needing their own screen.
+ *
+ * The codes are drawn on the device in Pazimo's dotted style rather than
+ * loaded from `qr.png`: the backend's cinema payload is the bare `ticketId`
+ * (`buildCinemaQrPayload`), so encoding it here scans exactly the same.
  */
+
+/** Share of the plate the symbol takes; the rest is its quiet zone. */
+const QR_SHARE = 0.78;
 
 const SINGLE_PLATE_MAX = 280;
 const GRID_QR_SIZE = 84;
@@ -57,9 +65,9 @@ function CinemaTicketViewImpl({
   if (!lead) return null;
 
   const poster = resolveImageUrl(lead.movie.poster);
-  const seated = tickets.every((t) => t.seat);
-  const admits = seated
-    ? `Seat${tickets.length > 1 ? 's' : ''} ${tickets.map((t) => `${t.seat!.row}${t.seat!.number}`).join(', ')}`
+  const seatLabels = orderSeatLabels(tickets);
+  const admits = isSeatedOrder(tickets)
+    ? `Seat${seatLabels.length > 1 ? 's' : ''} ${seatLabels.join(', ')}`
     : `${lead.ticketType} × ${tickets.reduce((n, t) => n + t.quantity, 0)}`;
   const total = tickets.reduce((sum, t) => sum + t.totalAmount, 0);
   const plate = Math.min(available - Spacing.xl * 2, SINGLE_PLATE_MAX);
@@ -104,14 +112,18 @@ function CinemaTicketViewImpl({
               : 'Show this QR code at the cinema entrance'}
           </Text>
 
-          {tickets.length === 1 ? (
+          {tickets.length === 1 && fill ? (
+            <QrSlot max={plate}>
+              {(size) => (
+                <QrPlate size={size}>
+                  <PazimoQr value={lead.ticketId} size={size * QR_SHARE} background={PLATE_COLOR} />
+                </QrPlate>
+              )}
+            </QrSlot>
+          ) : tickets.length === 1 ? (
             <View style={styles.plateWrap}>
               <QrPlate size={plate}>
-                <Image
-                  source={{ uri: cinemaTicketQrUrl(lead.ticketId) }}
-                  style={{ width: plate * 0.78, height: plate * 0.78 }}
-                  contentFit="contain"
-                />
+                <PazimoQr value={lead.ticketId} size={plate * QR_SHARE} background={PLATE_COLOR} />
               </QrPlate>
             </View>
           ) : (
@@ -119,39 +131,32 @@ function CinemaTicketViewImpl({
               {tickets.map((t) => (
                 <View key={t.ticketId} style={styles.qrCell}>
                   <View style={styles.qrCellPlate}>
-                    <Image
-                      source={{ uri: cinemaTicketQrUrl(t.ticketId) }}
-                      style={styles.qrCellImage}
-                      contentFit="contain"
-                    />
+                    <PazimoQr value={t.ticketId} size={GRID_QR_SIZE * 0.84} background={PLATE_COLOR} />
                   </View>
                   <Text
                     variant="caption"
                     color="textSecondary"
                     numberOfLines={1}
                   >
-                    {t.seat ? `${t.seat.row}${t.seat.number}` : t.ticketType}
+                    {t.seats?.length ? orderSeatLabels([t]).join(', ') : t.ticketType}
                   </Text>
                 </View>
               ))}
             </View>
           )}
 
-          <Text variant="small" color="textSecondary" style={styles.centered}>
-            {admits}
-          </Text>
-
           {onShowSeats ? (
             <Touchable
               accessibilityRole="button"
-              accessibilityLabel="Show seats and snacks"
+              accessibilityLabel={order.concessions.length ? 'Show seats and snacks' : 'Show seats'}
               onPress={onShowSeats}
               pressedScale={0.96}
               style={styles.showSeatsButton}>
-              <Text variant="small" color="textSecondary" style={styles.showSeatsText}>
-                Show seats & snacks
+              <Ionicons name="grid-outline" size={14} color="#FFFFFF" />
+              <Text variant="small" style={styles.showSeatsText}>
+                {order.concessions.length ? 'Show seats & snacks' : 'Show seats'}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.55)" />
+              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.7)" />
             </Touchable>
           ) : null}
         </View>
@@ -167,6 +172,7 @@ function CinemaTicketViewImpl({
           {lead.hallName ? (
             <DetailRow icon="film-outline" label="Hall" value={lead.hallName} />
           ) : null}
+          <DetailRow icon="grid-outline" label="Admits" value={admits} />
           {order.concessions.length ? (
             <DetailRow
               icon="fast-food-outline"
@@ -207,9 +213,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
+  // The QR slot takes whatever height the text leaves, so the whole ticket
+  // fits on screen; a multi-seat grid just centres in that space instead.
   stubFilled: { flex: 1, justifyContent: 'center' },
   eyebrow: { textAlign: 'center', marginBottom: 2 },
   title: {
@@ -223,14 +231,22 @@ const styles = StyleSheet.create({
 
   plateWrap: { marginTop: Spacing.lg, marginBottom: Spacing.md },
 
+  // A real pill button, not an underlined caption — it's the way to see
+  // where you're sitting, so it should look like something to tap.
   showSeatsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     marginTop: Spacing.sm,
     alignSelf: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  showSeatsText: { textDecorationLine: 'underline' },
+  showSeatsText: { color: '#FFFFFF', fontFamily: FontFamily.bold },
 
   qrGrid: {
     flexDirection: 'row',
@@ -245,11 +261,10 @@ const styles = StyleSheet.create({
     width: GRID_QR_SIZE,
     height: GRID_QR_SIZE,
     borderRadius: Radius.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: PLATE_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qrCellImage: { width: GRID_QR_SIZE * 0.8, height: GRID_QR_SIZE * 0.8 },
 
   scrim: {
     position: 'absolute',
@@ -261,9 +276,9 @@ const styles = StyleSheet.create({
   },
 
   details: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
 });
 

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaCheckoutSheet } from '@/components/cinema/cinema-checkout-sheet';
 import { SEAT_ACCENT, SeatMap } from '@/components/cinema/seat-map';
+import { useScreenPreview } from '@/components/cinema/use-screen-preview';
 import { Button } from '@/components/ui/button';
 import { GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
@@ -16,21 +17,12 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
 import { useTheme } from '@/hooks/use-theme';
 import { formatPrice } from '@/lib/pricing';
-import { resolveImageUrl } from '@/lib/media';
-import { useScreenVideo, useShowtimeSeats } from '@/queries/cinema-checkout';
+import { useShowtimeSeats } from '@/queries/cinema-checkout';
 import { useCinemaBookingStore, type SelectedSeat } from '@/stores/use-cinema-booking-store';
 import type { CinemaSeat } from '@/types/api';
 
 /** The server's own cap — mirrored here for a responsive no-op, not enforced here. */
 const MAX_SEATS = 10;
-
-/**
- * Looping backdrop for the auditorium's screen. Falls back to this bundled
- * clip until an admin uploads one from the Screen tab (`useScreenVideo`) —
- * so a fresh install never shows a blank screen, and every install picks up
- * whatever the admin sets without a release.
- */
-const SCREEN_PREVIEW = require('@/assets/videos/c894168c4145c485105d7646f5a5d8c7.mp4');
 
 export default function SeatsScreen() {
   const { showtimeId } = useLocalSearchParams<{ showtimeId: string }>();
@@ -40,9 +32,7 @@ export default function SeatsScreen() {
 
   const store = useCinemaBookingStore();
   const { seatMap, isLoading, isError, refetch } = useShowtimeSeats(showtimeId);
-  const { video: screenVideoPath } = useScreenVideo();
-  const screenVideoUrl = resolveImageUrl(screenVideoPath);
-  const screenPreview = screenVideoUrl ? { uri: screenVideoUrl } : SCREEN_PREVIEW;
+  const screenPreview = useScreenPreview();
 
   const [selected, setSelected] = useState<SelectedSeat[]>([]);
   const [ticketTypeId, setTicketTypeId] = useState<string | null>(null);

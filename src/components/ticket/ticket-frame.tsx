@@ -16,7 +16,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 
 import {
   type TicketGeometry,
@@ -24,6 +24,7 @@ import {
   tearLinePath,
   ticketFootPath,
   ticketHeadPath,
+  ticketLipPath,
   ticketPath,
 } from '@/components/ticket/ticket-path';
 import { Glass } from '@/components/ui/glass';
@@ -186,6 +187,13 @@ const GLASS_BOTTOM = 'rgba(0,0,0,0.22)';
 const TEAR_COLOR = 'rgba(255,255,255,0.16)';
 
 /* -------------------------------------------------------------------------- */
+/*                                    DEPTH                                   */
+/* -------------------------------------------------------------------------- */
+
+/** How thick the ticket reads — the lip drawn under its bottom edge. */
+const DEPTH = 7;
+
+/* -------------------------------------------------------------------------- */
 /*                                    PROPS                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -253,6 +261,9 @@ function TicketFrameImpl({
   blurTarget,
   faceColor = 'rgba(12,15,22,0.94)',
 }: TicketFrameProps) {
+  // Deliberately still: no tilt-in, sway or glare. The tilt-in faded the card
+  // up from nothing on a slow spring, which is exactly the wait between
+  // opening a ticket and its QR being readable.
   const theme = useTheme();
   const [box, setBox] = useState({
     width: 0,
@@ -357,7 +368,23 @@ function TicketFrameImpl({
   /* ---------------------------------------------------------------------- */
 
   return (
-    <View style={sizing}>
+    <View style={[sizing, styles.depthRoom]}>
+      {/* The ticket's thickness, peeking out under its bottom edge. */}
+      {ready ? (
+        <Svg
+          width={box.width}
+          height={box.height + DEPTH}
+          style={styles.lip}
+          pointerEvents="none">
+          <Defs>
+            <SvgGradient id="ticketLip" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#2C2E38" />
+              <Stop offset="1" stopColor="#0B0C10" />
+            </SvgGradient>
+          </Defs>
+          <Path d={ticketLipPath(geometry, DEPTH)} fill="url(#ticketLip)" />
+        </Svg>
+      ) : null}
       <View style={sizing} onLayout={onBox}>
         {/* ---------------------------------------------------------------- */}
         {/* OUTER TICKET SILHOUETTE / EDGE LIGHT                             */}
@@ -365,8 +392,10 @@ function TicketFrameImpl({
 
         {/* The glow is not drawn along the path. It is an oversized gradient
             spoke spun behind the card and masked to the OUTLINE of the
-            silhouette — a `RING`-wide stroke, not a fill — so the light
-            physically exists only in that band. Nothing has to cover the
+            whole silhouette (a `RING`-wide stroke, not a fill), so the light
+            physically exists only in that band. The half-circle notches are
+            part of that outline, so the light dips round each bite instead of
+            jumping across it. Nothing has to cover the
             interior to hide it, which matters on web: `Glass`'s backdrop-filter
             there genuinely blurs whatever a fill-mask would have left showing
             through the middle. One rotate transform on the native driver, no
@@ -590,6 +619,10 @@ const styles = StyleSheet.create({
   filled: {
     flex: 1,
   },
+
+  // Room under the face for the thickness lip, so it isn't clipped.
+  depthRoom: { paddingBottom: DEPTH },
+  lip: { position: 'absolute', top: 0, left: 0 },
 
   sweep: { position: 'absolute', left: '50%', top: '50%' },
   // Top half only: the spoke runs from the centre of the sweep to beyond the
