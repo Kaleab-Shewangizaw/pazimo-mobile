@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 
-import { groupSharesByCounterparty } from '@/lib/conversations';
+import { groupSharesByCounterparty, pendingIncomingCounterpartyIds } from '@/lib/conversations';
 import {
   beverageShareToViewModel,
   cinemaShareToViewModel,
@@ -8,6 +9,7 @@ import {
 } from '@/lib/share-item-view-model';
 import { useBeverageShares } from '@/queries/beverage-shares';
 import { useCinemaShares } from '@/queries/cinema-shares';
+import { useConversationsList } from '@/queries/messages';
 import { useTicketShares } from '@/queries/ticket-shares';
 import { useAuthStore } from '@/stores/use-auth-store';
 
@@ -61,4 +63,46 @@ export function useAllShareConversations() {
     error: ticketsErr,
     refetch,
   };
+}
+
+/**
+ * Whether the home screen's Chats button should show its red dot — true
+ * exactly when the Chats list itself shows something: a thread with unread
+ * messages, or one with a share of theirs still waiting on me. It reads the
+ * very same queries `shares.tsx` renders from (not separate
+ * `received`/`pending`-filtered ones), so the dot can't disagree with the
+ * list: a refresh there clears it here, and a share from a thread that isn't
+ * in the list (cleared, blocked) can't light it. Re-read whenever home
+ * regains focus — those share lists have no fallback poll, so without a live
+ * socket they'd otherwise only ever update on a remount.
+ */
+export function useChatsNeedAttention(): boolean {
+  const myId = useAuthStore((s) => s.user?._id);
+  const { conversations } = useConversationsList();
+  const { shares: ticketShares, refetch: refetchTickets } = useTicketShares({});
+  const { shares: beverageShares, refetch: refetchBeverages } = useBeverageShares({});
+  const { shares: cinemaShares, refetch: refetchCinema } = useCinemaShares({});
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!myId) return;
+      refetchTickets();
+      refetchBeverages();
+      refetchCinema();
+    }, [myId, refetchTickets, refetchBeverages, refetchCinema]),
+  );
+
+  return useMemo(() => {
+    const pendingIncoming = pendingIncomingCounterpartyIds(
+      [
+        ...ticketShares.map(ticketShareToViewModel),
+        ...beverageShares.map(beverageShareToViewModel),
+        ...cinemaShares.map(cinemaShareToViewModel),
+      ],
+      myId,
+    );
+    return conversations.some(
+      (c) => c.unreadCount > 0 || pendingIncoming.has(c.counterparty._id),
+    );
+  }, [conversations, ticketShares, beverageShares, cinemaShares, myId]);
 }

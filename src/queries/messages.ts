@@ -27,7 +27,7 @@ import {
 import { useSocketStatus } from '@/hooks/use-socket-status';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
-import type { DeletedMessageAck, Message, MessagesPage } from '@/types/api';
+import type { ConversationSummary, DeletedMessageAck, Message, MessagesPage } from '@/types/api';
 
 /**
  * How often an open chat re-reads its history while the socket isn't live —
@@ -143,6 +143,13 @@ export function useMarkConversationRead() {
 
   const submit = useCallback(
     async (counterpartyId: string) => {
+      // Cleared in the cache up front, so the Chats row and the home
+      // screen's chat dot go dark the moment the thread is on screen rather
+      // than a round-trip (and refetch) later. If the request fails, the
+      // next list refetch puts the server's real count back.
+      queryClient.setQueryData<ConversationSummary[]>(queryKeys.conversations.list(), (list) =>
+        list?.map((c) => (c.counterparty._id === counterpartyId ? { ...c, unreadCount: 0 } : c)),
+      );
       try {
         await markConversationRead(counterpartyId);
         queryClient.invalidateQueries({ queryKey: queryKeys.conversations.list() });
