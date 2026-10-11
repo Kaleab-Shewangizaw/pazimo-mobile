@@ -160,7 +160,12 @@ export function updateEmail(email: string): Promise<User> {
 }
 
 /** Full-name edit from the account menu. Phone number isn't editable here — it's the verified login identifier. */
-export function updateProfile(input: { firstName: string; lastName?: string }): Promise<User> {
+export function updateProfile(input: {
+  firstName?: string;
+  lastName?: string;
+  /** `YYYY-MM-DD`. Set once — the server refuses to change it afterwards. */
+  birthDate?: string;
+}): Promise<User> {
   return putData<User>('/auth/update-profile', input);
 }
 

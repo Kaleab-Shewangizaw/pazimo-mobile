@@ -76,7 +76,15 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Pazimo to save your recap cards to your photos.",
+          "savePhotosPermission": "Allow Pazimo to save your recap cards to your photos.",
+          "granularPermissions": ["photo"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

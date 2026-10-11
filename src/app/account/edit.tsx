@@ -7,6 +7,7 @@ import { AddEmailSheet } from '@/components/account/add-email-sheet';
 import { ChangePasswordSheet } from '@/components/account/change-password-sheet';
 import { DeleteAccountSheet } from '@/components/account/delete-account-sheet';
 import { UsernameSheet } from '@/components/account/username-sheet';
+import { BirthDateSheet } from '@/components/rewards/birth-date-sheet';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -20,6 +21,11 @@ import { Spacing } from '@/constants/theme';
 import { useUpdateProfile } from '@/queries/account';
 import { needsEmail, useAuthStore } from '@/stores/use-auth-store';
 
+/** The stored value is UTC midnight of that calendar day — read it back in UTC so no timezone shifts it a day. */
+function formatBirthDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export default function EditAccountScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -32,6 +38,7 @@ export default function EditAccountScreen() {
   const [usernameVisible, setUsernameVisible] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [birthDateVisible, setBirthDateVisible] = useState(false);
 
   const nameChanged = user
     ? firstName.trim() !== user.firstName && firstName.trim().length > 0
@@ -88,6 +95,13 @@ export default function EditAccountScreen() {
               value={user.username ? `@${user.username}` : 'Set up'}
               onPress={() => setUsernameVisible(true)}
             />
+            <ListRow
+              icon="gift-outline"
+              label="Birthday"
+              // Set once — after that it's shown, not editable (support can fix a typo).
+              value={user.birthDate ? formatBirthDate(user.birthDate) : 'Add'}
+              onPress={user.birthDate ? undefined : () => setBirthDateVisible(true)}
+            />
             <ListRow icon="lock-closed-outline" label="Password" onPress={() => setPasswordVisible(true)} />
           </ListCard>
         </View>
@@ -112,6 +126,7 @@ export default function EditAccountScreen() {
       <AddEmailSheet visible={addEmailVisible} onClose={() => setAddEmailVisible(false)} />
       <UsernameSheet visible={usernameVisible} onClose={() => setUsernameVisible(false)} />
       <ChangePasswordSheet visible={passwordVisible} onClose={() => setPasswordVisible(false)} />
+      <BirthDateSheet visible={birthDateVisible} onClose={() => setBirthDateVisible(false)} />
       <DeleteAccountSheet
         visible={deleteVisible}
         onClose={() => setDeleteVisible(false)}

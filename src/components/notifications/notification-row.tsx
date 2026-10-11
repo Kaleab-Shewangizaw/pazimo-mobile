@@ -14,6 +14,7 @@ const KIND_ICON: Record<AppNotificationKind, keyof typeof Ionicons.glyphMap> = {
   'beverage-share': 'wine',
   'cinema-share': 'film',
   campaign: 'megaphone',
+  achievement: 'trophy',
 };
 
 export type NotificationRowProps = {
