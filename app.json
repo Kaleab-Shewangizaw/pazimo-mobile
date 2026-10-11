@@ -33,6 +33,21 @@
               "scheme": "https",
               "host": "pazimo.com",
               "pathPrefix": "/events/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/event/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/movie/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/refill/venue/"
             }
           ],
           "category": [

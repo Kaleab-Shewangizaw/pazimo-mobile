@@ -35,6 +35,7 @@ function TouchableImpl({
   pressedScale = 0.97,
   haptic = false,
   onPressIn,
+  onPressOut,
   onPress,
   ...rest
 }: TouchableProps) {
@@ -50,9 +51,13 @@ function TouchableImpl({
     [onPressIn, pressedScale, scale],
   );
 
-  const handlePressOut = useCallback(() => {
-    Animated.spring(scale, { toValue: 1, ...SPRING }).start();
-  }, [scale]);
+  const handlePressOut = useCallback<NonNullable<PressableProps['onPressOut']>>(
+    (event) => {
+      Animated.spring(scale, { toValue: 1, ...SPRING }).start();
+      onPressOut?.(event);
+    },
+    [onPressOut, scale],
+  );
 
   const handlePress = useCallback<NonNullable<PressableProps['onPress']>>(
     (event) => {

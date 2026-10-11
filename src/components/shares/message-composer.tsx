@@ -1,6 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { memo, useCallback, useState } from 'react';
-import { StyleSheet, Text as RNText, TextInput, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+// Per-icon subpath imports — see `app/(tabs)/_layout.tsx` for why not the barrel.
+import { CheckIcon } from 'phosphor-react-native/src/icons/Check';
+import { PaperPlaneTiltIcon } from 'phosphor-react-native/src/icons/PaperPlaneTilt';
+import { PlusIcon } from 'phosphor-react-native/src/icons/Plus';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text as RNText, TextInput, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
@@ -116,66 +121,203 @@ function MessageComposerImpl({
         </Text>
       ) : null}
 
-      {/* One bordered pill holds all three controls — `alignItems: 'flex-end'`
-          is what keeps attach/send pinned to the bottom edge as the field
-          grows with the text instead of drifting to its vertical center. */}
-      <View style={[styles.pill, { backgroundColor: 'rgba(255,255,255,0.06)', borderColor: theme.glassBorder }]}>
-        <Touchable
-          accessibilityRole="button"
-          accessibilityLabel="Send a ticket, drink, or other item"
-          onPress={onAttach}
-          disabled={Boolean(editing)}
-          pressedScale={0.88}
-          style={[styles.iconButton, { opacity: editing ? 0.35 : 1 }]}>
-          <Ionicons name="add-circle-outline" size={26} color={theme.textSecondary} />
-        </Touchable>
+      {/* Attach sits on its own beside the field; the bordered pill holds the
+          field and send. `alignItems: 'flex-end'` on both rows is what keeps
+          the buttons pinned to the bottom edge as the field grows with the
+          text instead of drifting to its vertical center. */}
+      <View style={styles.bar}>
+        <AttachButton onPress={onAttach} disabled={Boolean(editing)} />
+        <View
+          style={[
+            styles.pill,
+            {
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              borderColor: theme.glassBorder,
+            },
+          ]}>
+          <View style={styles.textWrap}>
+            <RNText
+              style={[styles.input, styles.mirror]}
+              onLayout={(e) => {
+                const next = e.nativeEvent.layout.height;
+                setInputHeight(Math.min(Math.max(next, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT));
+              }}
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants">
+              {mirrorText}
+            </RNText>
 
-        <View style={styles.textWrap}>
-          <RNText
-            style={[styles.input, styles.mirror]}
-            onLayout={(e) => {
-              const next = e.nativeEvent.layout.height;
-              setInputHeight(Math.min(Math.max(next, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT));
-            }}
-            pointerEvents="none"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants">
-            {mirrorText}
-          </RNText>
+            <TextInput
+              value={text}
+              onChangeText={(next) => setText(next.slice(0, MESSAGE_LIMIT))}
+              placeholder="Message"
+              placeholderTextColor={theme.textMuted}
+              // `#composer-textarea` in global.css hides the web scrollbar this
+              // produces once content exceeds `MAX_INPUT_HEIGHT` — `scrollEnabled`
+              // has no effect on web (react-native-web's TextInput doesn't read it
+              // at all), only native.
+              nativeID="composer-textarea"
+              style={[styles.input, { color: theme.text, height: inputHeight }]}
+              multiline
+              scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
+              returnKeyType="default"
+            />
+          </View>
 
-          <TextInput
-            value={text}
-            onChangeText={(next) => setText(next.slice(0, MESSAGE_LIMIT))}
-            placeholder="Message"
-            placeholderTextColor={theme.textMuted}
-            // `#composer-textarea` in global.css hides the web scrollbar this
-            // produces once content exceeds `MAX_INPUT_HEIGHT` — `scrollEnabled`
-            // has no effect on web (react-native-web's TextInput doesn't read it
-            // at all), only native.
-            nativeID="composer-textarea"
-            style={[styles.input, { color: theme.text, height: inputHeight }]}
-            multiline
-            scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
-            returnKeyType="default"
-          />
+          <SendButton editing={Boolean(editing)} enabled={canSend} onPress={send} />
         </View>
-
-        <Touchable
-          accessibilityRole="button"
-          accessibilityLabel={editing ? 'Save edit' : 'Send message'}
-          disabled={!canSend}
-          onPress={send}
-          haptic
-          pressedScale={0.88}
-          style={[styles.iconButton, { opacity: canSend ? 1 : 0.35 }]}>
-          <Ionicons
-            name={editing ? 'checkmark-circle' : 'arrow-up-circle'}
-            size={30}
-            color={theme.brand}
-          />
-        </Touchable>
       </View>
     </View>
+  );
+}
+
+/**
+ * The attach entry point, standing on its own beside the field: a polished
+ * metal disc (white through silver to graphite) with a glint of light that
+ * sweeps across it every few seconds, so it reads as the place where the
+ * good stuff — tickets, drinks — comes from. Pressing it spins the plus
+ * into an × and pops it, then springs back.
+ */
+function AttachButton({ onPress, disabled }: { onPress: () => void; disabled: boolean }) {
+  const theme = useTheme();
+  const [spin] = useState(() => new Animated.Value(0));
+  const [shine] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (disabled) return;
+    const sweep = Animated.loop(
+      Animated.sequence([
+        Animated.delay(2600),
+        Animated.timing(shine, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(shine, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    sweep.start();
+    return () => sweep.stop();
+  }, [disabled, shine]);
+
+  const turn = (toValue: number) =>
+    Animated.spring(spin, {
+      toValue,
+      useNativeDriver: true,
+      speed: 22,
+      bounciness: 12,
+    }).start();
+
+  const rotate = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '135deg'],
+  });
+  const iconScale = spin.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.25, 1.1],
+  });
+  const glintX = shine.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-ATTACH_SIZE, ATTACH_SIZE],
+  });
+
+  return (
+    <Touchable
+      accessibilityRole="button"
+      accessibilityLabel="Send a ticket, drink, or other item"
+      onPress={onPress}
+      onPressIn={() => turn(1)}
+      onPressOut={() => turn(0)}
+      disabled={disabled}
+      haptic
+      pressedScale={0.9}
+      style={[styles.attachShadow, { opacity: disabled ? 0.35 : 1 }]}>
+      <LinearGradient
+        colors={['#FFFFFF', '#E4E4E7', '#A1A1AA', '#52525B']}
+        locations={[0, 0.35, 0.75, 1]}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.85, y: 1 }}
+        style={styles.attachDisc}>
+        {/* A thin bright rim on the top edge — the "lit from above" bevel. */}
+        <View pointerEvents="none" style={styles.attachRim} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.glint, { transform: [{ translateX: glintX }, { rotate: '20deg' }] }]}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+        <Animated.View style={{ transform: [{ rotate }, { scale: iconScale }] }}>
+          <PlusIcon size={22} weight="bold" color={theme.onBrand} />
+        </Animated.View>
+      </LinearGradient>
+    </Touchable>
+  );
+}
+
+/**
+ * Solid white disc with a paper plane — springs up to full size once
+ * there's something to send, and sits shrunk and dimmed until then.
+ */
+function SendButton({
+  editing,
+  enabled,
+  onPress,
+}: {
+  editing: boolean;
+  enabled: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const [ready] = useState(() => new Animated.Value(enabled ? 1 : 0));
+
+  useEffect(() => {
+    Animated.spring(ready, {
+      toValue: enabled ? 1 : 0,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 10,
+    }).start();
+  }, [enabled, ready]);
+
+  const scale = ready.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1],
+  });
+  const opacity = ready.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1],
+  });
+
+  return (
+    <Touchable
+      accessibilityRole="button"
+      accessibilityLabel={editing ? 'Save edit' : 'Send message'}
+      accessibilityState={{ disabled: !enabled }}
+      disabled={!enabled}
+      onPress={onPress}
+      haptic
+      pressedScale={0.85}
+      style={styles.actionButton}>
+      <Animated.View
+        style={[styles.sendDisc, { backgroundColor: theme.brand, opacity, transform: [{ scale }] }]}>
+        {editing ? (
+          <CheckIcon size={18} weight="bold" color={theme.onBrand} />
+        ) : (
+          // The tilted plane's visual mass sits up and right — nudged back so it reads centered.
+          <PaperPlaneTiltIcon size={19} weight="fill" color={theme.onBrand} style={styles.planeIcon} />
+        )}
+      </Animated.View>
+    </Touchable>
   );
 }
 
@@ -184,6 +326,8 @@ const LINE_HEIGHT = 20;
 const MAX_LINES = 5;
 const MIN_INPUT_HEIGHT = LINE_HEIGHT + Spacing.sm * 2;
 const MAX_INPUT_HEIGHT = LINE_HEIGHT * MAX_LINES + Spacing.sm * 2;
+/** Matches the one-line pill's full height (field + its padding), so the two sit flush. */
+const ATTACH_SIZE = MIN_INPUT_HEIGHT + Spacing.xs * 2;
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.xs },
@@ -198,20 +342,58 @@ const styles = StyleSheet.create({
   },
   editBannerText: { flex: 1 },
   pill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.xl,
     paddingHorizontal: Spacing.xs,
     paddingVertical: Spacing.xs,
-    gap: 2,
+    gap: Spacing.xs,
   },
-  iconButton: {
-    width: 34,
-    height: 34,
+  actionButton: {
+    width: MIN_INPUT_HEIGHT,
+    height: MIN_INPUT_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bar: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
+  attachShadow: {
+    borderRadius: Radius.pill,
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+  attachDisc: {
+    width: ATTACH_SIZE,
+    height: ATTACH_SIZE,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  attachRim: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  glint: { position: 'absolute', top: -8, bottom: -8, width: 14 },
+  sendDisc: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  planeIcon: { marginLeft: -2, marginBottom: -1 },
   textWrap: { flex: 1, position: 'relative' },
   mirror: {
     position: 'absolute',

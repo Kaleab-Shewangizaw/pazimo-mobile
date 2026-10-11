@@ -9,7 +9,7 @@ import { Text } from '@/components/ui/text';
 import { AspectRatio, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime } from '@/lib/date';
-import type { InviteKind } from '@/lib/invite-link';
+import { routeForInvite, type InviteKind } from '@/lib/invite-link';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { useVenueBeverageCatalog } from '@/queries/beverages';
 import { useCinemaMovie } from '@/queries/cinema';
@@ -82,18 +82,7 @@ export function InviteMessageCard({ kind, id, openShowtimes, sent }: InviteMessa
       ? formatDateTime(eventQuery.data.startDate, eventQuery.data.startTime)
       : null;
 
-  const onPress = () => {
-    if (kind === 'movie') {
-      router.push({
-        pathname: '/movie/[id]',
-        params: openShowtimes ? { id, openShowtimes: '1' } : { id },
-      });
-    } else if (kind === 'event') {
-      router.push(`/event/${id}`);
-    } else {
-      router.push(`/refill/venue/${id}`);
-    }
-  };
+  const onPress = () => router.push(routeForInvite({ kind, id, openShowtimes }));
 
   return (
     <Touchable
