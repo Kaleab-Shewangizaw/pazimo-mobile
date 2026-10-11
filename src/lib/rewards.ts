@@ -59,4 +59,4 @@ export function periodLabel(period: RecapPeriodType, key: string): string {
   return `${MONTH_NAMES[m - 1]} ${y}`;
 }
 
-export const formatPoints = (n: number) => Math.round(n).toLocaleString('en-US');
+export const formatPoints = (n: number) => Math.round(Number.isFinite(n) ? n : 0).toLocaleString('en-US');
