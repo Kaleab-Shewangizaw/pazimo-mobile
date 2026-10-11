@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
+// Per-icon subpath import — see `app/(tabs)/_layout.tsx` for why not the barrel.
+import { PaperPlaneTiltIcon } from 'phosphor-react-native/src/icons/PaperPlaneTilt';
 import { useCallback, useDeferredValue, useState } from 'react';
 import { ActivityIndicator, Share, StyleSheet, TextInput, View } from 'react-native';
 
 import { AvatarInitials } from '@/components/shares/avatar-initials';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { Button } from '@/components/ui/button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -44,11 +47,11 @@ function nameOf(person: { firstName: string; lastName?: string }) {
 }
 
 /**
- * One sheet for inviting someone to a movie/event/venue — send it straight
- * into a Pazimo chat, or hand it to the OS share sheet (Telegram, Instagram,
+ * One sheet for inviting someone to a movie/event/venue — send it into
+ * Pazimo chats, or hand it to the OS share sheet (Telegram, Instagram,
  * copy link, …). Unlike `ShareItemSheet` (an irreversible ownership
  * transfer, hence its multi-step confirm), this just posts a message —
- * tapping a contact sends immediately, Instagram-style.
+ * tap to pick one or more people, then the pinned Send button, Instagram-style.
  */
 export function InviteShareSheet({
   visible,
@@ -60,12 +63,18 @@ export function InviteShareSheet({
   subtitle,
 }: InviteShareSheetProps) {
   const theme = useTheme();
-  const { submit, submitting } = useSendMessage();
+  const { submit } = useSendMessage();
   const { conversations: contacts, isLoading: contactsLoading } = useConversationsList();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const { results, isLoading: searchLoading } = useShareSearch(deferredQuery);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  // Tapping a person picks them; nothing goes out until the pinned Send
+  // button — so a mis-tap never sends, and one share can go to several
+  // people. Whole `ShareUser`s are kept, not ids, so someone picked from
+  // search results stays picked after the search is cleared.
+  const [selected, setSelected] = useState<Map<string, ShareUser>>(() => new Map());
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
   const [copyLabel, setCopyLabel] = useState('Copy link');
 
   // In-chat sends use the app's own deep link (a rich card renders from it,
@@ -80,16 +89,51 @@ export function InviteShareSheet({
   const resolvable = isResolvableIdentifier(trimmed);
   const typing = trimmed.length > 0;
 
-  const sendTo = useCallback(
-    async (person: ShareUser) => {
-      const sent = await submit(person._id, link);
-      if (sent) {
-        setSentTo(person._id);
-        setTimeout(onClose, 700);
-      }
-    },
-    [submit, link, onClose],
-  );
+  // Every open starts with nobody picked — adjusted during render (the
+  // "reset state when a prop changes" pattern) rather than in an effect.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setSelected(new Map());
+      setSent(false);
+      setQuery('');
+    }
+  }
+
+  const toggle = useCallback((person: ShareUser) => {
+    setSelected((current) => {
+      const next = new Map(current);
+      if (next.has(person._id)) next.delete(person._id);
+      else next.set(person._id, person);
+      return next;
+    });
+  }, []);
+
+  const sendToSelected = useCallback(async () => {
+    if (selected.size === 0 || sending) return;
+    setSending(true);
+    // One at a time, and only the ones that failed stay picked — so a retry
+    // never double-sends to the people who already got it.
+    const failed = new Map<string, ShareUser>();
+    for (const person of selected.values()) {
+      const ok = await submit(person._id, link);
+      if (!ok) failed.set(person._id, person);
+    }
+    setSending(false);
+    setSelected(failed);
+    if (failed.size === 0) {
+      setSent(true);
+      setTimeout(onClose, 700);
+    }
+  }, [selected, sending, submit, link, onClose]);
+
+  const selectedPeople = [...selected.values()];
+  const sendLabel = sent
+    ? 'Sent!'
+    : selectedPeople.length === 1
+      ? `Send to ${nameOf(selectedPeople[0])}`
+      : `Send to ${selectedPeople.length} people`;
 
   const copyLink = useCallback(() => {
     Clipboard.setStringAsync(publicLink).then(() => {
@@ -105,7 +149,21 @@ export function InviteShareSheet({
   }, [shareText]);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      footer={
+        selected.size > 0 || sent ? (
+          <Button
+            label={sendLabel}
+            size="lg"
+            loading={sending}
+            disabled={sending || sent}
+            onPress={sendToSelected}
+            icon={sent ? undefined : <PaperPlaneTiltIcon size={18} weight="fill" color={theme.onBrand} />}
+          />
+        ) : null
+      }>
       <View style={styles.header}>
         <Text variant="title" style={styles.headerTitle}>
           Share
@@ -170,9 +228,8 @@ export function InviteShareSheet({
               <ContactRow
                 key={person._id}
                 person={person}
-                busy={submitting && sentTo !== person._id}
-                sent={sentTo === person._id}
-                onPress={() => sendTo(person)}
+                selected={selected.has(person._id)}
+                onPress={() => toggle(person)}
               />
             ))}
           </View>
@@ -189,9 +246,8 @@ export function InviteShareSheet({
             <ContactRow
               key={c.counterparty._id}
               person={c.counterparty}
-              busy={submitting && sentTo !== c.counterparty._id}
-              sent={sentTo === c.counterparty._id}
-              onPress={() => sendTo(c.counterparty)}
+              selected={selected.has(c.counterparty._id)}
+              onPress={() => toggle(c.counterparty)}
             />
           ))}
         </View>
@@ -215,22 +271,21 @@ export function InviteShareSheet({
 function ContactRow({
   person,
   onPress,
-  busy,
-  sent,
+  selected,
 }: {
   person: ShareUser;
   onPress: () => void;
-  busy: boolean;
-  sent: boolean;
+  selected: boolean;
 }) {
   const theme = useTheme();
   const name = nameOf(person);
   return (
     <Touchable
-      accessibilityRole="button"
-      accessibilityLabel={`Share with ${name}`}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={name}
       onPress={onPress}
-      disabled={busy || sent}
+      haptic
       pressedScale={0.98}
       style={styles.row}>
       <AvatarInitials name={name} size={40} />
@@ -244,15 +299,15 @@ function ContactRow({
           </Text>
         ) : null}
       </View>
-      {sent ? (
-        <Ionicons name="checkmark-circle" size={20} color={theme.success} />
-      ) : busy ? (
-        <ActivityIndicator color={theme.textMuted} size="small" />
-      ) : (
-        <Text variant="small" color="brand">
-          Send
-        </Text>
-      )}
+      <View
+        style={[
+          styles.check,
+          selected
+            ? { backgroundColor: theme.brand, borderColor: theme.brand }
+            : { borderColor: theme.textMuted },
+        ]}>
+        {selected ? <Ionicons name="checkmark" size={15} color={theme.onBrand} /> : null}
+      </View>
     </Touchable>
   );
 }
@@ -325,6 +380,14 @@ const styles = StyleSheet.create({
   list: { gap: Spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm },
   rowText: { flex: 1, gap: 1 },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   spinner: { marginVertical: Spacing.lg },
   empty: { textAlign: 'center', paddingVertical: Spacing.lg },
 

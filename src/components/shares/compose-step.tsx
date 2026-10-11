@@ -2,14 +2,10 @@ import { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { PickableItemRow } from '@/components/shares/pickable-item-row';
-import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/theme';
 import { formatTicketDate } from '@/lib/date';
 import type { TransferableTicket } from '@/types/api';
-
-const MESSAGE_LIMIT = 500;
 
 export type ComposeStepProps = {
   /** Already filtered to the event this share started from — a share never spans events. */
@@ -18,9 +14,6 @@ export type ComposeStepProps = {
   /** ticketId -> quantity selected to send. A ticket absent (or 0) is not included. */
   quantities: Map<string, number>;
   onChangeQuantity: (ticketId: string, quantity: number) => void;
-  message: string;
-  onChangeMessage: (text: string) => void;
-  onContinue: () => void;
 };
 
 /**
@@ -35,15 +28,7 @@ function ComposeStepImpl({
   loading,
   quantities,
   onChangeQuantity,
-  message,
-  onChangeMessage,
-  onContinue,
 }: ComposeStepProps) {
-  // Counted against `tickets`, not the raw map — a preselected id that never
-  // shows up here (already used, checked in, or dropped from the transferable
-  // list since the sheet opened) must not silently enable "Continue".
-  const selectedCount = tickets.filter((t) => (quantities.get(t.ticketId) ?? 0) > 0).length;
-
   return (
     <View style={styles.container}>
       {loading ? (
@@ -64,18 +49,6 @@ function ComposeStepImpl({
           ))}
         </View>
       )}
-
-      <Field
-        label="Message (optional)"
-        value={message}
-        onChangeText={(text) => onChangeMessage(text.slice(0, MESSAGE_LIMIT))}
-        placeholder="Enjoy the show!"
-        multiline
-        numberOfLines={3}
-        hint={`${message.length}/${MESSAGE_LIMIT}`}
-      />
-
-      <Button label="Continue" size="lg" disabled={selectedCount === 0} onPress={onContinue} />
     </View>
   );
 }
