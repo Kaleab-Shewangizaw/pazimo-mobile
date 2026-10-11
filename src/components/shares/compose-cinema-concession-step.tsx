@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { PickableItemRow } from '@/components/shares/pickable-item-row';
+import { QuantityPickRow } from '@/components/shares/quantity-pick-row';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/theme';
 import { formatPrice } from '@/lib/pricing';
@@ -10,17 +10,21 @@ import type { TransferableCinemaConcession } from '@/types/api';
 export type ComposeCinemaConcessionStepProps = {
   concessions: TransferableCinemaConcession[];
   loading: boolean;
-  /** sale _id -> selected. Always the full quantity — a snack sale never splits. */
-  selected: Set<string>;
-  onToggle: (saleId: string) => void;
+  /** sale _id -> how many to send. Absent (or 0) is not picked. */
+  quantities: Map<string, number>;
+  onChangeQuantity: (saleId: string, quantity: number) => void;
 };
 
-/** Which cinema snack to send — checkbox only, same reasoning as the drink picker: always the full sale. */
+/**
+ * Which cinema snacks to send, and how many of each — 2 of your 4 popcorns
+ * go to your friend, 2 stay with you (the backend splits the sale on
+ * accept, each half with its own pickup code).
+ */
 function ComposeCinemaConcessionStepImpl({
   concessions,
   loading,
-  selected,
-  onToggle,
+  quantities,
+  onChangeQuantity,
 }: ComposeCinemaConcessionStepProps) {
   return (
     <View style={styles.container}>
@@ -33,12 +37,14 @@ function ComposeCinemaConcessionStepImpl({
       ) : (
         <View style={styles.list}>
           {concessions.map((sale) => (
-            <PickableItemRow
+            <QuantityPickRow
               key={sale._id}
               title={sale.beverageName}
-              subtitle={`${sale.cinema?.name ?? 'Cinema'} · ${formatPrice(sale.totalAmount, sale.currency)}${sale.quantity > 1 ? ` · ×${sale.quantity}` : ''}`}
-              selected={selected.has(sale._id)}
-              onToggle={() => onToggle(sale._id)}
+              subtitle={`${sale.cinema?.name ?? 'Cinema'} · ${formatPrice(sale.unitPrice, sale.currency)} each${sale.quantity > 1 ? ` · ×${sale.quantity}` : ''}`}
+              available={sale.quantity}
+              value={quantities.get(sale._id) ?? 0}
+              onChange={(q) => onChangeQuantity(sale._id, q)}
+              noun={['snack', 'snacks']}
             />
           ))}
         </View>

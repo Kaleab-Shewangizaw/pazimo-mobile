@@ -391,7 +391,7 @@ export type ShareSaleDetails = {
   status: 'confirmed' | 'refunded';
   redeemedAt?: string | null;
   soldAt: string;
-  beverage?: { name: string; color?: string | null };
+  beverage?: { name: string; color?: string | null; image?: string | null };
   /** Only populated on an `EVENT_BEVERAGE` share. */
   event?: { title: string; startDate: string; location?: EventLocation };
   /** Only populated on a `VENUE_BEVERAGE` share. */
@@ -843,6 +843,14 @@ export type CinemaCheckoutStartResponse = {
   seats: string[];
 };
 
+export type CinemaTicketSeat = {
+  row: string;
+  number: string;
+  seatKey: string;
+  categoryKey: string;
+  categoryLabel: string;
+};
+
 export type CinemaTicket = {
   /** Present on every read (Mongoose includes it by default) — needed to send this ticket to a friend. */
   _id: string;
@@ -855,8 +863,14 @@ export type CinemaTicket = {
   quantity: number;
   totalAmount: number;
   currency: 'ETB';
-  /** Absent on capacity-only halls — that ticket admits to the room, not a chair. */
-  seat?: { row: string; number: string; seatKey: string; categoryKey: string; categoryLabel: string };
+  /** The showtime's id — what the seat map is fetched by ("Show seats"). */
+  showtime?: string;
+  /**
+   * Every seat this ticket admits — one ticket covers all the seats bought in
+   * the same price category in one checkout. Empty (or absent) on
+   * capacity-only halls, where a ticket admits to the room, not a chair.
+   */
+  seats?: CinemaTicketSeat[];
   status: 'active' | 'used' | 'cancelled' | 'refunded' | 'expired';
   paymentStatus: 'pending' | 'completed' | 'failed';
   purchaseDate: string;
@@ -920,6 +934,8 @@ export type CinemaShareItemDetails = {
   ticketType?: string;
   status?: string;
   checkedIn?: boolean;
+  /** Just the seats in this share — a seat-level send lists only those it moves. */
+  seats?: CinemaTicketSeat[];
   movie?: { title: string; poster?: string | null };
   // Concession fields
   referenceNumber?: string;
@@ -930,6 +946,8 @@ export type CinemaShareItemDetails = {
   totalAmount?: number;
   redeemedAt?: string | null;
   soldAt?: string;
+  /** The snack's own product image (server path; run through `resolveImageUrl`). */
+  beverage?: { image?: string | null };
   // Shared
   cinema?: { name: string; city?: string };
 };
@@ -960,11 +978,15 @@ export type TransferableCinemaTicket = {
   ticketId: string;
   movieTitle: string;
   hallName?: string;
+  /** The showtime's id — the seat map the sender picks seats on. */
+  showtime?: string;
   showtimeStartsAt: string;
   ticketType: string;
   quantity: number;
   currency: Currency;
   cinema?: { name: string; city?: string };
+  /** Assigned seating only — each seat can be sent on its own. */
+  seats?: (CinemaTicketSeat & { admittedAt?: string | null })[];
 };
 
 /** A row from `GET /cinemas/my-concessions/transferable` — the cinema-snack-attach picker's data source. */

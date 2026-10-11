@@ -32,6 +32,12 @@ export type ShareItemArt = {
   eventId?: string;
   /** A drink/snack's own swatch color, for cards with no artwork at all. */
   accentColor?: string | null;
+  /**
+   * A drink/snack's own product image — usually a background-removed
+   * cutout, so it's drawn whole ("contain") floating over its color, never
+   * cropped edge-to-edge the way `imageUrl` cover art is.
+   */
+  productImageUrl?: string | null;
   /** ISO start time — the event's date or the screening's. */
   startsAt?: string | null;
   place?: string | null;
@@ -124,7 +130,15 @@ export function cinemaShareToViewModel(share: CinemaShare): ShareItemViewModel {
       const title = isConcession ? details?.beverageName || 'Snack' : details?.movieTitle || 'Cinema ticket';
       const subtitle = isConcession
         ? [details?.cinema?.name, item.quantity > 1 ? `×${item.quantity}` : null].filter(Boolean).join(' · ')
-        : [details?.cinema?.name, details?.ticketType, item.quantity > 1 ? `${item.quantity} seats` : null]
+        : [
+            details?.cinema?.name,
+            details?.ticketType,
+            details?.seats?.length
+              ? `Seat${details.seats.length > 1 ? 's' : ''} ${details.seats.map((s) => `${s.row}${s.number}`).join(', ')}`
+              : item.quantity > 1
+                ? `${item.quantity} seats`
+                : null,
+          ]
             .filter(Boolean)
             .join(' · ');
       return {
@@ -138,7 +152,11 @@ export function cinemaShareToViewModel(share: CinemaShare): ShareItemViewModel {
       const lead = share.items[0]?.itemDetails;
       if (!lead) return undefined;
       return isConcession
-        ? { accentColor: lead.beverageColor, place: lead.cinema?.name }
+        ? {
+            accentColor: lead.beverageColor,
+            productImageUrl: resolveImageUrl(lead.beverage?.image),
+            place: lead.cinema?.name,
+          }
         : {
             imageUrl: resolveImageUrl(lead.movie?.poster),
             startsAt: lead.showtimeStartsAt,
@@ -174,6 +192,7 @@ export function beverageShareToViewModel(share: BeverageShare): ShareItemViewMod
       if (!lead) return undefined;
       return {
         accentColor: lead.beverage?.color,
+        productImageUrl: resolveImageUrl(lead.beverage?.image),
         startsAt: lead.event?.startDate,
         place: lead.event?.title || lead.venue?.name,
       };

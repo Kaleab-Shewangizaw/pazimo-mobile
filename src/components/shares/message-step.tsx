@@ -14,7 +14,7 @@ type TransferKind = Exclude<ShareKind, 'MESSAGE'>;
 const NOUN: Record<TransferKind, [singular: string, plural: string]> = {
   TICKET: ['ticket', 'tickets'],
   BEVERAGE: ['drink', 'drinks'],
-  CINEMA_TICKET: ['cinema ticket', 'cinema tickets'],
+  CINEMA_TICKET: ['movie seat', 'movie seats'],
   CINEMA_CONCESSION: ['snack', 'snacks'],
 };
 

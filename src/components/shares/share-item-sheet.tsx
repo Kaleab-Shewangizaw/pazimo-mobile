@@ -4,7 +4,7 @@ import { Animated, Keyboard, StyleSheet, View } from 'react-native';
 
 import { ComposeBeverageStep } from '@/components/shares/compose-beverage-step';
 import { ComposeCinemaConcessionStep } from '@/components/shares/compose-cinema-concession-step';
-import { ComposeCinemaTicketStep } from '@/components/shares/compose-cinema-ticket-step';
+import { ComposeCinemaTicketStep, type CinemaSeatPick } from '@/components/shares/compose-cinema-ticket-step';
 import { ComposeStep } from '@/components/shares/compose-step';
 import { ConfirmStep, type ConfirmSelection } from '@/components/shares/confirm-step';
 import { KindPickerStep } from '@/components/shares/kind-picker-step';
@@ -28,7 +28,7 @@ import {
 } from '@/queries/cinema-shares';
 import { useCreateShare } from '@/queries/ticket-shares';
 import { useTransferableTickets } from '@/queries/tickets';
-import type { ShareUser } from '@/types/api';
+import type { Currency, ShareUser, TransferableCinemaTicket } from '@/types/api';
 
 /**
  * The one compose sheet for every "send this to a friend" entry point in the
@@ -42,6 +42,34 @@ import type { ShareUser } from '@/types/api';
  */
 
 type StepKey = 'recipient' | 'kind' | 'item' | 'message' | 'confirm';
+
+/** A ticket being sent: `seats` are the picked ones, or `null` for a ticket that goes whole (no assigned seating). */
+type CinemaTicketSelection = {
+  ticket: TransferableCinemaTicket;
+  seats: NonNullable<TransferableCinemaTicket['seats']> | null;
+};
+
+/** Review-step line for a drink/snack: what goes, and what (if anything) you keep. */
+function partialConfirm(
+  id: string,
+  name: string,
+  place: string | undefined,
+  available: number,
+  sending: number,
+  unitPrice: number,
+  currency: Currency,
+): ConfirmSelection {
+  const kept = available - sending;
+  const where = place ? `${place} · ` : '';
+  return {
+    id,
+    title: sending > 1 ? `${name} × ${sending}` : name,
+    subtitle: kept
+      ? `${where}${formatPrice(unitPrice * sending, currency)} — you'll keep ${kept}`
+      : `${where}${formatPrice(unitPrice * sending, currency)} — you'll no longer have ${sending > 1 ? 'these' : 'this'}`,
+    full: kept === 0,
+  };
+}
 
 const STEP_TITLE: Record<StepKey, string> = {
   recipient: 'Send to a friend',
@@ -106,9 +134,10 @@ export function ShareItemSheet({
   const [recipient, setRecipient] = useState<ShareUser | null>(null);
   const [selectedKind, setSelectedKind] = useState<ShareKind | null>(forcedKind ?? null);
   const [ticketQuantities, setTicketQuantities] = useState<Map<string, number>>(() => new Map());
-  const [beverageSelected, setBeverageSelected] = useState<Set<string>>(() => new Set());
+  const [beverageQuantities, setBeverageQuantities] = useState<Map<string, number>>(() => new Map());
   const [cinemaTicketSelected, setCinemaTicketSelected] = useState<Set<string>>(() => new Set());
-  const [cinemaConcessionSelected, setCinemaConcessionSelected] = useState<Set<string>>(() => new Set());
+  const [cinemaSeatPick, setCinemaSeatPick] = useState<CinemaSeatPick | null>(null);
+  const [cinemaConcessionQuantities, setCinemaConcessionQuantities] = useState<Map<string, number>>(() => new Map());
   const [message, setMessage] = useState('');
   const idempotencyKeyRef = useRef(generateIdempotencyKey());
 
@@ -119,9 +148,10 @@ export function ShareItemSheet({
     if (!visible) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- there is no prior render this could be computed in: what the sheet was opened for can change while it's closed.
     setTicketQuantities(initialTicketId ? new Map([[initialTicketId, 1]]) : new Map());
-    setBeverageSelected(new Set());
+    setBeverageQuantities(new Map());
     setCinemaTicketSelected(new Set());
-    setCinemaConcessionSelected(new Set());
+    setCinemaSeatPick(null);
+    setCinemaConcessionQuantities(new Map());
     setRecipient(initialRecipient ?? null);
     setSelectedKind(forcedKind ?? null);
     setStepIndex(0);
@@ -148,9 +178,10 @@ export function ShareItemSheet({
     setRecipient(null);
     setSelectedKind(forcedKind ?? null);
     setTicketQuantities(new Map());
-    setBeverageSelected(new Set());
+    setBeverageQuantities(new Map());
     setCinemaTicketSelected(new Set());
-    setCinemaConcessionSelected(new Set());
+    setCinemaSeatPick(null);
+    setCinemaConcessionQuantities(new Map());
     setMessage('');
     idempotencyKeyRef.current = generateIdempotencyKey();
     fade.setValue(1);
@@ -192,14 +223,19 @@ export function ShareItemSheet({
     });
   }, []);
 
-  const toggleBeverage = useCallback((saleId: string) => {
-    setBeverageSelected((current) => {
-      const next = new Set(current);
-      if (next.has(saleId)) next.delete(saleId);
-      else next.add(saleId);
-      return next;
-    });
-  }, []);
+  // id -> quantity maps for drinks and snacks, the same shape as
+  // `changeTicketQuantity`: 0 removes the pick.
+  const setIn =
+    (setter: typeof setBeverageQuantities) =>
+    (id: string, quantity: number) =>
+      setter((current) => {
+        const next = new Map(current);
+        if (quantity > 0) next.set(id, quantity);
+        else next.delete(id);
+        return next;
+      });
+  const changeBeverageQuantity = useMemo(() => setIn(setBeverageQuantities), []);
+  const changeCinemaConcessionQuantity = useMemo(() => setIn(setCinemaConcessionQuantities), []);
 
   const toggleCinemaTicket = useCallback((ticketId: string) => {
     setCinemaTicketSelected((current) => {
@@ -210,14 +246,6 @@ export function ShareItemSheet({
     });
   }, []);
 
-  const toggleCinemaConcession = useCallback((saleId: string) => {
-    setCinemaConcessionSelected((current) => {
-      const next = new Set(current);
-      if (next.has(saleId)) next.delete(saleId);
-      else next.add(saleId);
-      return next;
-    });
-  }, []);
 
   const ticketSelections = useMemo(
     () =>
@@ -230,45 +258,76 @@ export function ShareItemSheet({
     [ticketQuantities, eventTickets],
   );
 
+  // Resolved against the live lists and clamped to what's actually there,
+  // so a sale that's since shrunk or gone can't send more than it holds.
   const beverageSelections = useMemo(
-    () => allTransferableSales.filter((s) => beverageSelected.has(s.saleId)),
-    [allTransferableSales, beverageSelected],
+    () =>
+      allTransferableSales.flatMap((sale) => {
+        const quantity = Math.min(beverageQuantities.get(sale.saleId) ?? 0, sale.quantity);
+        return quantity > 0 ? [{ sale, quantity }] : [];
+      }),
+    [allTransferableSales, beverageQuantities],
   );
 
-  const cinemaTicketSelections = useMemo(
-    () => allCinemaTickets.filter((t) => cinemaTicketSelected.has(t._id)),
-    [allCinemaTickets, cinemaTicketSelected],
-  );
+  // Each ticket being sent, and which of its seats: a seated ticket goes
+  // seat by seat (only the picked ones — the backend splits it on accept),
+  // a ticket for a hall without assigned seats goes whole. Resolved against
+  // the live list, so a seat that's since been used or sent elsewhere drops
+  // out instead of failing the send.
+  const cinemaTicketSelections = useMemo(() => {
+    const picked = new Set(cinemaSeatPick?.seatKeys ?? []);
+    return allCinemaTickets.flatMap((ticket): CinemaTicketSelection[] => {
+      if (ticket.showtime && ticket.seats?.length) {
+        if (ticket.showtime !== cinemaSeatPick?.showtimeId) return [];
+        const seats = ticket.seats.filter((seat) => picked.has(seat.seatKey) && !seat.admittedAt);
+        return seats.length ? [{ ticket, seats }] : [];
+      }
+      return cinemaTicketSelected.has(ticket._id) ? [{ ticket, seats: null }] : [];
+    });
+  }, [allCinemaTickets, cinemaTicketSelected, cinemaSeatPick]);
 
   const cinemaConcessionSelections = useMemo(
-    () => allCinemaConcessions.filter((c) => cinemaConcessionSelected.has(c._id)),
-    [allCinemaConcessions, cinemaConcessionSelected],
+    () =>
+      allCinemaConcessions.flatMap((sale) => {
+        const quantity = Math.min(cinemaConcessionQuantities.get(sale._id) ?? 0, sale.quantity);
+        return quantity > 0 ? [{ sale, quantity }] : [];
+      }),
+    [allCinemaConcessions, cinemaConcessionQuantities],
   );
 
   const confirmSelections: ConfirmSelection[] = useMemo(() => {
     if (selectedKind === 'BEVERAGE') {
-      return beverageSelections.map((sale) => ({
-        id: sale.saleId,
-        title: sale.beverageName,
-        subtitle: `${sale.title} · ${formatPrice(sale.totalAmount, sale.currency)} — you'll no longer have this`,
-        full: true,
-      }));
+      return beverageSelections.map(({ sale, quantity }) =>
+        partialConfirm(sale.saleId, sale.beverageName, sale.title, sale.quantity, quantity, sale.unitPrice, sale.currency),
+      );
     }
     if (selectedKind === 'CINEMA_TICKET') {
-      return cinemaTicketSelections.map((ticket) => ({
-        id: ticket._id,
-        title: `${ticket.movieTitle} · ${ticket.ticketType}`,
-        subtitle: `${formatTicketDate(ticket.showtimeStartsAt)} — you'll no longer have this`,
-        full: true,
-      }));
+      return cinemaTicketSelections.map(({ ticket, seats }) => {
+        if (!seats) {
+          return {
+            id: ticket._id,
+            title: `${ticket.movieTitle} · ${ticket.ticketType}`,
+            subtitle: `${formatTicketDate(ticket.showtimeStartsAt)} — you'll no longer have this`,
+            full: true,
+          };
+        }
+        const label = (list: { row: string; number: string }[]) => list.map((s) => `${s.row}${s.number}`).join(', ');
+        const sending = new Set(seats.map((s) => s.seatKey));
+        const kept = (ticket.seats ?? []).filter((s) => !sending.has(s.seatKey));
+        return {
+          id: ticket._id,
+          title: `${ticket.movieTitle} · Seat${seats.length > 1 ? 's' : ''} ${label(seats)}`,
+          subtitle: kept.length
+            ? `${formatTicketDate(ticket.showtimeStartsAt)} — you'll keep ${label(kept)}`
+            : `${formatTicketDate(ticket.showtimeStartsAt)} — you'll no longer have ${seats.length > 1 ? 'these' : 'this'}`,
+          full: kept.length === 0,
+        };
+      });
     }
     if (selectedKind === 'CINEMA_CONCESSION') {
-      return cinemaConcessionSelections.map((sale) => ({
-        id: sale._id,
-        title: sale.beverageName,
-        subtitle: `${formatPrice(sale.totalAmount, sale.currency)} — you'll no longer have this`,
-        full: true,
-      }));
+      return cinemaConcessionSelections.map(({ sale, quantity }) =>
+        partialConfirm(sale._id, sale.beverageName, sale.cinema?.name, sale.quantity, quantity, sale.unitPrice, sale.currency),
+      );
     }
     return ticketSelections.map(({ ticket, quantity }) => {
       const full = quantity === ticket.transferableCapacity;
@@ -301,8 +360,8 @@ export function ShareItemSheet({
       result = beverageSelections.length
         ? await beverageShare.submit({
             toUserId: recipient._id,
-            salesContext: beverageSelections[0].salesContext,
-            items: beverageSelections.map((sale) => ({ saleId: sale.saleId, quantity: sale.quantity })),
+            salesContext: beverageSelections[0].sale.salesContext,
+            items: beverageSelections.map(({ sale, quantity }) => ({ saleId: sale.saleId, quantity })),
             message: message.trim() || undefined,
             idempotencyKey: idempotencyKeyRef.current,
           })
@@ -312,7 +371,11 @@ export function ShareItemSheet({
         ? await cinemaShare.submit({
             toUserId: recipient._id,
             itemType: 'CINEMA_TICKET',
-            items: cinemaTicketSelections.map((ticket) => ({ itemId: ticket._id, quantity: ticket.quantity })),
+            items: cinemaTicketSelections.map(({ ticket, seats }) =>
+              seats
+                ? { itemId: ticket._id, quantity: seats.length, seatKeys: seats.map((s) => s.seatKey) }
+                : { itemId: ticket._id, quantity: ticket.quantity },
+            ),
             message: message.trim() || undefined,
             idempotencyKey: idempotencyKeyRef.current,
           })
@@ -322,7 +385,7 @@ export function ShareItemSheet({
         ? await cinemaShare.submit({
             toUserId: recipient._id,
             itemType: 'CINEMA_CONCESSION',
-            items: cinemaConcessionSelections.map((sale) => ({ itemId: sale._id, quantity: sale.quantity })),
+            items: cinemaConcessionSelections.map(({ sale, quantity }) => ({ itemId: sale._id, quantity })),
             message: message.trim() || undefined,
             idempotencyKey: idempotencyKeyRef.current,
           })
@@ -365,11 +428,11 @@ export function ShareItemSheet({
   // in, or no longer transferable) must not silently enable "Continue".
   const itemCount =
     selectedKind === 'BEVERAGE'
-      ? beverageSelections.length
+      ? beverageSelections.reduce((n, { quantity }) => n + quantity, 0)
       : selectedKind === 'CINEMA_TICKET'
-        ? cinemaTicketSelections.length
+        ? cinemaTicketSelections.reduce((n, { ticket, seats }) => n + (seats?.length ?? ticket.quantity), 0)
         : selectedKind === 'CINEMA_CONCESSION'
-          ? cinemaConcessionSelections.length
+          ? cinemaConcessionSelections.reduce((n, { quantity }) => n + quantity, 0)
           : ticketSelections.length;
 
   // The step's primary action, pinned under the list so it never has to be
@@ -440,8 +503,8 @@ export function ShareItemSheet({
             <ComposeBeverageStep
               sales={allTransferableSales}
               loading={salesLoading}
-              selected={beverageSelected}
-              onToggle={toggleBeverage}
+              quantities={beverageQuantities}
+              onChangeQuantity={changeBeverageQuantity}
             />
           ) : selectedKind === 'CINEMA_TICKET' ? (
             <ComposeCinemaTicketStep
@@ -449,13 +512,15 @@ export function ShareItemSheet({
               loading={cinemaTicketsLoading}
               selected={cinemaTicketSelected}
               onToggle={toggleCinemaTicket}
+              seatPick={cinemaSeatPick}
+              onChangeSeatPick={setCinemaSeatPick}
             />
           ) : selectedKind === 'CINEMA_CONCESSION' ? (
             <ComposeCinemaConcessionStep
               concessions={allCinemaConcessions}
               loading={cinemaConcessionsLoading}
-              selected={cinemaConcessionSelected}
-              onToggle={toggleCinemaConcession}
+              quantities={cinemaConcessionQuantities}
+              onChangeQuantity={changeCinemaConcessionQuantity}
             />
           ) : (
             <ComposeStep

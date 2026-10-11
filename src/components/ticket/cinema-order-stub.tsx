@@ -9,6 +9,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { isSeatedOrder, orderSeatLabels } from '@/lib/cinema-seats';
 import { resolveImageUrl } from '@/lib/media';
 import type { CinemaOrder } from '@/types/api';
 
@@ -39,10 +40,9 @@ function CinemaOrderStubImpl({ order }: CinemaOrderStubProps) {
   if (!lead) return null;
 
   const poster = resolveImageUrl(lead.movie.poster);
-  const seated = order.tickets.every((t) => t.seat);
   const seatCount = order.tickets.reduce((n, t) => n + t.quantity, 0);
-  const admits = seated
-    ? `Seat${seatCount > 1 ? 's' : ''} ${order.tickets.map((t) => `${t.seat!.row}${t.seat!.number}`).join(', ')}`
+  const admits = isSeatedOrder(order.tickets)
+    ? `Seat${seatCount > 1 ? 's' : ''} ${orderSeatLabels(order.tickets).join(', ')}`
     : `${lead.ticketType} × ${seatCount}`;
   const snackCount = order.concessions.reduce((n, c) => n + c.quantity, 0);
   const spent = order.tickets.every((t) => t.status !== 'active');
