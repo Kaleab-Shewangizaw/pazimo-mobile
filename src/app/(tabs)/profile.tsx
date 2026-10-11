@@ -17,7 +17,6 @@ import { Text } from '@/components/ui/text';
 import { tabBarClearance } from '@/constants/layout';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/pricing';
 import { formatPoints } from '@/lib/rewards';
 import { useMyRewards } from '@/queries/rewards';
 import { useMyWallet } from '@/queries/wallet';
@@ -130,20 +129,13 @@ export default function ProfileScreen() {
                 <ListRow
                   icon="wallet-outline"
                   label="Wallet"
-                  value={
-                    wallet.exists
-                      ? wallet.status === 'frozen'
-                        ? 'Frozen'
-                        : formatMoney(wallet.balance ?? 0, 'ETB')
-                      : 'Set up'
-                  }
+                  value={!wallet.exists ? 'Set up' : wallet.status === 'frozen' ? 'Frozen' : undefined}
                   onPress={() => router.push('/wallet')}
                 />
               ) : null}
               <ListRow
                 icon="trophy-outline"
                 label="Rewards & recap"
-                value={rewards ? `${formatPoints(rewards.score)} pts` : undefined}
                 onPress={() => router.push('/rewards')}
               />
               <ListRow
