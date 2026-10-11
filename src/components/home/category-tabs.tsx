@@ -3,6 +3,7 @@ import { FlatList, type ListRenderItem, StyleSheet } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Spacing } from '@/constants/theme';
 import type { Category } from '@/types/api';
 
@@ -71,8 +72,8 @@ function CategoryTabsImpl({
 const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg, gap: Spacing.xxl + Spacing.xs },
   tab: { paddingVertical: Spacing.xs },
-  active: { color: '#FFFFFF' },
-  inactive: { color: 'rgba(255,255,255,0.42)' },
+  active: { color: '#FFFFFF', ...GLASS_TEXT_SHADOW },
+  inactive: { color: 'rgba(255,255,255,0.72)', ...GLASS_TEXT_SHADOW },
 });
 
 export const CategoryTabs = memo(CategoryTabsImpl);

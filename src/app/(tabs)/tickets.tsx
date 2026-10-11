@@ -12,6 +12,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { PageRefreshControl } from '@/components/ui/refresh-control';
 import { EmptyState, ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
+import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { tabBarClearance } from '@/constants/layout';
 import { Radius, Spacing } from '@/constants/theme';
 import { useRefresh } from '@/hooks/use-refresh';
@@ -189,8 +190,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   tabPillActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
-  tabLabel: { color: 'rgba(255,255,255,0.75)', fontWeight: '600' },
-  tabLabelActive: { color: '#0A0A0C' },
+  tabLabel: { color: GLASS_LABEL_INACTIVE, fontWeight: '700', ...GLASS_TEXT_SHADOW },
+  // The halo is for white-on-glass; on the solid white fill it only smudges.
+  tabLabelActive: { color: '#0A0A0C', textShadowColor: 'transparent' },
 
   list: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
 });

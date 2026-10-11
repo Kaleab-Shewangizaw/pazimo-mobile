@@ -47,3 +47,23 @@ export const BACKGROUND_DEFAULT_DIM = 0.75;
  * top of the photo's own. Not admin-controlled. 0 disables it.
  */
 export const BACKGROUND_FROST_INTENSITY = 60;
+
+/**
+ * Text and icons on glass. The glass is tinted *white* (GLASS_CONTROL_TINT,
+ * or whatever admins set), so a white label on it has no contrast of its own
+ * over bright artwork — this dark halo is what keeps it legible. Spread it
+ * into any label style that sits on glass; icons take it too, since Ionicons
+ * render as text.
+ */
+export const GLASS_TEXT_SHADOW = {
+  textShadowColor: 'rgba(0, 0, 0, 0.6)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 6,
+} as const;
+
+/**
+ * An unselected chip/tab label on glass — a step back from the pure white of
+ * a selected one, without fading into the glass behind it (the old 0.42–0.75
+ * values did exactly that).
+ */
+export const GLASS_LABEL_INACTIVE = 'rgba(255, 255, 255, 0.9)';

@@ -34,7 +34,7 @@ import { useCinemaShowtimes, useCinemas } from '@/queries/cinema';
 import type { Cinema } from '@/types/api';
 
 /** Matches the glass search field's furniture on Discover. */
-const PLACEHOLDER = 'rgba(255,255,255,0.55)';
+const PLACEHOLDER = 'rgba(255,255,255,0.75)';
 
 /**
  * Pick a cinema, then swipe its programme as a deck of posters.

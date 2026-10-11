@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Radius, Spacing } from '@/constants/theme';
 import type { DayKey } from '@/lib/programme';
 
@@ -96,7 +97,7 @@ function DayRailImpl({
         <Ionicons
           name="chevron-forward"
           size={12}
-          color={active === 'tomorrow' ? '#0A0A0C' : 'rgba(255,255,255,0.75)'}
+          color={active === 'tomorrow' ? '#0A0A0C' : GLASS_LABEL_INACTIVE}
         />
       </Touchable>
     </View>
@@ -117,10 +118,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   sideLabel: {
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(255,255,255,0.72)',
+    ...GLASS_TEXT_SHADOW,
   },
   sideLabelActive: {
-    color: 'rgba(255,255,255,0.85)',
+    color: '#FFFFFF',
   },
 
   // ── Center: "Now Playing" active label ───────────────────────────────────
@@ -130,8 +132,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   centerLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontWeight: '500',
+    color: 'rgba(255,255,255,0.72)',
+    fontWeight: '600',
+    ...GLASS_TEXT_SHADOW,
   },
   centerLabelActive: {
     color: '#FFFFFF',
@@ -154,10 +157,13 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   pillLabel: {
-    color: 'rgba(255,255,255,0.75)',
+    color: GLASS_LABEL_INACTIVE,
+    fontWeight: '600',
+    ...GLASS_TEXT_SHADOW,
   },
   pillLabelActive: {
     color: '#0A0A0C',
+    textShadowColor: 'transparent',
   },
 });
 

@@ -18,6 +18,7 @@ import { Glass } from '@/components/ui/glass';
 import { GLASS_SHADOW, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Radius, Spacing } from '@/constants/theme';
 import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useGoBack } from '@/hooks/use-go-back';
@@ -240,11 +241,14 @@ export default function ConversationScreen() {
           style={styles.headerIdentityShadow}>
           <Glass variant="clear" intensity={28} tint={glassTint} radius={Radius.pill} style={styles.headerIdentity}>
             <View style={styles.headerTitles}>
-              <Text variant="callout" numberOfLines={1}>
+              <Text variant="callout" numberOfLines={1} style={GLASS_TEXT_SHADOW}>
                 {name}
               </Text>
               {counterparty.username ? (
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                <Text
+                  variant="caption"
+                  numberOfLines={1}
+                  style={[{ color: GLASS_LABEL_INACTIVE }, GLASS_TEXT_SHADOW]}>
                   @{counterparty.username}
                 </Text>
               ) : null}
