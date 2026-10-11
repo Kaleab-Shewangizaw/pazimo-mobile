@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AvatarInitials } from '@/components/shares/avatar-initials';
 import { ChatMenuSheet } from '@/components/shares/chat-menu-sheet';
 import { ContactCardSheet } from '@/components/shares/contact-card-sheet';
 import { MessageComposer } from '@/components/shares/message-composer';
@@ -19,6 +18,7 @@ import { Glass } from '@/components/ui/glass';
 import { GLASS_SHADOW, GlassIconButton } from '@/components/ui/glass-button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Radius, Spacing } from '@/constants/theme';
 import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useGoBack } from '@/hooks/use-go-back';
@@ -38,6 +38,15 @@ import { useAllShareConversations } from '@/queries/share-conversations';
 import type { ShareUser } from '@/types/api';
 
 const HEADER_HEIGHT = 44;
+
+/** Messages from the same person this close together join one bubble run. */
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+function joinsRun(a: ShareItemViewModel | undefined, b: ShareItemViewModel | undefined): boolean {
+  if (!a || !b || a.kind !== 'MESSAGE' || b.kind !== 'MESSAGE') return false;
+  if (a.fromUser._id !== b.fromUser._id) return false;
+  return Math.abs(new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) < GROUP_WINDOW_MS;
+}
 
 /**
  * One person's full history — every message and item transfer between us, in
@@ -231,13 +240,15 @@ export default function ConversationScreen() {
           pressedScale={0.97}
           style={styles.headerIdentityShadow}>
           <Glass variant="clear" intensity={28} tint={glassTint} radius={Radius.pill} style={styles.headerIdentity}>
-            <AvatarInitials name={name} size={36} />
             <View style={styles.headerTitles}>
-              <Text variant="callout" numberOfLines={1}>
+              <Text variant="callout" numberOfLines={1} style={GLASS_TEXT_SHADOW}>
                 {name}
               </Text>
               {counterparty.username ? (
-                <Text variant="caption" color="textSecondary" numberOfLines={1}>
+                <Text
+                  variant="caption"
+                  numberOfLines={1}
+                  style={[{ color: GLASS_LABEL_INACTIVE }, GLASS_TEXT_SHADOW]}>
                   @{counterparty.username}
                 </Text>
               ) : null}
@@ -275,12 +286,14 @@ export default function ConversationScreen() {
           contentContainerStyle={styles.bodyContent}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
           showsVerticalScrollIndicator={false}>
-          {items.map((item) => (
+          {items.map((item, i) => (
             <ShareRow
               key={`${item.kind}-${item.id}`}
               share={item}
               onPress={openDetail}
               onLongPressMessage={openMessageOptions}
+              groupedWithPrev={joinsRun(items[i - 1], item)}
+              groupedWithNext={joinsRun(item, items[i + 1])}
             />
           ))}
         </ScrollView>
@@ -380,9 +393,9 @@ const styles = StyleSheet.create({
   headerIdentity: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    minHeight: HEADER_HEIGHT,
     paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   headerTitles: { flex: 1, gap: 1 },
 
@@ -401,7 +414,9 @@ const styles = StyleSheet.create({
   // `flexGrow` + `flex-end` is what makes a short thread sit against the
   // bottom of the list (Telegram-style) instead of floating at the top with
   // empty space below it once there's less content than the viewport.
-  bodyContent: { flexGrow: 1, justifyContent: 'flex-end', paddingVertical: Spacing.lg, gap: Spacing.sm },
+  // No `gap` — each row sets its own top margin, tighter within a run of
+  // messages from the same person (see `ShareRow`'s `groupedWithPrev`).
+  bodyContent: { flexGrow: 1, justifyContent: 'flex-end', paddingVertical: Spacing.lg },
 
   footer: {
     paddingHorizontal: Spacing.lg,

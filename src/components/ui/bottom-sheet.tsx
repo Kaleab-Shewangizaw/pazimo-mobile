@@ -59,12 +59,19 @@ export function BottomSheet({
   onClose,
   children,
   maxHeight,
+  footer,
 }: {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
   /** Caps sheet height so short content doesn't force it to the top of the screen. */
   maxHeight?: number;
+  /**
+   * Pinned under the scrolling content — the sheet's primary action
+   * (Continue, Send) stays on screen however long the list above it gets,
+   * instead of making people scroll to the bottom to find it.
+   */
+  footer?: ReactNode;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -87,6 +94,7 @@ export function BottomSheet({
   // `adjustResize` doesn't reach inside a `statusBarTranslucent` Modal, so the
   // lift is measured from the keyboard itself.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -163,7 +171,11 @@ export function BottomSheet({
   // being typed into stays in view. The drag strip is the sheet's only other
   // row, so it is what separates the sheet's budget from the scroller's.
   const contentCeiling =
-    (maxHeight ?? SCREEN_HEIGHT - insets.top - TOP_GAP) - keyboardHeight - DRAG_AREA_HEIGHT;
+    (maxHeight ?? SCREEN_HEIGHT - insets.top - TOP_GAP) -
+    keyboardHeight -
+    DRAG_AREA_HEIGHT -
+    (footer ? footerHeight : 0);
+  const bottomInset = keyboardHeight > 0 ? 0 : insets.bottom;
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
@@ -199,7 +211,7 @@ export function BottomSheet({
             style={{ maxHeight: Math.max(contentCeiling, 0) }}
             contentContainerStyle={[
               styles.content,
-              { paddingBottom: (keyboardHeight > 0 ? 0 : insets.bottom) + Spacing.lg },
+              { paddingBottom: footer ? Spacing.md : bottomInset + Spacing.lg },
             ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -207,6 +219,13 @@ export function BottomSheet({
             bounces={false}>
             {children}
           </ScrollView>
+          {footer ? (
+            <View
+              onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+              style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: bottomInset + Spacing.md }]}>
+              {footer}
+            </View>
+          ) : null}
         </Glass>
       </Animated.View>
     </Modal>
@@ -219,6 +238,11 @@ const styles = StyleSheet.create({
   // page through two notches under the sheet.
   sheet: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   content: { paddingHorizontal: Spacing.lg },
+  footer: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   dragArea: { paddingVertical: Spacing.sm, alignItems: 'center' },
   handle: { width: 36, height: 4, borderRadius: Radius.pill },
 });

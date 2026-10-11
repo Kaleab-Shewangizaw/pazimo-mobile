@@ -23,6 +23,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": ["android.permission.WRITE_CONTACTS"],
       "package": "com.kal_x.pazimomobile",
       "intentFilters": [
         {
@@ -33,6 +34,21 @@
               "scheme": "https",
               "host": "pazimo.com",
               "pathPrefix": "/events/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/event/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/movie/"
+            },
+            {
+              "scheme": "https",
+              "host": "pazimo.com",
+              "pathPrefix": "/refill/venue/"
             }
           ],
           "category": [
@@ -65,6 +81,12 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Pazimo to see which of your contacts are on Pazimo so you can chat with them and invite the rest."
+        }
+      ],
       "expo-sharing",
       "expo-video",
       [

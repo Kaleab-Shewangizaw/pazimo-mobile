@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import {
   deleteAccount,
   fetchNotificationPreferences,
+  fetchSessions,
   sendPhoneVerifyOtp,
   updateNotificationPreferences,
   updateOtpPreference,
@@ -27,6 +28,26 @@ export function useNotificationPreferences() {
   });
 
   return { ...query, preferences: query.data };
+}
+
+/**
+ * Active sessions. Stores the upgraded token the server hands back to a device
+ * still on a pre-sessions token, so "terminate all others" can't sign it out.
+ */
+export function useAccountSessions() {
+  const token = useAuthStore((s) => s.token);
+  const replaceToken = useAuthStore((s) => s.replaceToken);
+
+  return useQuery({
+    queryKey: queryKeys.account.sessions,
+    queryFn: async () => {
+      const data = await fetchSessions();
+      if (data.token) await replaceToken(data.token);
+      return data.sessions;
+    },
+    enabled: Boolean(token),
+    staleTime: 0,
+  });
 }
 
 /** Manual mutation shape — matches `useSetContact`'s, this codebase has no `useMutation` anywhere. */

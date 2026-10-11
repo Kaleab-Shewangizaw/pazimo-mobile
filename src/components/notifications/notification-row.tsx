@@ -20,12 +20,19 @@ const KIND_ICON: Record<AppNotificationKind, keyof typeof Ionicons.glyphMap> = {
 export type NotificationRowProps = {
   notification: AppNotification;
   onPress: (notification: AppNotification) => void;
+  /**
+   * Arrived since the inbox was last opened. Opening the screen marks
+   * everything read straight away (Instagram-style), so `readAt` alone would
+   * wipe the highlight the moment you land — this keeps what's new looking
+   * new for the rest of the visit.
+   */
+  isNew?: boolean;
 };
 
 /** One inbox row — same row anatomy as the Chats list's `ConversationRow`, with an unread dot in place of a count. */
-function NotificationRowImpl({ notification, onPress }: NotificationRowProps) {
+function NotificationRowImpl({ notification, onPress, isNew }: NotificationRowProps) {
   const theme = useTheme();
-  const unread = !notification.readAt;
+  const unread = isNew ?? !notification.readAt;
 
   return (
     <Touchable

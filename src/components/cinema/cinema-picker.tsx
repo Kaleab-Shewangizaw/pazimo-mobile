@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
+import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { resolveImageUrl } from '@/lib/media';
@@ -72,7 +73,7 @@ function CinemaRowImpl({ cinema, selected = false, onPress }: CinemaRowProps) {
         </Text>
         {where ? (
           <View style={styles.whereRow}>
-            <Ionicons name="location-sharp" size={12} color="rgba(255,255,255,0.75)" />
+            <Ionicons name="location-sharp" size={12} color={GLASS_LABEL_INACTIVE} />
             <Text variant="caption" style={styles.where} numberOfLines={1}>
               {where}
             </Text>
@@ -109,7 +110,7 @@ const styles = StyleSheet.create({
   },
   title: { color: '#FFFFFF', letterSpacing: -0.3 },
   whereRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  where: { color: 'rgba(255,255,255,0.75)', flexShrink: 1 },
+  where: { color: GLASS_LABEL_INACTIVE, flexShrink: 1, ...GLASS_TEXT_SHADOW },
 
   corner: {
     position: 'absolute',

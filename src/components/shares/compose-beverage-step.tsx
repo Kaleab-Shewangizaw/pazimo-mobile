@@ -2,14 +2,10 @@ import { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { PickableItemRow } from '@/components/shares/pickable-item-row';
-import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/theme';
 import { formatPrice } from '@/lib/pricing';
 import type { TransferableBeverageSale } from '@/types/api';
-
-const MESSAGE_LIMIT = 500;
 
 export type ComposeBeverageStepProps = {
   sales: TransferableBeverageSale[];
@@ -17,9 +13,6 @@ export type ComposeBeverageStepProps = {
   /** saleId -> selected. Always the full quantity — drinks never split. */
   selected: Set<string>;
   onToggle: (saleId: string) => void;
-  message: string;
-  onChangeMessage: (text: string) => void;
-  onContinue: () => void;
 };
 
 /**
@@ -31,12 +24,7 @@ function ComposeBeverageStepImpl({
   loading,
   selected,
   onToggle,
-  message,
-  onChangeMessage,
-  onContinue,
 }: ComposeBeverageStepProps) {
-  const selectedCount = sales.filter((s) => selected.has(s.saleId)).length;
-
   return (
     <View style={styles.container}>
       {loading ? (
@@ -58,18 +46,6 @@ function ComposeBeverageStepImpl({
           ))}
         </View>
       )}
-
-      <Field
-        label="Message (optional)"
-        value={message}
-        onChangeText={(text) => onChangeMessage(text.slice(0, MESSAGE_LIMIT))}
-        placeholder="Cheers!"
-        multiline
-        numberOfLines={3}
-        hint={`${message.length}/${MESSAGE_LIMIT}`}
-      />
-
-      <Button label="Continue" size="lg" disabled={selectedCount === 0} onPress={onContinue} />
     </View>
   );
 }

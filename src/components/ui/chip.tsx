@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { Text } from '@/components/ui/text';
+import { GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -34,7 +35,7 @@ function ChipImpl({
 
   return (
     <View style={[styles.chip, fill, style]}>
-      <Text variant="label" style={{ color: textColor }}>
+      <Text variant="label" style={[{ color: textColor }, variant === 'glass' && GLASS_TEXT_SHADOW]}>
         {label}
       </Text>
     </View>

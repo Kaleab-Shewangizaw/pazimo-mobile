@@ -15,6 +15,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
+import { GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { tabBarClearance } from '@/constants/layout';
 import { AspectRatio, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -317,5 +318,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  chipText: { color: '#FFFFFF' },
+  chipText: { color: '#FFFFFF', fontWeight: '600', ...GLASS_TEXT_SHADOW },
 });

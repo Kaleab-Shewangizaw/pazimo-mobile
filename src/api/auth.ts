@@ -1,5 +1,6 @@
 import { deleteRaw, getData, postData, postRaw, putData, putRaw } from '@/api/client';
 import type {
+  AccountSession,
   AuthPayload,
   LoginResult,
   NotificationPreferences,
@@ -202,4 +203,27 @@ export function registerPushToken(token: string): Promise<void> {
 /** Best-effort on sign-out — this device shouldn't keep getting this account's pushes once signed out. */
 export function unregisterPushToken(token: string): Promise<void> {
   return deleteRaw<{ status: string }>('/auth/push-token', { data: { token } }).then(() => undefined);
+}
+
+/**
+ * This account's signed-in devices, this one first. `token` comes back only
+ * when this device still held a pre-sessions token — the caller must store it.
+ */
+export function fetchSessions(): Promise<{ sessions: AccountSession[]; token: string | null }> {
+  return getData<{ sessions: AccountSession[]; token: string | null }>('/auth/sessions');
+}
+
+/** Signs one other device out. */
+export function revokeSession(id: string): Promise<void> {
+  return deleteRaw<{ status: string }>(`/auth/sessions/${id}`).then(() => undefined);
+}
+
+/** Signs every other device out. */
+export function revokeOtherSessions(): Promise<void> {
+  return deleteRaw<{ status: string }>('/auth/sessions').then(() => undefined);
+}
+
+/** Ends this device's session server-side. Best-effort on sign-out. */
+export function signOutSession(): Promise<void> {
+  return postRaw<{ status: string }>('/auth/sign-out').then(() => undefined);
 }

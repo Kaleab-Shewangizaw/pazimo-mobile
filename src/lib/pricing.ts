@@ -73,6 +73,11 @@ const formatters: Partial<Record<Currency, Intl.NumberFormat>> = {};
 
 export function formatPrice(amount: number, currency: Currency): string {
   if (amount === 0) return 'Free';
+  return formatMoney(amount, currency);
+}
+
+/** An amount of money as-is — "ETB 0", never "Free". For balances and totals, not prices. */
+export function formatMoney(amount: number, currency: Currency): string {
   formatters[currency] ??= new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,

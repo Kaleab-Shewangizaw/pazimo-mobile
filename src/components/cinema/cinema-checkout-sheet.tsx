@@ -13,6 +13,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useWalletCheckout } from '@/hooks/use-wallet-checkout';
 import {
   checkoutEmail,
   formatPhoneForPayment,
@@ -24,7 +25,12 @@ import { useCinemaConcessions, useCinemaQuote } from '@/queries/cinema-checkout'
 import { usePaymentConfig } from '@/queries/payments';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { useCinemaBookingStore, type SelectedConcession } from '@/stores/use-cinema-booking-store';
-import type { CinemaCheckoutBasket, CinemaConcessionItem, PaymentMethodId } from '@/types/api';
+import type {
+  CinemaCheckoutBasket,
+  CinemaConcessionItem,
+  PaymentMethodId,
+  WalletPayResult,
+} from '@/types/api';
 
 /**
  * Snacks, then payment — one sheet, the same shape as the event flow's
@@ -100,6 +106,7 @@ export function CinemaCheckoutSheet({
     [store.showtimeId, showtimeId, store.assignedSeating, store.ticketTypeId, store.quantity, store.seats, store.concessions],
   );
   const { quote, loading: quoting } = useCinemaQuote(visible ? basket : null);
+  const walletCheckout = useWalletCheckout({ total: quote?.total ?? 0, currency: 'ETB' });
 
   const summary =
     store.assignedSeating === false
@@ -161,11 +168,51 @@ export function CinemaCheckoutSheet({
 
   const close = useCallback(() => {
     Keyboard.dismiss();
+    walletCheckout.deselect();
     onClose();
     setTimeout(reset, 260);
-  }, [onClose, reset]);
+  }, [onClose, reset, walletCheckout]);
+
+  const onPayWithWallet = useCallback(async () => {
+    if (!basket) return;
+    Keyboard.dismiss();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await walletCheckout.pay((fields) =>
+        startCinemaCheckout({
+          ...basket,
+          ...fields,
+          // The account's contact number; nothing is pushed to it.
+          phoneNumber: user?.phoneNumber ?? formatPhoneForPayment(details.phone, 'ETB', provider),
+          customerName: (knownAs || details.fullName).trim() || 'Cinema Guest',
+          customerEmail: checkoutEmail(details.email, user?.email),
+        }) as unknown as Promise<WalletPayResult>,
+      );
+      setSubmitting(false);
+      if (!result) return;
+      walletCheckout.deselect();
+      onClose();
+      setTimeout(reset, 260);
+      router.push(`/cinema-order/${result.transactionId}`);
+    } catch (err) {
+      setSubmitting(false);
+      const message =
+        err instanceof ApiError ? err.message : 'We could not complete that payment. Try again.';
+      setError(message);
+      if (/seat/i.test(message)) {
+        onClose();
+        setTimeout(reset, 260);
+        onSeatConflict();
+      }
+    }
+  }, [basket, details, knownAs, onClose, onSeatConflict, provider, reset, router, user, walletCheckout]);
 
   const onPay = useCallback(async () => {
+    if (walletCheckout.selected) {
+      await onPayWithWallet();
+      return;
+    }
     if (!basket || !method) return;
 
     setShowErrors(true);
@@ -211,7 +258,7 @@ export function CinemaCheckoutSheet({
         onSeatConflict();
       }
     }
-  }, [basket, method, methods, knownAs, details, provider, user, onClose, reset, router, onSeatConflict]);
+  }, [basket, method, methods, knownAs, details, provider, user, onClose, reset, router, onSeatConflict, walletCheckout.selected, onPayWithWallet]);
 
   const travel = width * TRAVEL;
   const stepStyles = [
@@ -286,7 +333,11 @@ export function CinemaCheckoutSheet({
           <PaymentStep
             methods={methods}
             selectedMethod={method}
-            onSelectMethod={setPicked}
+            onSelectMethod={(id) => {
+              walletCheckout.deselect();
+              setPicked(id);
+            }}
+            wallet={walletCheckout.option}
             details={details}
             onChangeDetails={setEdits}
             knownAs={knownAs}

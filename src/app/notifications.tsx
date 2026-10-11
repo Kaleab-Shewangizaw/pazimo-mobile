@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useIsFocused, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,8 +24,8 @@ import type { AppNotification } from '@/types/api';
 /**
  * The bell's inbox: shares sent to or answered by you, and announcements from
  * Pazimo — kept server-side, so it's complete even for pushes this device
- * never showed (permission off, swiped away, another phone). Tapping a row
- * marks it read and goes wherever its push would have.
+ * never showed (permission off, swiped away, another phone). Opening the
+ * screen marks it all read; tapping a row goes wherever its push would have.
  */
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -49,17 +49,37 @@ export default function NotificationsScreen() {
   const { submit: markRead } = useMarkNotificationsRead();
   const { refreshing, onRefresh } = useRefresh(refetch);
 
+  // Opening the inbox reads it, like Instagram — no tapping rows one by one
+  // to clear the bell. What was unread is remembered for this visit so it
+  // still shows as new until you leave; the next visit starts clean.
+  // Also covers notifications arriving while the screen is open: the
+  // refetch bumps `unreadCount`, and they're read (and highlighted) too.
+  const isFocused = useIsFocused();
+  const [newIds, setNewIds] = useState<ReadonlySet<string>>(() => new Set());
+  const unreadIds = notifications.filter((n) => !n.readAt).map((n) => n._id);
+  if (isFocused && unreadIds.some((id) => !newIds.has(id))) {
+    setNewIds(new Set([...newIds, ...unreadIds]));
+  }
+  if (!isFocused && newIds.size > 0) {
+    setNewIds(new Set());
+  }
+
+  useEffect(() => {
+    if (isFocused && user && unreadCount > 0) markRead();
+  }, [isFocused, user, unreadCount, markRead]);
+
   const openNotification = useCallback(
     (notification: AppNotification) => {
-      if (!notification.readAt) markRead({ ids: [notification._id] });
       openNotificationTarget(router, notification.data);
     },
-    [markRead, router],
+    [router],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: AppNotification }) => <NotificationRow notification={item} onPress={openNotification} />,
-    [openNotification],
+    ({ item }: { item: AppNotification }) => (
+      <NotificationRow notification={item} onPress={openNotification} isNew={newIds.has(item._id)} />
+    ),
+    [openNotification, newIds],
   );
 
   const onEndReached = useCallback(() => {
@@ -86,14 +106,6 @@ export default function NotificationsScreen() {
         right={
           user ? (
             <View style={styles.headerActions}>
-              {unreadCount > 0 ? (
-                <GlassIconButton
-                  icon="checkmark-done"
-                  accessibilityLabel="Mark all as read"
-                  size={34}
-                  onPress={() => markRead()}
-                />
-              ) : null}
               <GlassIconButton
                 icon="settings-outline"
                 accessibilityLabel="Notification settings"

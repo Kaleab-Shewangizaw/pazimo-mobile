@@ -133,8 +133,14 @@ export function pendingIncomingCounterpartyIds(
 ): Set<string> {
   const ids = new Set<string>();
   if (!myId) return ids;
+  const now = Date.now();
   for (const share of shares) {
-    if (share.status === 'pending' && share.toUser._id === myId) {
+    // The server only flips an unclaimed share to `expired` lazily, on its
+    // next read — a cached list can still say `pending` well past
+    // `expiresAt`, and something you can no longer accept mustn't keep a
+    // red dot lit.
+    const expired = Boolean(share.expiresAt) && new Date(share.expiresAt).getTime() <= now;
+    if (share.status === 'pending' && !expired && share.toUser._id === myId) {
       ids.add(share.fromUser._id);
     }
   }

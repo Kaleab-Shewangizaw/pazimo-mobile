@@ -12,6 +12,7 @@ import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useWalletCheckout } from '@/hooks/use-wallet-checkout';
 import {
   checkoutEmail,
   formatPhoneForPayment,
@@ -23,7 +24,7 @@ import { formatPrice } from '@/lib/pricing';
 import { useEventRefillQuote, useVenueRefillQuote } from '@/queries/beverages';
 import { usePaymentConfig } from '@/queries/payments';
 import { useAuthStore } from '@/stores/use-auth-store';
-import type { Currency, PaymentMethodId } from '@/types/api';
+import type { Currency, PaymentMethodId, WalletPayResult } from '@/types/api';
 
 /**
  * The payment leg of the refill flow — one step, unlike the cinema/event
@@ -77,6 +78,7 @@ export function RefillCheckoutSheet({
   const venueQuote = useVenueRefillQuote(channel === 'venue' ? ownerId : undefined, visible ? items : null);
   const { quote } = channel === 'event' ? eventQuote : venueQuote;
   const total = quote?.total ?? clientTotal;
+  const walletCheckout = useWalletCheckout({ total, currency });
 
   const [picked, setPicked] = useState<PaymentMethodId | null>(null);
   const [edits, setEdits] = useState<Partial<BuyerDetails>>({});
@@ -97,13 +99,15 @@ export function RefillCheckoutSheet({
     [edits, accountName, user],
   );
 
+  const { deselect: deselectWallet } = walletCheckout;
   const reset = useCallback(() => {
+    deselectWallet();
     setPicked(null);
     setEdits({});
     setShowErrors(false);
     setSubmitting(false);
     setError(null);
-  }, []);
+  }, [deselectWallet]);
 
   const close = useCallback(() => {
     Keyboard.dismiss();
@@ -111,7 +115,40 @@ export function RefillCheckoutSheet({
     setTimeout(reset, 260);
   }, [onClose, reset]);
 
+  const onPayWithWallet = useCallback(async () => {
+    Keyboard.dismiss();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await walletCheckout.pay((fields) => {
+        const body = {
+          ...fields,
+          items,
+          // The account's contact number; nothing is pushed to it.
+          phoneNumber: user?.phoneNumber ?? formatPhoneForPayment(details.phone, currency, provider),
+          customerName: (knownAs || details.fullName).trim() || 'Pazimo Customer',
+          customerEmail: checkoutEmail(details.email, user?.email),
+        };
+        return (
+          channel === 'event' ? startEventRefillCheckout(ownerId, body) : startVenueRefillCheckout(ownerId, body)
+        ) as unknown as Promise<WalletPayResult>;
+      });
+      setSubmitting(false);
+      if (!result) return;
+      onClose();
+      setTimeout(reset, 260);
+      router.push(`/refill/order/${result.transactionId}`);
+    } catch (err) {
+      setSubmitting(false);
+      setError(err instanceof ApiError ? err.message : 'We could not complete that payment. Try again.');
+    }
+  }, [channel, currency, details, items, knownAs, onClose, ownerId, provider, reset, router, user, walletCheckout]);
+
   const onPay = useCallback(async () => {
+    if (walletCheckout.selected) {
+      await onPayWithWallet();
+      return;
+    }
     if (!method) return;
 
     setShowErrors(true);
@@ -155,7 +192,7 @@ export function RefillCheckoutSheet({
       const message = err instanceof ApiError ? err.message : 'We could not start that payment. Try again.';
       setError(message);
     }
-  }, [method, methods, knownAs, details, currency, provider, items, channel, ownerId, user, onClose, reset, router]);
+  }, [method, methods, knownAs, details, currency, provider, items, channel, ownerId, user, onClose, reset, router, walletCheckout.selected, onPayWithWallet]);
 
   return (
     <BottomSheet visible={visible} onClose={close}>
@@ -190,7 +227,11 @@ export function RefillCheckoutSheet({
       <PaymentStep
         methods={methods}
         selectedMethod={method}
-        onSelectMethod={setPicked}
+        onSelectMethod={(id) => {
+          walletCheckout.deselect();
+          setPicked(id);
+        }}
+        wallet={walletCheckout.option}
         details={details}
         onChangeDetails={setEdits}
         knownAs={knownAs}

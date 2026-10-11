@@ -1,7 +1,6 @@
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,25 +23,22 @@ export type ConfirmStepProps = {
   recipientHandle?: string;
   selections: ConfirmSelection[];
   message: string;
-  submitting: boolean;
   error: string | null;
-  onConfirm: () => void;
 };
 
 /**
  * The one screen where the permanence of a transfer actually gets said out
  * loud, per-item — a full transfer reads "you'll no longer own this", a
  * partial one reads what's kept vs sent, and neither gets softened into
- * vaguer copy. Nothing here is submitted until `onConfirm`.
+ * vaguer copy. Nothing is submitted from here — the sheet's pinned
+ * Transfer button (see `ShareItemSheet`) does that.
  */
 function ConfirmStepImpl({
   recipientName,
   recipientHandle,
   selections,
   message,
-  submitting,
   error,
-  onConfirm,
 }: ConfirmStepProps) {
   const theme = useTheme();
 
@@ -92,14 +88,6 @@ function ConfirmStepImpl({
           {error}
         </Text>
       ) : null}
-
-      <Button
-        label="Transfer"
-        size="lg"
-        loading={submitting}
-        disabled={submitting || selections.length === 0}
-        onPress={onConfirm}
-      />
     </View>
   );
 }

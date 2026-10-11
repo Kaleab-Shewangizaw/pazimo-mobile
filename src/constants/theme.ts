@@ -46,6 +46,17 @@ const palette = {
   /** The one warm accent in an otherwise white-on-black palette — reserved for happy-hour pricing. */
   happyHour: '#FBBF24',
 
+  /**
+   * Chat bubbles: mine are the solid white brand fill, theirs a raised
+   * graphite — the two sides read apart at a glance, no avatars needed.
+   */
+  bubbleSent: white.full,
+  onBubbleSent: '#0A0A0B',
+  bubbleReceived: '#26262C',
+  /** Tappable links in message text — the one place blue appears, because that's what a link looks like everywhere else. */
+  link: '#7CC4FF',
+  linkOnBubbleSent: '#0B5FCC',
+
   /** Scrim under text laid over cover art. */
   scrim: 'rgba(0, 0, 0, 0.62)',
   skeleton: 'rgba(255, 255, 255, 0.06)',

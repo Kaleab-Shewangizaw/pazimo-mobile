@@ -33,6 +33,13 @@ export function openNotificationTarget(router: Router, data: Record<string, unkn
     return;
   }
 
+  // Pazimo Wallet alerts (deposit, payment, refund, freeze, new phone).
+  if (data.type === 'wallet') {
+    if (!useAuthStore.getState().token) return;
+    router.push('/wallet');
+    return;
+  }
+
   // Every other push carries `counterpartyId` (see pushService's callers) —
   // a message, a ticket/drink/cinema share, or a response to one, all
   // resolve to "open this conversation." Already looking at it? Then there's

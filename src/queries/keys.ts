@@ -79,12 +79,23 @@ export const queryKeys = {
     contactsList: () => [...queryKeys.conversations.all, 'contacts-list'] as const,
     blocked: () => [...queryKeys.conversations.all, 'blocked'] as const,
   },
+  // Deliberately not under `conversations.all`: every incoming message
+  // invalidates that whole tree, and this one re-reads the phone's address
+  // book and uploads it to be matched — far too heavy to redo per message.
+  addressBook: ['address-book'] as const,
   notifications: {
     all: ['notifications'] as const,
     list: () => [...queryKeys.notifications.all, 'list'] as const,
   },
   account: {
     notificationPreferences: ['account', 'notification-preferences'] as const,
+    sessions: ['account', 'sessions'] as const,
+  },
+  wallet: {
+    all: ['wallet'] as const,
+    mine: () => [...queryKeys.wallet.all, 'mine'] as const,
+    statement: () => [...queryKeys.wallet.all, 'statement'] as const,
+    devices: () => [...queryKeys.wallet.all, 'devices'] as const,
   },
   rewards: {
     all: ['rewards'] as const,
@@ -92,4 +103,5 @@ export const queryKeys = {
     history: () => [...queryKeys.rewards.all, 'history'] as const,
     recap: (period: string, key: string) => [...queryKeys.rewards.all, 'recap', period, key] as const,
   },
+  linkPreview: (url: string) => ['link-preview', url] as const,
 } as const;

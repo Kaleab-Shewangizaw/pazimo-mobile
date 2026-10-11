@@ -5,7 +5,7 @@ import { StyleSheet, type StyleProp, View, type ViewStyle } from 'react-native';
 import { Glass } from '@/components/ui/glass';
 import { Touchable, type TouchableProps } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
-import { GLASS_CONTROL_TINT } from '@/constants/appearance';
+import { GLASS_CONTROL_TINT, GLASS_TEXT_SHADOW } from '@/constants/appearance';
 import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useGlassStyle } from '@/hooks/use-glass-style';
 import { useTheme } from '@/hooks/use-theme';
@@ -107,7 +107,12 @@ function GlassButtonImpl({
           <Ionicons name={icon} size={Math.round(m.disc * 0.54)} color={theme.onBrand} />
         </View>
       ) : icon ? (
-        <Ionicons name={icon} size={Math.round(m.disc * 0.75)} color={foreground} />
+        <Ionicons
+          name={icon}
+          size={Math.round(m.disc * 0.75)}
+          color={foreground}
+          style={selected ? undefined : GLASS_TEXT_SHADOW}
+        />
       ) : null}
       <Text
         variant={size === 'lg' ? 'callout' : 'body'}
@@ -175,7 +180,7 @@ function GlassIconButtonImpl({
         radius={Radius.pill}
         blurTarget={blurTarget}
         style={[styles.iconBody, { width: size, height: size }]}>
-        <Ionicons name={icon} size={Math.round(size * 0.5)} color={color} />
+        <Ionicons name={icon} size={Math.round(size * 0.5)} color={color} style={GLASS_TEXT_SHADOW} />
       </Glass>
     </Touchable>
   );
@@ -226,9 +231,7 @@ const styles = StyleSheet.create({
   disc: { borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
   label: {
     color: '#FFFFFF',
-    fontFamily: FontFamily.semibold,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    fontFamily: FontFamily.bold,
+    ...GLASS_TEXT_SHADOW,
   },
 });

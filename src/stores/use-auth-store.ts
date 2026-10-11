@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
-import { fetchMe, unregisterPushToken } from '@/api/auth';
-import { setAuthToken } from '@/api/client';
+import { fetchMe, signOutSession, unregisterPushToken } from '@/api/auth';
+import { setAuthToken, setSessionEndedHandler } from '@/api/client';
+import { queryClient } from '@/lib/query-client';
 import { getRegisteredPushToken, setRegisteredPushToken } from '@/lib/push-notifications';
 import { StorageKeys, secureStorage } from '@/lib/storage';
 import type { AuthPayload, User } from '@/types/api';
@@ -29,6 +30,10 @@ type AuthState = {
   /** Refreshes the cached profile in place without touching the session. */
   setUser: (user: User) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Swaps in a new token for the same account (the server upgraded this session) without re-fetching the profile. */
+  replaceToken: (token: string) => Promise<void>;
+  /** Drops the session locally only — the server already ended it from another device. */
+  clearSession: () => Promise<void>;
 };
 
 function parseUser(raw: string | null): User | null {
@@ -91,6 +96,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
         new Promise((resolve) => setTimeout(resolve, 3000)),
       ]);
     }
+    // Ends this device's session server-side, so it leaves Active sessions on
+    // the account's other devices. Same 3 s cap as above.
+    await Promise.race([
+      signOutSession().catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
     setAuthToken(null);
     set({ user: null, token: null });
     await Promise.all([
@@ -98,7 +109,29 @@ export const useAuthStore = create<AuthState>()((set) => ({
       secureStorage.remove(StorageKeys.user),
     ]);
   },
+
+  replaceToken: async (token) => {
+    setAuthToken(token);
+    set({ token });
+    await secureStorage.set(StorageKeys.token, token);
+  },
+
+  clearSession: async () => {
+    setRegisteredPushToken(null);
+    setAuthToken(null);
+    set({ user: null, token: null });
+    queryClient.clear();
+    await Promise.all([
+      secureStorage.remove(StorageKeys.token),
+      secureStorage.remove(StorageKeys.user),
+    ]);
+  },
 }));
+
+// Terminated from another device: every later request would 401, so sign out here too.
+setSessionEndedHandler(() => {
+  useAuthStore.getState().clearSession();
+});
 
 /** Display name that tolerates the single-name accounts `unified-auth` creates. */
 export function displayName(user: User | null): string {

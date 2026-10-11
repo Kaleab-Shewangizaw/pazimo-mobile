@@ -8,8 +8,10 @@ import { ComposeCinemaTicketStep } from '@/components/shares/compose-cinema-tick
 import { ComposeStep } from '@/components/shares/compose-step';
 import { ConfirmStep, type ConfirmSelection } from '@/components/shares/confirm-step';
 import { KindPickerStep } from '@/components/shares/kind-picker-step';
+import { MessageStep } from '@/components/shares/message-step';
 import { RecipientStep } from '@/components/shares/recipient-step';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
+import { Button } from '@/components/ui/button';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -39,12 +41,13 @@ import type { ShareUser } from '@/types/api';
  * what it's offering) skips the kind picker.
  */
 
-type StepKey = 'recipient' | 'kind' | 'item' | 'confirm';
+type StepKey = 'recipient' | 'kind' | 'item' | 'message' | 'confirm';
 
 const STEP_TITLE: Record<StepKey, string> = {
   recipient: 'Send to a friend',
   kind: 'What do you want to send?',
   item: 'Choose what to send',
+  message: 'Add a message',
   confirm: 'Review transfer',
 };
 
@@ -94,6 +97,7 @@ export function ShareItemSheet({
     if (!initialRecipient) steps.push('recipient');
     if (!forcedKind) steps.push('kind');
     steps.push('item');
+    steps.push('message');
     steps.push('confirm');
     return steps;
   }, [initialRecipient, forcedKind]);
@@ -356,10 +360,52 @@ export function ShareItemSheet({
     ? [recipient.firstName, recipient.lastName].filter(Boolean).join(' ').trim() || 'Pazimo user'
     : '';
 
+  // Counted from the resolved selections, not the raw maps/sets — a
+  // preselected id that never shows up in the list (already used, checked
+  // in, or no longer transferable) must not silently enable "Continue".
+  const itemCount =
+    selectedKind === 'BEVERAGE'
+      ? beverageSelections.length
+      : selectedKind === 'CINEMA_TICKET'
+        ? cinemaTicketSelections.length
+        : selectedKind === 'CINEMA_CONCESSION'
+          ? cinemaConcessionSelections.length
+          : ticketSelections.length;
+
+  // The step's primary action, pinned under the list so it never has to be
+  // scrolled to — the item lists here can run long.
+  const footer =
+    step === 'item' ? (
+      <Button
+        label={itemCount > 1 ? `Continue · ${itemCount} selected` : 'Continue'}
+        size="lg"
+        disabled={itemCount === 0}
+        onPress={() => goToStep(stepIndex + 1)}
+      />
+    ) : step === 'message' ? (
+      <Button
+        label={message.trim() ? 'Continue' : 'Skip'}
+        size="lg"
+        variant={message.trim() ? undefined : 'secondary'}
+        onPress={() => {
+          Keyboard.dismiss();
+          goToStep(stepIndex + 1);
+        }}
+      />
+    ) : step === 'confirm' ? (
+      <Button
+        label="Transfer"
+        size="lg"
+        loading={activeShare.submitting}
+        disabled={activeShare.submitting || confirmSelections.length === 0}
+        onPress={onSend}
+      />
+    ) : null;
+
   const headerTitle = step !== 'recipient' && recipient ? `To ${recipientName}` : STEP_TITLE[step];
 
   return (
-    <BottomSheet visible={visible} onClose={close}>
+    <BottomSheet visible={visible} onClose={close} footer={footer}>
       <View style={styles.header}>
         {stepIndex > 0 ? (
           <Touchable
@@ -396,9 +442,6 @@ export function ShareItemSheet({
               loading={salesLoading}
               selected={beverageSelected}
               onToggle={toggleBeverage}
-              message={message}
-              onChangeMessage={setMessage}
-              onContinue={() => goToStep(stepIndex + 1)}
             />
           ) : selectedKind === 'CINEMA_TICKET' ? (
             <ComposeCinemaTicketStep
@@ -406,9 +449,6 @@ export function ShareItemSheet({
               loading={cinemaTicketsLoading}
               selected={cinemaTicketSelected}
               onToggle={toggleCinemaTicket}
-              message={message}
-              onChangeMessage={setMessage}
-              onContinue={() => goToStep(stepIndex + 1)}
             />
           ) : selectedKind === 'CINEMA_CONCESSION' ? (
             <ComposeCinemaConcessionStep
@@ -416,9 +456,6 @@ export function ShareItemSheet({
               loading={cinemaConcessionsLoading}
               selected={cinemaConcessionSelected}
               onToggle={toggleCinemaConcession}
-              message={message}
-              onChangeMessage={setMessage}
-              onContinue={() => goToStep(stepIndex + 1)}
             />
           ) : (
             <ComposeStep
@@ -426,20 +463,23 @@ export function ShareItemSheet({
               loading={ticketsLoading}
               quantities={ticketQuantities}
               onChangeQuantity={changeTicketQuantity}
-              message={message}
-              onChangeMessage={setMessage}
-              onContinue={() => goToStep(stepIndex + 1)}
             />
           )
+        ) : step === 'message' ? (
+          <MessageStep
+            recipientName={recipientName}
+            kind={selectedKind ?? 'TICKET'}
+            itemCount={itemCount}
+            message={message}
+            onChangeMessage={setMessage}
+          />
         ) : (
           <ConfirmStep
             recipientName={recipientName}
             recipientHandle={recipient?.username}
             selections={confirmSelections}
             message={message.trim()}
-            submitting={activeShare.submitting}
             error={activeShare.error}
-            onConfirm={onSend}
           />
         )}
       </Animated.View>

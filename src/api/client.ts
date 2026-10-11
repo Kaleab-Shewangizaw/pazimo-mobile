@@ -1,6 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 
 import { Env } from '@/lib/env';
+import { getInstallationId } from '@/lib/installation';
 import { StorageKeys, secureStorage } from '@/lib/storage';
 
 /**
@@ -39,10 +40,20 @@ export async function loadAuthToken(): Promise<string | null> {
   return authToken;
 }
 
-api.interceptors.request.use((config) => {
+/** Set by the auth store: what to do when the server says this device was signed out elsewhere. */
+let onSessionEnded: (() => void) | null = null;
+
+export function setSessionEndedHandler(handler: (() => void) | null) {
+  onSessionEnded = handler;
+}
+
+api.interceptors.request.use(async (config) => {
   if (authToken) {
     config.headers.Authorization = `Bearer ${authToken}`;
   }
+  // Names the install on every call, so a sign-in's session shows which phone
+  // it is under Settings → Security → Active sessions.
+  config.headers['X-Installation-Id'] = await getInstallationId().catch(() => '');
   return config;
 });
 
@@ -151,6 +162,12 @@ api.interceptors.response.use(
     }
 
     const { status, data } = error.response;
+    // Terminated from another device. Only for the token this request carried —
+    // a late reply from before a fresh sign-in must not sign the new session out.
+    const sentToken = String(error.config?.headers?.Authorization ?? '').replace('Bearer ', '');
+    if (status === 401 && codeFrom(data) === 'SESSION_ENDED' && sentToken && sentToken === authToken) {
+      onSessionEnded?.();
+    }
     throw new ApiError(
       messageFrom(data, `Request failed (${status})`),
       status,
