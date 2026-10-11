@@ -2,7 +2,7 @@ import type { VideoSource } from 'expo-video';
 import { memo, useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnUI, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Rect } from 'react-native-svg';
 
 import { ScreenPanel } from '@/components/cinema/screen-panel';
@@ -24,17 +24,53 @@ const CURVE_SCALE = 0.45;
 /** Relative to fit-to-screen — 1 is "zoomed all the way back out". */
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+/** Each tap of + / − multiplies (or divides) the zoom by this. */
+const ZOOM_STEP = 1.5;
+
+/** Breathing room kept around the whole room at fit-to-screen — no seat ever touches (or is cut by) the edge. */
+const MAP_PADDING = Spacing.lg;
+const ZOOM_BUTTON = 34;
+/** A strip under the seats reserved for the zoom buttons, so they never sit on top of a seat at fit-to-screen. */
+const CONTROLS_SPACE = ZOOM_BUTTON + Spacing.sm * 2;
 
 export type SeatMapProps = {
   categories: CinemaSeatCategory[];
   rows: CinemaSeatRow[];
+  /** Lit up in white — what's being bought, sent, or (read-only) what you hold. */
   selectedKeys: string[];
-  onToggle: (seat: CinemaSeat) => void;
+  onToggle?: (seat: CinemaSeat) => void;
   /** A looping, muted clip for the auditorium's screen. */
   screenPreview?: VideoSource;
+  /**
+   * Picking which of YOUR seats to send: only these can be tapped, every
+   * other chair in the room is shown taken. Omitted, it's the booking map —
+   * any available seat can be picked.
+   */
+  selectableKeys?: string[];
+  /** Showing seats already bought — the same room, nothing tappable. */
+  readOnly?: boolean;
+  /** The summary card's prompt while nothing is selected. */
+  emptyHint?: string;
 };
 
-function SeatMapImpl({ categories, rows, selectedKeys, onToggle, screenPreview }: SeatMapProps) {
+/**
+ * The auditorium: the screen, what each seat color means, the seats
+ * themselves (pinch or + / − to zoom, drag once zoomed), and a running
+ * summary of what's selected. One component for all three places a seat
+ * map appears — booking, choosing which seats to send a friend, and seeing
+ * where you're sitting — so they all look exactly the same.
+ */
+function SeatMapImpl({
+  categories,
+  rows,
+  selectedKeys,
+  onToggle,
+  screenPreview,
+  selectableKeys,
+  readOnly = false,
+  emptyHint = 'Tap a seat below to select it',
+}: SeatMapProps) {
+  const selectable = selectableKeys ? new Set(selectableKeys) : undefined;
   const categoryByKey = new Map(categories.map((c) => [c.key, c]));
   const selected = new Set(selectedKeys);
   const pickedGroups = useMemo(
@@ -49,10 +85,17 @@ function SeatMapImpl({ categories, rows, selectedKeys, onToggle, screenPreview }
       {/* Established up front, before anyone starts tapping — the seat dots
           alone don't explain themselves. */}
       <CategoryLegend categories={categories} />
-      <ZoomableGrid rows={rows} categoryByKey={categoryByKey} selected={selected} onToggle={onToggle} />
+      <ZoomableGrid
+        rows={rows}
+        categoryByKey={categoryByKey}
+        selected={selected}
+        onToggle={onToggle}
+        selectable={selectable}
+        readOnly={readOnly}
+      />
       {/* Below the whole chart, never layered over it — a floating per-row
           label here used to sit on top of the seats themselves. */}
-      <SelectionSummary groups={pickedGroups} />
+      <SelectionSummary groups={pickedGroups} emptyHint={emptyHint} />
     </View>
   );
 }
@@ -116,7 +159,7 @@ function CategoryLegend({ categories }: { categories: CinemaSeatCategory[] }) {
  * sat. A constant footprint from the very first layout keeps the grid's
  * size independent of anything picked here.
  */
-function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
+function SelectionSummary({ groups, emptyHint }: { groups: PickedGroup[]; emptyHint: string }) {
   const totalCount = groups.reduce((sum, g) => sum + g.seats.length, 0);
   const totalPrice = groups.reduce(
     (sum, g) => sum + (g.category.price ?? 0) * g.seats.length,
@@ -139,7 +182,7 @@ function SelectionSummary({ groups }: { groups: PickedGroup[] }) {
         </Text>
       </View>
       <Text variant="small" style={styles.summaryLine} numberOfLines={1}>
-        {totalCount > 0 ? picksLine : 'Tap a seat below to select it'}
+        {totalCount > 0 ? picksLine : emptyHint}
       </Text>
     </View>
   );
@@ -150,25 +193,45 @@ function ZoomableGrid({
   categoryByKey,
   selected,
   onToggle,
+  selectable,
+  readOnly,
 }: {
   rows: CinemaSeatRow[];
   categoryByKey: Map<string, CinemaSeatCategory>;
   selected: Set<string>;
-  onToggle: (seat: CinemaSeat) => void;
+  onToggle?: (seat: CinemaSeat) => void;
+  selectable?: Set<string>;
+  readOnly: boolean;
 }) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
+  // Mirrors `scale` on the JS side — drives the buttons' enabled state and
+  // whether one-finger panning is on. Updated whenever a zoom settles.
+  const [zoom, setZoom] = useState(MIN_ZOOM);
 
   const fitScale = useMemo(() => {
     if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) {
       return 1;
     }
-    const fit = Math.min(containerSize.width / contentSize.width, containerSize.height / contentSize.height);
-    return Math.min(Math.max(fit, 0.5), 1.6);
+    // Fit the WHOLE room inside the padded area — no lower bound: a big hall
+    // on a small phone shrinks as far as it has to rather than spilling out
+    // of the viewport (it used to stop at 0.5× and cut the back rows off).
+    // Pinch or + to look closer.
+    const fit = Math.min(
+      (containerSize.width - MAP_PADDING * 2) / contentSize.width,
+      (containerSize.height - CONTROLS_SPACE - MAP_PADDING * 2) / contentSize.height,
+    );
+    return Math.min(Math.max(fit, 0.1), 1.6);
   }, [containerSize, contentSize]);
 
+  // The area the room is centered in: the viewport minus the zoom strip.
   const containerW = containerSize.width;
-  const containerH = containerSize.height;
+  const containerH = Math.max(0, containerSize.height - CONTROLS_SPACE);
+
+  // A curved row lifts its middle seats above the row's own box (see
+  // `SeatRow`'s translateY) — padded in so the front row's lift is part of
+  // the measured room, not drawn outside it.
+  const curveLift = rows.reduce((max, row) => Math.max(max, row.curve * CURVE_SCALE), 0);
   const contentW = contentSize.width;
   const contentH = contentSize.height;
 
@@ -183,9 +246,28 @@ function ZoomableGrid({
     'worklet';
     const scaledW = contentW * totalScale;
     const scaledH = contentH * totalScale;
-    const maxX = Math.max(0, (scaledW - containerW) / 2);
-    const maxY = Math.max(0, (scaledH - containerH) / 2);
+    // Zoomed in, drag far enough to bring every edge seat clear of the
+    // viewport edge (by the same padding as at fit-to-screen).
+    const maxX = Math.max(0, (scaledW - containerW) / 2 + MAP_PADDING);
+    const maxY = Math.max(0, (scaledH - containerH) / 2 + MAP_PADDING);
     return { x: Math.min(Math.max(x, -maxX), maxX), y: Math.min(Math.max(y, -maxY), maxY) };
+  };
+
+  /** Animates to `next` zoom, keeping the view inside the grid's edges. */
+  const settleZoom = (next: number) => {
+    'worklet';
+    const target = Math.min(Math.max(next, MIN_ZOOM), MAX_ZOOM);
+    // Scale the current offset with the zoom, so the part of the room in
+    // the middle of the view stays in the middle instead of drifting.
+    const ratio = savedScale.value > 0 ? target / savedScale.value : 1;
+    const clamped = clampPan(savedTranslateX.value * ratio, savedTranslateY.value * ratio, fitScale * target);
+    scale.value = withTiming(target);
+    translateX.value = withTiming(clamped.x);
+    translateY.value = withTiming(clamped.y);
+    savedScale.value = target;
+    savedTranslateX.value = clamped.x;
+    savedTranslateY.value = clamped.y;
+    runOnJS(setZoom)(target);
   };
 
   const pinch = Gesture.Pinch()
@@ -193,16 +275,23 @@ function ZoomableGrid({
       scale.value = Math.min(Math.max(savedScale.value * e.scale, MIN_ZOOM), MAX_ZOOM);
     })
     .onEnd(() => {
-      savedScale.value = scale.value;
-      const clamped = clampPan(translateX.value, translateY.value, fitScale * scale.value);
+      const ended = scale.value;
+      savedScale.value = ended;
+      const clamped = clampPan(translateX.value, translateY.value, fitScale * ended);
       translateX.value = withTiming(clamped.x);
       translateY.value = withTiming(clamped.y);
       savedTranslateX.value = clamped.x;
       savedTranslateY.value = clamped.y;
+      runOnJS(setZoom)(ended);
     });
 
+  // One finger drags the room around once it's zoomed in — at fit-to-screen
+  // there's nowhere to drag to, and leaving it off then keeps a parent
+  // scroll view (and plain seat taps) working normally. A small activation
+  // distance means a tap on a seat is still a tap, not a drag.
   const pan = Gesture.Pan()
-    .minPointers(2)
+    .enabled(zoom > MIN_ZOOM)
+    .minDistance(6)
     .onUpdate((e) => {
       const clamped = clampPan(
         savedTranslateX.value + e.translationX,
@@ -227,17 +316,11 @@ function ZoomableGrid({
     ],
   }));
 
-  const resetZoom = () => {
-    runOnUI(() => {
-      'worklet';
-      scale.value = withTiming(1);
-      translateX.value = withTiming(0);
-      translateY.value = withTiming(0);
-      savedScale.value = 1;
-      savedTranslateX.value = 0;
-      savedTranslateY.value = 0;
-    })();
-  };
+  const zoomBy = (factor: number) => runOnUI(settleZoom)(zoom * factor);
+  const resetZoom = () => runOnUI(settleZoom)(MIN_ZOOM);
+
+  const canZoomIn = zoom < MAX_ZOOM - 0.01;
+  const canZoomOut = zoom > MIN_ZOOM + 0.01;
 
   return (
     <View
@@ -247,7 +330,7 @@ function ZoomableGrid({
       }>
       <GestureDetector gesture={composed}>
         <Animated.View
-          style={[styles.grid, animatedStyle]}
+          style={[styles.grid, { paddingTop: curveLift }, animatedStyle]}
           onLayout={(e: LayoutChangeEvent) =>
             setContentSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
           }>
@@ -261,18 +344,34 @@ function ZoomableGrid({
               categoryByKey={categoryByKey}
               selected={selected}
               onToggle={onToggle}
+              selectable={selectable}
+              readOnly={readOnly}
             />
           ))}
         </Animated.View>
       </GestureDetector>
 
-      <GlassIconButton
-        icon="contract-outline"
-        accessibilityLabel="Reset zoom"
-        size={34}
-        onPress={resetZoom}
-        style={styles.resetButton}
-      />
+      <View style={styles.zoomControls}>
+        <GlassIconButton
+          icon="add"
+          accessibilityLabel="Zoom in"
+          size={ZOOM_BUTTON}
+          onPress={() => zoomBy(ZOOM_STEP)}
+          disabled={!canZoomIn}
+          style={!canZoomIn && styles.zoomDisabled}
+        />
+        <GlassIconButton
+          icon="remove"
+          accessibilityLabel="Zoom out"
+          size={ZOOM_BUTTON}
+          onPress={() => zoomBy(1 / ZOOM_STEP)}
+          disabled={!canZoomOut}
+          style={!canZoomOut && styles.zoomDisabled}
+        />
+        {canZoomOut ? (
+          <GlassIconButton icon="contract-outline" accessibilityLabel="Reset zoom" size={ZOOM_BUTTON} onPress={resetZoom} />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -282,11 +381,15 @@ function SeatRow({
   categoryByKey,
   selected,
   onToggle,
+  selectable,
+  readOnly,
 }: {
   row: CinemaSeatRow;
   categoryByKey: Map<string, CinemaSeatCategory>;
   selected: Set<string>;
-  onToggle: (seat: CinemaSeat) => void;
+  onToggle?: (seat: CinemaSeat) => void;
+  selectable?: Set<string>;
+  readOnly: boolean;
 }) {
   const count = row.seats.length;
   const center = (count - 1) / 2;
@@ -307,6 +410,8 @@ function SeatRow({
             isSelected={selected.has(seat.seatKey)}
             translateY={translateY}
             onToggle={onToggle}
+            selectable={selectable ? selectable.has(seat.seatKey) : undefined}
+            readOnly={readOnly}
           />
         );
       })}
@@ -320,18 +425,37 @@ function SeatCell({
   isSelected,
   translateY,
   onToggle,
+  selectable,
+  readOnly,
 }: {
   seat: CinemaSeat;
   category: CinemaSeatCategory | undefined;
   isSelected: boolean;
   translateY: number;
-  onToggle: (seat: CinemaSeat) => void;
+  onToggle?: (seat: CinemaSeat) => void;
+  /** Defined only when picking from your own seats: whether this is one of them. */
+  selectable?: boolean;
+  readOnly: boolean;
 }) {
   if (!seat.exists) {
     return <View style={styles.cellSpacer} />;
   }
 
-  const disabled = seat.status === 'sold' || seat.status === 'held' || seat.status === 'blocked';
+  const taken = seat.status === 'sold' || seat.status === 'held' || seat.status === 'blocked';
+
+  if (readOnly) {
+    // Drawn exactly as the booking map would draw it — just not tappable.
+    return (
+      <View
+        accessibilityLabel={isSelected ? `Your seat ${seat.number}` : undefined}
+        style={[styles.cell, { transform: [{ translateY }] }]}>
+        <SeatGlyph isSelected={isSelected} disabled={taken && !isSelected} categoryColor={category?.color} />
+      </View>
+    );
+  }
+
+  // Sending seats: yours are the only "available" chairs in the room.
+  const disabled = selectable === undefined ? taken : !selectable;
 
   return (
     <Touchable
@@ -339,7 +463,7 @@ function SeatCell({
       accessibilityLabel={`Seat ${seat.number}${category ? `, ${category.label}` : ''}`}
       accessibilityState={{ selected: isSelected, disabled }}
       disabled={disabled}
-      onPress={() => onToggle(seat)}
+      onPress={() => onToggle?.(seat)}
       pressedScale={disabled ? 1 : 0.88}
       style={[styles.cell, { transform: [{ translateY }] }]}>
       <SeatGlyph isSelected={isSelected} disabled={disabled} categoryColor={category?.color} />
@@ -409,14 +533,26 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: Radius.lg,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 0,
+    // Centered, not top-aligned: the room is shrunk with a transform around
+    // its own center, so a top-aligned room taller than the viewport slid
+    // DOWN as it scaled and its back rows were cut off at the bottom.
+    // Centered, the shrunk room lands squarely in the middle of the area.
+    justifyContent: 'center',
+    paddingBottom: CONTROLS_SPACE,
     backgroundColor: 'transparent',
   },
   grid: { gap: SEAT_GAP, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: SEAT_GAP, position: 'relative' },
 
-  resetButton: { position: 'absolute', right: Spacing.sm, bottom: Spacing.sm },
+  // A row in the reserved strip under the room, not a column over it.
+  zoomControls: {
+    position: 'absolute',
+    right: Spacing.sm,
+    bottom: Spacing.sm,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  zoomDisabled: { opacity: 0.4 },
 
   legend: {
     flexDirection: 'row',

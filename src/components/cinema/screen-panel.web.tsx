@@ -1,386 +1,137 @@
 import { getAssetByID } from '@react-native/assets-registry/registry';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { VideoSource } from 'expo-video';
 import { createElement } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
-import Svg, {
-  Defs,
-  Path,
-  Stop,
-  LinearGradient as SvgGradient,
-} from 'react-native-svg';
+import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
+
+import {
+  PANEL_HEIGHT,
+  PANEL_UNITS,
+  REFLECTION_FADE,
+  REFLECTION_PATH,
+  REFLECTION_START_OPACITY,
+  REFLECTION_VIDEO_TOP,
+  SCREEN_HEIGHT,
+  SCREEN_PATH,
+  SCREEN_UNITS,
+} from '@/components/cinema/screen-geometry';
 
 /**
- * ================================================================
- * CINEMA SCREEN
- * ================================================================
- *
- * Main screen:
- *
- *          ╭────────────────────╮
- *       ╭──╯                    ╰──╮
- *      ╰────────────────────────────╯
- *
- * The bottom edge curves upward toward the center.
+ * Web build of `screen-panel.tsx` — same single box, same shared geometry
+ * (see `screen-geometry.ts`); a plain `<video>` with CSS masks stands in for
+ * expo-video + MaskedView, which don't render on web.
  */
 
-export const SCREEN_VIEWBOX = '0 0 100 48';
+const PANEL_VIEWBOX = `0 0 100 ${PANEL_UNITS}`;
+const SCREEN_VIEWBOX = `0 0 100 ${SCREEN_UNITS}`;
 
-export const SCREEN_PATH =
-  'M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z';
+const svgUri = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
 
-/**
- * ================================================================
- * REFLECTION
- * ================================================================
- *
- * The reflection starts EXACTLY from the bottom contour of the
- * screen:
- *
- *      M 5,44 Q 50,28 95,44
- *
- * Then it expands outward as it travels downward:
- *
- *      top:    x = 5 → 95
- *      bottom: x = 0 → 100
- *
- * This creates the "narrow → wide" perspective.
- *
- * The top contour is deliberately identical to the screen's
- * bottom contour, eliminating the visible line/gap.
- */
-export const REFLECTION_PATH =
-  'M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z';
-
-/**
- * Reflection coordinate system.
- *
- * The reflection starts at Y=44, exactly where the screen's
- * bottom edge exists.
- */
-const REFLECTION_VIEWBOX = '0 28 100 38';
-
-/**
- * ================================================================
- * WEB MASKS
- * ================================================================
- */
-
-const MASK_URI = `data:image/svg+xml,${encodeURIComponent(
+const SCREEN_MASK = svgUri(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${SCREEN_VIEWBOX}" preserveAspectRatio="none"><path d="${SCREEN_PATH}" fill="#000"/></svg>`,
-)}`;
+);
 
-const REFLECTION_MASK_URI = `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${REFLECTION_VIEWBOX}" preserveAspectRatio="none"><path d="${REFLECTION_PATH}" fill="#000"/></svg>`,
-)}`;
+// The mask's own alpha does the fade, so the reflection dissolves into
+// whatever is behind it rather than into an assumed background color.
+const REFLECTION_MASK = svgUri(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${PANEL_VIEWBOX}" preserveAspectRatio="none">` +
+    `<defs><linearGradient id="f" x1="0" y1="${REFLECTION_FADE.from}" x2="0" y2="${REFLECTION_FADE.to}" gradientUnits="userSpaceOnUse">` +
+    `<stop offset="0" stop-color="#000" stop-opacity="${REFLECTION_START_OPACITY}"/>` +
+    `<stop offset="0.35" stop-color="#000" stop-opacity="${REFLECTION_START_OPACITY * 0.5}"/>` +
+    `<stop offset="1" stop-color="#000" stop-opacity="0"/>` +
+    `</linearGradient></defs><path d="${REFLECTION_PATH}" fill="url(#f)"/></svg>`,
+);
 
-/**
- * ================================================================
- * SCREEN PANEL
- * ================================================================
- */
+const mask = (uri: string) =>
+  ({
+    WebkitMaskImage: `url("${uri}")`,
+    maskImage: `url("${uri}")`,
+    WebkitMaskSize: '100% 100%',
+    maskSize: '100% 100%',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+  }) as unknown as ViewStyle;
+
+function video(uri: string, flipped: boolean) {
+  return createElement('video', {
+    src: uri,
+    autoPlay: true,
+    muted: true,
+    loop: true,
+    playsInline: true,
+    style: {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+      transform: flipped ? 'scaleY(-1)' : undefined,
+    },
+  });
+}
 
 export function ScreenPanel({ source }: { source?: VideoSource }) {
   const uri = resolveUri(source);
 
   return (
-    <View style={styles.screenContainer}>
-      {/* ==========================================================
-          MAIN SCREEN
-      ========================================================== */}
-
-      <View style={styles.screenPanel}>
+    <View style={styles.container} pointerEvents="none">
+      <View style={styles.panel}>
         {uri ? (
-          <View style={[StyleSheet.absoluteFill, maskStyle]}>
-            {createElement('video', {
-              src: uri,
-              autoPlay: true,
-              muted: true,
-              loop: true,
-              playsInline: true,
-              style: {
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-              },
-            })}
+          <View style={[StyleSheet.absoluteFill, mask(REFLECTION_MASK)]}>
+            <View style={styles.reflectedVideo}>{video(uri, true)}</View>
           </View>
         ) : (
-          <Svg
-            width="100%"
-            height="100%"
-            viewBox={SCREEN_VIEWBOX}
-            preserveAspectRatio="none"
-          >
+          <Svg style={StyleSheet.absoluteFill} viewBox={PANEL_VIEWBOX} preserveAspectRatio="none">
             <Defs>
               <SvgGradient
-                id="screenFill"
+                id="reflectionFill"
                 x1="0"
-                y1="0"
+                y1={REFLECTION_FADE.from}
                 x2="0"
-                y2="1"
-              >
-                <Stop
-                  offset="0"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.35}
-                />
-
-                <Stop
-                  offset="0.4"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.18}
-                />
-
-                <Stop
-                  offset="1"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.05}
-                />
+                y2={REFLECTION_FADE.to}
+                gradientUnits="userSpaceOnUse">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={REFLECTION_START_OPACITY * 0.45} />
+                <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
               </SvgGradient>
             </Defs>
-
-            <Path
-              d={SCREEN_PATH}
-              fill="url(#screenFill)"
-            />
+            <Path d={REFLECTION_PATH} fill="url(#reflectionFill)" />
           </Svg>
         )}
-      </View>
 
-      {/* ==========================================================
-          REFLECTION
-      ========================================================== */}
-
-      <View
-        style={styles.reflectionWrap}
-        pointerEvents="none"
-      >
-        <View style={styles.reflectionInner}>
+        <View style={styles.screen}>
           {uri ? (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                reflectionMaskStyle,
-              ]}
-            >
-              {createElement('video', {
-                src: uri,
-                autoPlay: true,
-                muted: true,
-                loop: true,
-                playsInline: true,
-                style: {
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  transform: 'scaleY(-1)',
-                  filter: 'blur(2px)',
-                },
-              })}
-            </View>
+            <View style={[StyleSheet.absoluteFill, mask(SCREEN_MASK)]}>{video(uri, false)}</View>
           ) : (
-            <Svg
-              width="100%"
-              height="100%"
-              viewBox={REFLECTION_VIEWBOX}
-              preserveAspectRatio="none"
-            >
+            <Svg width="100%" height="100%" viewBox={SCREEN_VIEWBOX} preserveAspectRatio="none">
               <Defs>
-                <SvgGradient
-                  id="reflectionFill"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <Stop
-                    offset="0"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.24}
-                  />
-
-                  <Stop
-                    offset="0.25"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.15}
-                  />
-
-                  <Stop
-                    offset="0.55"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.07}
-                  />
-
-                  <Stop
-                    offset="1"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0}
-                  />
+                <SvgGradient id="screenFill" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.35} />
+                  <Stop offset="0.4" stopColor="#FFFFFF" stopOpacity={0.18} />
+                  <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.05} />
                 </SvgGradient>
               </Defs>
-
-              <Path
-                d={REFLECTION_PATH}
-                fill="url(#reflectionFill)"
-              />
+              <Path d={SCREEN_PATH} fill="url(#screenFill)" />
             </Svg>
           )}
         </View>
-
-        {/* ========================================================
-            REFLECTION FADE
-        ======================================================== */}
-
-        <LinearGradient
-          colors={[
-            'rgba(5,5,7,0)',
-            'rgba(5,5,7,0.08)',
-            'rgba(5,5,7,0.28)',
-            'rgba(5,5,7,0.62)',
-            'rgba(5,5,7,0.98)',
-          ]}
-          locations={[
-            0,
-            0.16,
-            0.38,
-            0.68,
-            1,
-          ]}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
-
-        {/* ========================================================
-            CONTACT GLOW
-        ======================================================== */}
-
-        <LinearGradient
-          colors={[
-            'rgba(255,255,255,0.055)',
-            'rgba(255,255,255,0.018)',
-            'rgba(255,255,255,0)',
-          ]}
-          style={styles.reflectionHighlight}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
       </View>
     </View>
   );
 }
 
-/**
- * ================================================================
- * VIDEO URI RESOLUTION
- * ================================================================
- */
-
 function resolveUri(source?: VideoSource): string | null {
-  if (source == null) {
-    return null;
-  }
-
-  if (typeof source === 'string') {
-    return source;
-  }
-
+  if (source == null) return null;
+  if (typeof source === 'string') return source;
   if (typeof source === 'number') {
     const asset = getAssetByID(source);
-
-    if (!asset) {
-      return null;
-    }
-
+    if (!asset) return null;
     const type = asset.type ? `.${asset.type}` : '';
-
     return `${asset.httpServerLocation}/${asset.name}${type}`;
   }
-
   return source.uri ?? null;
 }
 
-/**
- * ================================================================
- * WEB MASK STYLES
- * ================================================================
- */
-
-const maskStyle = {
-  WebkitMaskImage: `url("${MASK_URI}")`,
-  maskImage: `url("${MASK_URI}")`,
-  WebkitMaskSize: '100% 100%',
-  maskSize: '100% 100%',
-  WebkitMaskRepeat: 'no-repeat',
-  maskRepeat: 'no-repeat',
-} as unknown as ViewStyle;
-
-const reflectionMaskStyle = {
-  WebkitMaskImage: `url("${REFLECTION_MASK_URI}")`,
-  maskImage: `url("${REFLECTION_MASK_URI}")`,
-  WebkitMaskSize: '100% 100%',
-  maskSize: '100% 100%',
-  WebkitMaskRepeat: 'no-repeat',
-  maskRepeat: 'no-repeat',
-} as unknown as ViewStyle;
-
-/**
- * ================================================================
- * STYLES
- * ================================================================
- */
-
 const styles = StyleSheet.create({
-  screenContainer: {
-    width: '100%',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-
-  /**
-   * Main screen.
-   */
-  screenPanel: {
-    width: '98%',
-    height: 116,
-    zIndex: 2,
-  },
-
-  /**
-   * Reflection.
-   *
-   * It overlaps the screen enough for the two curved contours
-   * to physically meet.
-   */
-  reflectionWrap: {
-    width: '98%',
-    height: 92,
-    marginTop: -46,
-    position: 'relative',
-    alignSelf: 'center',
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-
-  /**
-   * Reflection itself.
-   */
-  reflectionInner: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.44,
-  },
-
-  /**
-   * Soft contact highlight.
-   */
-  reflectionHighlight: {
-    position: 'absolute',
-    left: '5%',
-    right: '5%',
-    top: 0,
-    height: 30,
-    opacity: 0.5,
-  },
+  container: { width: '100%', alignItems: 'center' },
+  panel: { width: '98%', height: PANEL_HEIGHT, overflow: 'hidden' },
+  screen: { position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT },
+  reflectedVideo: { position: 'absolute', left: 0, right: 0, top: REFLECTION_VIDEO_TOP, height: SCREEN_HEIGHT },
 });

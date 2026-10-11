@@ -1,80 +1,33 @@
 import MaskedView from '@react-native-masked-view/masked-view';
-import { LinearGradient } from 'expo-linear-gradient';
-import {
-  useVideoPlayer,
-  VideoView,
-  type VideoSource,
-} from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
 import { StyleSheet, View } from 'react-native';
-import Svg, {
-  Defs,
-  Path,
-  Stop,
-  LinearGradient as SvgGradient,
-} from 'react-native-svg';
+import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
+
+import {
+  PANEL_HEIGHT,
+  PANEL_UNITS,
+  REFLECTION_FADE,
+  REFLECTION_PATH,
+  REFLECTION_START_OPACITY,
+  REFLECTION_VIDEO_TOP,
+  SCREEN_HEIGHT,
+  SCREEN_PATH,
+  SCREEN_UNITS,
+} from '@/components/cinema/screen-geometry';
+
+const PANEL_VIEWBOX = `0 0 100 ${PANEL_UNITS}`;
+const SCREEN_VIEWBOX = `0 0 100 ${SCREEN_UNITS}`;
 
 /**
- * ================================================================
- * CINEMA SCREEN GEOMETRY
- * ================================================================
+ * The cinema screen at the top of a seat map, playing a looping muted clip,
+ * with its reflection on the floor below. Both layers sit in ONE box and
+ * share one coordinate system (see `screen-geometry.ts`), so the reflection
+ * begins exactly on the screen's curved bottom edge — no gap, no overlap.
+ *
+ * The reflection fades out through its mask's own alpha rather than a
+ * painted-on gradient, so it dissolves into whatever is behind the map
+ * instead of into an assumed background color.
  */
-
-export const SCREEN_VIEWBOX = '0 0 100 48';
-
-/**
- * Main curved cinema screen.
- *
- * Bottom edge:
- *
- *     M 5,44 Q 50,28 95,44
- */
-export const SCREEN_PATH =
-  'M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z';
-
-/**
- * ================================================================
- * CONNECTED REFLECTION
- * ================================================================
- *
- * The reflection starts with the EXACT SAME CURVE as the bottom
- * of the screen:
- *
- *     M 5,44 Q 50,28 95,44
- *
- * Then expands outward:
- *
- *     5 → 95   at the top
- *     0 → 100  at the bottom
- *
- * So it is:
- *
- *              SCREEN
- *                 │
- *              narrow
- *                 ↓
- *               wider
- *                 ↓
- *                wide
- */
-export const REFLECTION_PATH =
-  'M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z';
-
-/**
- * IMPORTANT:
- *
- * The reflection viewport starts at Y=44.
- *
- * Therefore its first visible pixel is exactly the screen's
- * bottom contour.
- */
-const REFLECTION_VIEWBOX = '0 44 100 22';
-
-/**
- * ================================================================
- * SCREEN PANEL
- * ================================================================
- */
-
 export function ScreenPanel({ source }: { source?: VideoSource }) {
   const player = useVideoPlayer(source ?? null, (p) => {
     p.loop = true;
@@ -83,261 +36,103 @@ export function ScreenPanel({ source }: { source?: VideoSource }) {
   });
 
   return (
-    <View style={styles.screenContainer}>
-      {/* ==========================================================
-          MAIN CURVED SCREEN
-      ========================================================== */}
-
-      <View style={styles.screenPanel}>
+    <View style={styles.container} pointerEvents="none">
+      <View style={styles.panel}>
+        {/* Reflection first, so the screen draws over the shared edge. */}
         {source ? (
           <MaskedView
             style={StyleSheet.absoluteFill}
             maskElement={
-              <Svg
-                width="100%"
-                height="100%"
-                viewBox={SCREEN_VIEWBOX}
-                preserveAspectRatio="none"
-              >
-                <Path
-                  d={SCREEN_PATH}
-                  fill="#000000"
-                />
+              <Svg width="100%" height="100%" viewBox={PANEL_VIEWBOX} preserveAspectRatio="none">
+                <FadeGradient id="reflectionMask" color="#000000" />
+                <Path d={REFLECTION_PATH} fill="url(#reflectionMask)" />
               </Svg>
-            }
-          >
+            }>
             <VideoView
               player={player}
-              style={StyleSheet.absoluteFill}
+              style={styles.reflectedVideo}
               contentFit="cover"
               nativeControls={false}
-              pointerEvents="none"
             />
           </MaskedView>
         ) : (
-          <Svg
-            width="100%"
-            height="100%"
-            viewBox={SCREEN_VIEWBOX}
-            preserveAspectRatio="none"
-          >
-            <Defs>
-              <SvgGradient
-                id="screenFill"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <Stop
-                  offset="0"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.30}
-                />
-
-                <Stop
-                  offset="0.4"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.17}
-                />
-
-                <Stop
-                  offset="1"
-                  stopColor="#FFFFFF"
-                  stopOpacity={0.05}
-                />
-              </SvgGradient>
-            </Defs>
-
-            <Path
-              d={SCREEN_PATH}
-              fill="url(#screenFill)"
-            />
+          <Svg style={StyleSheet.absoluteFill} viewBox={PANEL_VIEWBOX} preserveAspectRatio="none">
+            <FadeGradient id="reflectionFill" color="#FFFFFF" scale={0.45} />
+            <Path d={REFLECTION_PATH} fill="url(#reflectionFill)" />
           </Svg>
         )}
-      </View>
 
-      {/* ==========================================================
-          CONNECTED REFLECTION
-
-          No separate background.
-          No separate highlight.
-          No visual gap.
-      ========================================================== */}
-
-      <View
-        style={styles.reflectionWrap}
-        pointerEvents="none"
-      >
-        <View style={styles.reflectionInner}>
+        <View style={styles.screen}>
           {source ? (
             <MaskedView
               style={StyleSheet.absoluteFill}
               maskElement={
-                <Svg
-                  width="100%"
-                  height="100%"
-                  viewBox={REFLECTION_VIEWBOX}
-                  preserveAspectRatio="none"
-                >
-                  <Path
-                    d={REFLECTION_PATH}
-                    fill="#000000"
-                  />
+                <Svg width="100%" height="100%" viewBox={SCREEN_VIEWBOX} preserveAspectRatio="none">
+                  <Path d={SCREEN_PATH} fill="#000000" />
                 </Svg>
-              }
-            >
+              }>
               <VideoView
                 player={player}
-                style={[
-                  StyleSheet.absoluteFill,
-                  styles.reflectedVideo,
-                ]}
+                style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 nativeControls={false}
-                pointerEvents="none"
               />
             </MaskedView>
           ) : (
-            <Svg
-              width="100%"
-              height="100%"
-              viewBox={REFLECTION_VIEWBOX}
-              preserveAspectRatio="none"
-            >
+            <Svg width="100%" height="100%" viewBox={SCREEN_VIEWBOX} preserveAspectRatio="none">
               <Defs>
-                <SvgGradient
-                  id="reflectionFill"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <Stop
-                    offset="0"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.22}
-                  />
-
-                  <Stop
-                    offset="0.25"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.13}
-                  />
-
-                  <Stop
-                    offset="0.55"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0.06}
-                  />
-
-                  <Stop
-                    offset="1"
-                    stopColor="#FFFFFF"
-                    stopOpacity={0}
-                  />
+                <SvgGradient id="screenFill" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.3} />
+                  <Stop offset="0.4" stopColor="#FFFFFF" stopOpacity={0.17} />
+                  <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.05} />
                 </SvgGradient>
               </Defs>
-
-              <Path
-                d={REFLECTION_PATH}
-                fill="url(#reflectionFill)"
-              />
+              <Path d={SCREEN_PATH} fill="url(#screenFill)" />
             </Svg>
           )}
         </View>
-
-        {/* ========================================================
-            REFLECTION FADE
-        ======================================================== */}
-
-        <LinearGradient
-          pointerEvents="none"
-          colors={[
-            'rgba(5,5,7,0)',
-            'rgba(5,5,7,0.08)',
-            'rgba(5,5,7,0.30)',
-            'rgba(5,5,7,0.68)',
-            'rgba(5,5,7,1)',
-          ]}
-          locations={[
-            0,
-            0.16,
-            0.38,
-            0.68,
-            1,
-          ]}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-        />
       </View>
     </View>
   );
 }
 
 /**
- * ================================================================
- * STYLES
- * ================================================================
+ * Fades down the reflection in panel units: `REFLECTION_START_OPACITY` at
+ * the screen's edge, nothing at the bottom. As a mask (black) it fades the
+ * mirrored video itself; as a fill (white) it's the no-video fallback.
  */
+function FadeGradient({ id, color, scale = 1 }: { id: string; color: string; scale?: number }) {
+  const start = REFLECTION_START_OPACITY * scale;
+  return (
+    <Defs>
+      <SvgGradient
+        id={id}
+        x1="0"
+        y1={REFLECTION_FADE.from}
+        x2="0"
+        y2={REFLECTION_FADE.to}
+        gradientUnits="userSpaceOnUse">
+        <Stop offset="0" stopColor={color} stopOpacity={start} />
+        <Stop offset="0.35" stopColor={color} stopOpacity={start * 0.5} />
+        <Stop offset="1" stopColor={color} stopOpacity={0} />
+      </SvgGradient>
+    </Defs>
+  );
+}
 
 const styles = StyleSheet.create({
-  screenContainer: {
-    width: '100%',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-
-  /**
-   * Main screen.
-   */
-  screenPanel: {
-    width: '98%',
-    height: 116,
-    zIndex: 2,
-  },
-
-  /**
-   * The screen path ends at Y=44 inside a 48-unit viewBox.
-   *
-   * 44 / 48 * 116 ≈ 106px.
-   *
-   * So the reflection begins about 10px before the screen
-   * container ends.
-   *
-   * This connects the actual visible shapes instead of the
-   * rectangular containers.
-   */
-  reflectionWrap: {
-    width: '98%',
-    height: 80,
-    marginTop: -46,
-    position: 'relative',
-    alignSelf: 'center',
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-
-  /**
-   * ONLY the reflection.
-   *
-   * There is no separate floor/background layer.
-   */
-  reflectionInner: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.44,
-  },
-
-  /**
-   * Mirror the actual video vertically.
-   */
+  container: { width: '100%', alignItems: 'center' },
+  panel: { width: '98%', height: PANEL_HEIGHT, overflow: 'hidden' },
+  // The screen's video box is exactly the screen's units tall, so its mask
+  // (viewBox 0…SCREEN_UNITS) lines up with the panel's own coordinates.
+  screen: { position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT },
+  // The same video, flipped about the screen's bottom contour.
   reflectedVideo: {
-    transform: [
-      {
-        scaleY: -1,
-      },
-    ],
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: REFLECTION_VIDEO_TOP,
+    height: SCREEN_HEIGHT,
+    transform: [{ scaleY: -1 }],
   },
 });

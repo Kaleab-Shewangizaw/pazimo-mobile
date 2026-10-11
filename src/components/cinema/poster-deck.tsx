@@ -47,42 +47,56 @@ const HINT_DELAY = 620;
 
 const CARD_RADIUS = 28;
 
-const POSTER_ASPECT = 1.5;
+/**
+ * Tallest the card may get relative to its width. Posters are 2:3 (1.5); going
+ * a little past that lets the card fill a tall screen, with `cover` trimming a
+ * sliver off the poster's sides rather than leaving the stage half empty.
+ */
+const MAX_CARD_ASPECT = 2.1;
 
 /**
  * ============================================================
  * STACK PREVIEW
  * ============================================================
  *
- * The first upcoming card peeks slightly above the current one.
+ * The films after the current one sit behind it as a deck, each
+ * a little narrower and showing an even TIP above the one in
+ * front of it:
  *
- * The second and third upcoming cards peek a little further
- * above it, creating the visual feeling of a deck.
+ *        ┌─────────────┐   level 2 ── 3rd film after
+ *       ┌───────────────┐  level 1 ── 2nd film after
+ *      ┌─────────────────┐ level 0 ── next film
+ *     ┌───────────────────┐
+ *     │      CURRENT      │ level -1 (front)
  *
- * ONLY THE TOP is exposed.
- *
- * Nothing is added to the bottom.
- */
-const PEEK_RATIO = 0.09;
-const PEEK_SCALE = 0.93;
-
-/**
- * Additional cards in the visible stack.
- *
- * Keeping this at 3 gives:
- *
- *     Movie 3  ── tiny tip
- *       Movie 2 ── tip
- *         Movie 1 ── current
- *
- * without making the stack distracting.
+ * Every card lives on one of these levels, and a swipe moves each
+ * card exactly one level (down = forward, up = back), so the tip
+ * you see is always the film you land on next.
  */
 const STACK_PREVIEW_COUNT = 3;
 
+/** How much of each card shows above the one in front, as a fraction of card height. */
+const TIP_RATIO = 0.03;
+
+/** How much narrower each level is than the one in front of it. */
+const LEVEL_SCALE_STEP = 0.04;
+
+/** Headroom reserved above the front card so the tips sit inside the clipped deck. */
+const STACK_INSET_RATIO = STACK_PREVIEW_COUNT * TIP_RATIO;
+
+function levelScale(level: number): number {
+  return 1 - (level + 1) * LEVEL_SCALE_STEP;
+}
+
 /**
- * Distance between each visible card tip.
+ * translateY that puts a card's top edge one tip above the level in front.
+ * Cards scale about their centre, so a shrunk card's top edge has already
+ * dropped by half the height it lost — that has to be pulled back up.
  */
-const STACK_GAP_RATIO = 0.055;
+function levelY(level: number, height: number): number {
+  const top = -(level + 1) * TIP_RATIO * height;
+  return top - (height * (1 - levelScale(level))) / 2;
+}
 
 export type PosterDeckProps = {
   entries: ProgrammeEntry[];
@@ -106,12 +120,11 @@ function PosterDeckImpl({
   onOpen,
 }: PosterDeckProps) {
   const height = Math.min(
-    width * POSTER_ASPECT,
-    maxHeight ?? Infinity,
+    width * MAX_CARD_ASPECT,
+    (maxHeight ?? Infinity) / (1 + STACK_INSET_RATIO),
   );
+  const inset = Math.ceil(height * STACK_INSET_RATIO);
 
-  const peek = height * PEEK_RATIO;
-  const stackGap = height * STACK_GAP_RATIO;
 
   const [index, setIndex] = useState(0);
   const [drag] = useState(() => new Animated.Value(0));
@@ -314,66 +327,41 @@ function PosterDeckImpl({
   }
 
   const current = entries[index];
-
-  /**
-   * We keep the previous card exactly as before.
-   */
   const previous = entries[index - 1];
 
   /**
-   * Build the upcoming stack.
-   *
-   * entries[index + 1]
-   * entries[index + 2]
-   * entries[index + 3]
+   * The films behind the current one, nearest first. One more than
+   * is shown is rendered: it waits on the level above the deck's top
+   * edge (clipped out of sight) and slides into the last visible tip
+   * as everything moves forward, instead of popping in afterwards.
    */
   const upcoming = entries.slice(
     index + 1,
-    index + 1 + STACK_PREVIEW_COUNT,
+    index + 2 + STACK_PREVIEW_COUNT,
   );
 
-  /**
-   * ==========================================================
-   * CURRENT CARD
-   * ==========================================================
-   *
-   * Same behavior as the original:
-   *
-   * positive drag -> card moves down.
-   *
-   * negative drag -> front card stays at the top while the
-   * previous card comes over it.
-   */
-  const frontY = drag.interpolate({
-    inputRange: [-1, 0, 1],
-    outputRange: [0, 0, 1],
-  });
+  // Every card is driven by the same drag, across three stops:
+  //   -height  a full swipe UP   (back: everything moves one level deeper)
+  //    0       at rest
+  //   +height  a full swipe DOWN (forward: everything moves one level nearer)
+  const inputRange = [-height, 0, height];
 
-  /**
-   * ==========================================================
-   * PREVIOUS CARD
-   * ==========================================================
-   *
-   * EXACT SAME movement:
-   *
-   * At rest:
-   *   translateY = height
-   *
-   * Swipe UP:
-   *   translateY -> 0
-   *
-   * No blur.
-   * No opacity.
-   */
-  const previousY = drag.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [0, height],
+  /** Forward: leaves downward. Back: steps into the first level behind. */
+  const frontY = drag.interpolate({
+    inputRange,
+    outputRange: [levelY(0, height), 0, height],
+    extrapolate: 'clamp',
+  });
+  const frontScale = drag.interpolate({
+    inputRange,
+    outputRange: [levelScale(0), 1, 1],
     extrapolate: 'clamp',
   });
 
-  const previousScale = drag.interpolate({
-    inputRange: [-height, 0],
-    outputRange: [1, PEEK_SCALE],
+  /** Parked just below the deck; a swipe up brings it back over the front. */
+  const previousY = drag.interpolate({
+    inputRange,
+    outputRange: [0, height, height],
     extrapolate: 'clamp',
   });
 
@@ -383,39 +371,18 @@ function PosterDeckImpl({
         styles.deck,
         {
           width,
-          height,
+          height: height + inset,
         },
       ]}
       {...pan.panHandlers}
     >
-      {/* ==================================================== */}
-      {/* PREVIOUS CARD                                        */}
-      {/* ==================================================== */}
       {previous ? (
         <Animated.View
           style={[
             styles.layer,
+            { top: inset },
             styles.previousLayer,
-            {
-              /**
-               * IMPORTANT:
-               *
-               * Completely solid.
-               *
-               * No blur.
-               * No fade.
-               */
-              opacity: 1,
-
-              transform: [
-                {
-                  translateY: previousY,
-                },
-                {
-                  scale: previousScale,
-                },
-              ],
-            },
+            { transform: [{ translateY: previousY }] },
           ]}
         >
           <PosterCard
@@ -426,95 +393,26 @@ function PosterDeckImpl({
         </Animated.View>
       ) : null}
 
-      {/* ==================================================== */}
-      {/* UPCOMING STACK                                       */}
-      {/* ==================================================== */}
-      {/*
-       *
-       * The cards are rendered from deepest -> closest.
-       *
-       * Each one sits slightly higher than the one before it.
-       *
-       * This creates:
-       *
-       *        ┌───────────────┐
-       *        │    MOVIE 3   │
-       *        └───────────────┘
-       *          ┌───────────────┐
-       *          │    MOVIE 2   │
-       *          └───────────────┘
-       *            ┌───────────────┐
-       *            │    MOVIE 1   │
-       *            └───────────────┘
-       *              CURRENT
-       *
-       * Only the TOP tips are visible.
-       *
-       * There is NOTHING sticking out from the bottom.
-       */}
-
+      {/* Deepest first, so nearer cards draw over the ones behind them. */}
       {upcoming
-        .slice()
+        .map((entry, level) => ({ entry, level }))
         .reverse()
-        .map((entry, reversedIndex) => {
-          /**
-           * Convert reversed index back into stack position.
-           *
-           * Example:
-           *
-           * Movie 3 -> 2
-           * Movie 2 -> 1
-           * Movie 1 -> 0
-           */
-          const stackIndex =
-            upcoming.length - 1 - reversedIndex;
-
-          /**
-           * The closest upcoming card is the lowest one.
-           *
-           * Deeper cards sit further above it.
-           */
-          const restingY =
-            -peek - stackIndex * stackGap;
-
-          /**
-           * When the current card moves down, the closest
-           * upcoming card moves into its position.
-           *
-           * The other cards follow the same stack relationship.
-           */
-          const targetY =
-            stackIndex === 0
-              ? 0
-              : -stackIndex * stackGap;
-
+        .map(({ entry, level }) => {
           const cardY = drag.interpolate({
-            inputRange: [0, height],
-            outputRange: [restingY, targetY],
+            inputRange,
+            outputRange: [
+              levelY(level + 1, height),
+              levelY(level, height),
+              levelY(level - 1, height),
+            ],
             extrapolate: 'clamp',
           });
-
-          /**
-           * Keep the cards slightly smaller while they are
-           * behind the current poster.
-           *
-           * They become full size as they become the front card.
-           */
           const scale = drag.interpolate({
-            inputRange: [0, height],
+            inputRange,
             outputRange: [
-              Math.max(
-                0.88,
-                PEEK_SCALE -
-                  stackIndex * 0.025,
-              ),
-              stackIndex === 0
-                ? 1
-                : Math.max(
-                    0.88,
-                    PEEK_SCALE -
-                      (stackIndex - 1) * 0.025,
-                  ),
+              levelScale(level + 1),
+              levelScale(level),
+              levelScale(level - 1),
             ],
             extrapolate: 'clamp',
           });
@@ -525,30 +423,11 @@ function PosterDeckImpl({
               pointerEvents="none"
               style={[
                 styles.layer,
-
-                /**
-                 * Deeper cards get lower z-index.
-                 * The closest upcoming card sits above them.
-                 */
+                { top: inset },
                 {
-                  zIndex: 10 + stackIndex,
-
-                  /**
-                   * FULLY SOLID.
-                   *
-                   * No blur.
-                   * No opacity animation.
-                   */
-                  opacity: 1,
-
-                  transform: [
-                    {
-                      translateY: cardY,
-                    },
-                    {
-                      scale,
-                    },
-                  ],
+                  // Nearer levels above deeper ones, all below the front card.
+                  zIndex: 50 - level,
+                  transform: [{ translateY: cardY }, { scale }],
                 },
               ]}
             >
@@ -567,6 +446,7 @@ function PosterDeckImpl({
       <Animated.View
         style={[
           styles.layer,
+          { top: inset },
 
           /**
            * Always above the upcoming cards.
@@ -577,6 +457,9 @@ function PosterDeckImpl({
             transform: [
               {
                 translateY: frontY,
+              },
+              {
+                scale: frontScale,
               },
             ],
           },
