@@ -85,18 +85,30 @@ function resendCountdown(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+// The reset flow, worded for a wallet that has no PIN at all (Pazimo support
+// cleared it), where "forgot" and "reset" would be confusing.
+const SET_PIN_COPY = {
+  title: 'Set your wallet PIN',
+  intro:
+    'Your wallet doesn’t have a PIN right now. We’ll text a code to the phone number on your account, then you choose a new 6-digit PIN.',
+  button: 'Send me a code',
+};
+
 export function WalletCodeSheet({
   visible,
   purpose,
   onClose,
+  settingNewPin,
 }: {
   visible: boolean;
   purpose: WalletCodePurpose;
   onClose: () => void;
+  /** With purpose "reset_pin": the wallet has no PIN, so word it as setting one. */
+  settingNewPin?: boolean;
 }) {
   const theme = useTheme();
   const queryClient = useQueryClient();
-  const copy = COPY[purpose];
+  const copy = purpose === 'reset_pin' && settingNewPin ? SET_PIN_COPY : COPY[purpose];
 
   const [step, setStep] = useState<Step>(() => (liveCode(purpose) ? 'code' : 'intro'));
   const [maskedPhone, setMaskedPhone] = useState<string | null>(() => liveCode(purpose)?.maskedPhone ?? null);
