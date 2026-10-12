@@ -54,6 +54,8 @@ export default function WalletScreen() {
   const freeze = useFreezeWallet();
 
   const [codeFlow, setCodeFlow] = useState<WalletCodePurpose | null>(null);
+  // True while the PIN flow is open because the wallet has no PIN at all.
+  const [settingNewPin, setSettingNewPin] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
@@ -221,6 +223,27 @@ export default function WalletScreen() {
           })}
         </View>
 
+        {!data.pinSet ? (
+          <View style={[styles.notice, { borderColor: theme.glassBorder, backgroundColor: theme.surface }]}>
+            <View style={styles.point}>
+              <Ionicons name="keypad-outline" size={18} color={theme.text} />
+              <Text variant="body" style={styles.flex}>
+                Set a wallet PIN to pay with your wallet.
+              </Text>
+            </View>
+            <Text variant="small" color="textSecondary">
+              Your wallet doesn’t have a PIN right now. It takes a code sent to your phone and a new 6-digit PIN.
+            </Text>
+            <Button
+              label="Set PIN"
+              onPress={() => {
+                setSettingNewPin(true);
+                setCodeFlow('reset_pin');
+              }}
+            />
+          </View>
+        ) : null}
+
         {notices.length ? (
           <View style={[styles.notice, { borderColor: theme.glassBorder, backgroundColor: theme.surface }]}>
             {notices.map((notice) => (
@@ -341,7 +364,15 @@ export default function WalletScreen() {
       )}
 
       {codeFlow ? (
-        <WalletCodeSheet visible purpose={codeFlow} onClose={() => setCodeFlow(null)} />
+        <WalletCodeSheet
+          visible
+          purpose={codeFlow}
+          settingNewPin={settingNewPin}
+          onClose={() => {
+            setCodeFlow(null);
+            setSettingNewPin(false);
+          }}
+        />
       ) : null}
       {data?.exists ? (
         <DepositSheet visible={depositOpen} onClose={() => setDepositOpen(false)} wallet={data} />
