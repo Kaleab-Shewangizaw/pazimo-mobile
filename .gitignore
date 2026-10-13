@@ -42,3 +42,5 @@ example
 /ios
 /android
 .env
+# Locally built release artifacts (APKs)
+/release
