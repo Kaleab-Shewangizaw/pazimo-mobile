@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
@@ -47,7 +47,12 @@ export function DepositSheet({
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  const methods = wallet.depositMethods;
+  // Only the methods this build knows how to show — a newer server may list
+  // one added after this release, and an unknown id would have no name/logo.
+  const methods = useMemo(
+    () => wallet.depositMethods.filter((id) => id in DEPOSIT_METHODS),
+    [wallet.depositMethods],
+  );
   const [amount, setAmount] = useState('');
   const [picked, setPicked] = useState<WalletDepositMethod | null>(null);
   const [phone, setPhone] = useState<string | null>(null);

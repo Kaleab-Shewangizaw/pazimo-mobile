@@ -1263,7 +1263,14 @@ export type Recap = {
  * Pazimo Wallet (backend: /api/wallet, and method "wallet" on checkouts)
  * ------------------------------------------------------------------ */
 
-export type WalletDepositMethod = 'telebirr' | 'cbebirr' | 'mpesa' | 'awashbirr' | 'boa_ussd' | 'card';
+export type WalletDepositMethod =
+  | 'telebirr'
+  | 'cbebirr'
+  | 'cbe_ussd'
+  | 'mpesa'
+  | 'awashbirr'
+  | 'boa_ussd'
+  | 'card';
 
 /** `GET /wallet` — the wallet as seen from this phone. `exists: false` until setup finishes. */
 export type WalletSummary = {
