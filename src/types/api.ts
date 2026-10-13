@@ -43,8 +43,9 @@ export type EventOrganizer = {
   firstName?: string;
   lastName?: string;
   fullName?: string;
-  /** `image` is a server path or full URL; run it through `resolveImageUrl`. */
-  organizerProfile?: { organization?: string; image?: string | null };
+  /** `User.profilePicture` — a server path or full URL; run it through `resolveImageUrl`. */
+  profilePicture?: string | null;
+  organizerProfile?: { organization?: string };
 };
 
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
@@ -465,7 +466,6 @@ export type ChapaMethod = string;
 export type CardMethod = 'visa' | 'mastercard';
 export type PaymentMethodId = SantimMethod | ChapaMethod | CardMethod;
 
-export type PaymentInitiateRequest = {
 /**
  * `GET /config/payment/methods` — the methods an admin has switched on, in the
  * order customers should see them. `image` is a web path: built-in logos are
@@ -479,6 +479,7 @@ export type PaymentMethodOption = {
   image: string | null;
 };
 
+export type PaymentInitiateRequest = {
   currency: Currency;
   paymentReason: string;
   phoneNumber: string;
