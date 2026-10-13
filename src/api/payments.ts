@@ -4,6 +4,7 @@ import type {
   PaymentConfig,
   PaymentInitiateRequest,
   PaymentInitiateResponse,
+  PaymentMethodOption,
   PaymentStatusResponse,
 } from '@/types/api';
 
@@ -14,6 +15,15 @@ import type {
  */
 export function fetchPaymentConfig(): Promise<PaymentConfig> {
   return getData<PaymentConfig>('/config/payment/active');
+}
+
+/**
+ * The methods customers can pay with right now, in display order. Managed in
+ * Admin → Finance → Payment methods — an admin switches one off when it's
+ * failing, so it is read rather than baked in.
+ */
+export function fetchPaymentMethods(): Promise<PaymentMethodOption[]> {
+  return getData<PaymentMethodOption[]>('/config/payment/methods');
 }
 
 /**

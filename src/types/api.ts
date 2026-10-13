@@ -455,12 +455,30 @@ export type PaymentConfig = {
  * strings are the contract — do not normalise them.
  */
 export type SantimMethod = 'Telebirr' | 'CBE Birr' | 'Mpesa' | 'Awash Bank';
-export type ChapaMethod = 'telebirr' | 'CBEBirr' | 'mpesa' | 'AwashBirr';
+/**
+ * Chapa methods are managed in Admin → Finance → Payment methods, so the ids
+ * are whatever keys the server lists (`telebirr`, `cbebirr`, `cbe_ussd`, or
+ * one an admin added) — see `PaymentMethodOption`.
+ */
+export type ChapaMethod = string;
 /** USD always routes through Chapa's hosted card checkout. */
 export type CardMethod = 'visa' | 'mastercard';
 export type PaymentMethodId = SantimMethod | ChapaMethod | CardMethod;
 
 export type PaymentInitiateRequest = {
+/**
+ * `GET /config/payment/methods` — the methods an admin has switched on, in the
+ * order customers should see them. `image` is a web path: built-in logos are
+ * bundled in the app instead; an uploaded one (`/uploads/...`) is loaded from
+ * the API.
+ */
+export type PaymentMethodOption = {
+  key: string;
+  label: string;
+  kind: 'mobile' | 'card';
+  image: string | null;
+};
+
   currency: Currency;
   paymentReason: string;
   phoneNumber: string;
