@@ -22,7 +22,7 @@ import {
 } from '@/lib/payment-methods';
 import { formatPrice } from '@/lib/pricing';
 import { useEventRefillQuote, useVenueRefillQuote } from '@/queries/beverages';
-import { usePaymentConfig } from '@/queries/payments';
+import { usePaymentConfig, usePaymentMethods } from '@/queries/payments';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { Currency, PaymentMethodId, WalletPayResult } from '@/types/api';
 
@@ -67,10 +67,14 @@ export function RefillCheckoutSheet({
   const theme = useTheme();
   const router = useRouter();
   const { config } = usePaymentConfig();
+  const { methods: available } = usePaymentMethods();
   const user = useAuthStore((s) => s.user);
 
   const provider = config.activeProvider === 'CHAPA' ? 'CHAPA' : 'SANTIM';
-  const methods = useMemo(() => methodsFor(currency, config.activeProvider), [currency, config.activeProvider]);
+  const methods = useMemo(
+    () => methodsFor(currency, config.activeProvider, available),
+    [currency, config.activeProvider, available],
+  );
 
   const items = useMemo(() => lines.map(({ id, quantity }) => ({ id, quantity })), [lines]);
 
@@ -226,6 +230,7 @@ export function RefillCheckoutSheet({
 
       <PaymentStep
         methods={methods}
+        methodsLoading={!available}
         selectedMethod={method}
         onSelectMethod={(id) => {
           walletCheckout.deselect();

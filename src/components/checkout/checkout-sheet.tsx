@@ -32,7 +32,7 @@ import {
   phoneProblem,
 } from '@/lib/payment-methods';
 import { availableCurrencies, ticketsToDisplay, tierUnitPrice } from '@/lib/pricing';
-import { usePaymentConfig } from '@/queries/payments';
+import { usePaymentConfig, usePaymentMethods } from '@/queries/payments';
 import { queryKeys } from '@/queries/keys';
 import { useAuthStore } from '@/stores/use-auth-store';
 import type { Currency, PaymentMethodId, PazimoEvent } from '@/types/api';
@@ -71,6 +71,7 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const { config } = usePaymentConfig();
+  const { methods: available } = usePaymentMethods();
   const user = useAuthStore((s) => s.user);
 
   const currencies = useMemo(() => availableCurrencies(event), [event]);
@@ -98,8 +99,8 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
 
   const provider = providerFor(activeCurrency, config.activeProvider);
   const methods = useMemo(
-    () => methodsFor(activeCurrency, config.activeProvider),
-    [activeCurrency, config.activeProvider],
+    () => methodsFor(activeCurrency, config.activeProvider, available),
+    [activeCurrency, config.activeProvider, available],
   );
 
   const [step, setStep] = useState<0 | 1>(0);
@@ -397,6 +398,7 @@ export function CheckoutSheet({ visible, onClose, event }: CheckoutSheetProps) {
           importantForAccessibility={step === 1 ? 'auto' : 'no-hide-descendants'}>
           <PaymentStep
             methods={methods}
+            methodsLoading={!available}
             selectedMethod={method}
             onSelectMethod={(id) => {
               walletCheckout.deselect();

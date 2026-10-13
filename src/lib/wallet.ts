@@ -10,9 +10,10 @@ export const DEPOSIT_METHODS: Record<
 > = {
   telebirr: { name: 'Telebirr', logo: require('@/assets/images/payments/telebirr.png'), requiresPrefix: '09' },
   cbebirr: { name: 'CBE Birr', logo: require('@/assets/images/payments/cbe.png') },
+  cbe_ussd: { name: 'CBE USSD', logo: require('@/assets/images/payments/cbe.png') },
   mpesa: { name: 'M-Pesa', logo: require('@/assets/images/payments/mpesa.png'), requiresPrefix: '07' },
   awashbirr: { name: 'Awash', logo: require('@/assets/images/payments/awash.png') },
-  boa_ussd: { name: 'Abyssinia' },
+  boa_ussd: { name: 'Abyssinia', logo: require('@/assets/images/payments/abyssinia.png') },
   card: { name: 'Card', logo: require('@/assets/images/payments/visa.png'), card: true },
 };
 

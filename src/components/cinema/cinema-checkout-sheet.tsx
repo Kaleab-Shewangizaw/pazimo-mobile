@@ -22,7 +22,7 @@ import {
   phoneProblem,
 } from '@/lib/payment-methods';
 import { useCinemaConcessions, useCinemaQuote } from '@/queries/cinema-checkout';
-import { usePaymentConfig } from '@/queries/payments';
+import { usePaymentConfig, usePaymentMethods } from '@/queries/payments';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { useCinemaBookingStore, type SelectedConcession } from '@/stores/use-cinema-booking-store';
 import type {
@@ -64,10 +64,14 @@ export function CinemaCheckoutSheet({
   const store = useCinemaBookingStore();
   const { concessions, isLoading: concessionsLoading } = useCinemaConcessions(store.cinemaId ?? undefined);
   const { config } = usePaymentConfig();
+  const { methods: available } = usePaymentMethods();
   const user = useAuthStore((s) => s.user);
 
   const provider = config.activeProvider === 'CHAPA' ? 'CHAPA' : 'SANTIM';
-  const methods = useMemo(() => methodsFor('ETB', config.activeProvider), [config.activeProvider]);
+  const methods = useMemo(
+    () => methodsFor('ETB', config.activeProvider, available),
+    [config.activeProvider, available],
+  );
 
   const [step, setStep] = useState<0 | 1>(0);
   const [picked, setPicked] = useState<PaymentMethodId | null>(null);
@@ -332,6 +336,7 @@ export function CinemaCheckoutSheet({
           importantForAccessibility={step === 1 ? 'auto' : 'no-hide-descendants'}>
           <PaymentStep
             methods={methods}
+            methodsLoading={!available}
             selectedMethod={method}
             onSelectMethod={(id) => {
               walletCheckout.deselect();

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -41,6 +41,8 @@ export type BuyerDetails = {
 
 export type PaymentStepProps = {
   methods: PaymentMethod[];
+  /** The server's method list hasn't arrived yet — show placeholders. */
+  methodsLoading?: boolean;
   selectedMethod: PaymentMethodId | null;
   onSelectMethod: (id: PaymentMethodId) => void;
   details: BuyerDetails;
@@ -65,6 +67,7 @@ export type PaymentStepProps = {
 
 function PaymentStepImpl({
   methods,
+  methodsLoading,
   selectedMethod,
   onSelectMethod,
   details,
@@ -141,7 +144,27 @@ function PaymentStepImpl({
             )}
           </Touchable>
         ) : null}
-        <View style={styles.methodRow}>
+        {/* One row that scrolls sideways once there are more methods than fit
+            (the admin can add any number); the tiles share the width when
+            they do fit. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.methodRow}>
+          {methodsLoading
+            ? [0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[styles.method, styles.methodPlaceholder, { borderColor: theme.glassBorder }]}
+                />
+              ))
+            : null}
+          {!methodsLoading && methods.length === 0 ? (
+            <Text variant="small" color="textMuted">
+              No payment methods are available right now. Please try again shortly.
+            </Text>
+          ) : null}
           {methods.map((option) => {
             const active = !walletChosen && option.id === selectedMethod;
             return (
@@ -172,7 +195,7 @@ function PaymentStepImpl({
               </Touchable>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <View style={styles.section}>
@@ -299,14 +322,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   identityText: { flexShrink: 1 },
-  methodRow: { flexDirection: 'row', gap: Spacing.sm },
+  methodRow: { flexGrow: 1, gap: Spacing.sm },
   method: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 76,
     alignItems: 'center',
     gap: 6,
     paddingVertical: Spacing.sm,
     paddingHorizontal: 4,
     borderRadius: Radius.md,
+  },
+  methodPlaceholder: {
+    height: 62,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   logoPlate: {
     width: 34,

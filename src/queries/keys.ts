@@ -7,6 +7,7 @@ export const queryKeys = {
   },
   categories: ['categories'] as const,
   appBackground: ['app-background'] as const,
+  paymentMethods: ['payment-methods'] as const,
   wishlist: ['wishlist'] as const,
   tickets: {
     all: ['tickets'] as const,

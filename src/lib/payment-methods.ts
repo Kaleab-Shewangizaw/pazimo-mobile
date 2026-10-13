@@ -1,15 +1,22 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import type { Currency, PaymentMethodId, PaymentProvider } from '@/types/api';
+import { resolveImageUrl } from '@/lib/media';
+import type {
+  Currency,
+  PaymentMethodId,
+  PaymentMethodOption,
+  PaymentProvider,
+} from '@/types/api';
 
 /**
  * The rails a buyer can pick, per provider.
  *
- * The two providers name the same four wallets differently — `"CBE Birr"` for
- * SantimPay, `"CBEBirr"` for Chapa — and the backend matches on those exact
- * strings, so the ids here are the wire format and must not be normalised.
- *
- * USD never uses these: it is forced through Chapa's hosted card checkout.
+ * Chapa's list comes from the server (Admin → Finance → Payment methods): which
+ * methods, their names, their order, and whether they're switched on — the
+ * same list the web selector shows. SantimPay's ids are the wire format it
+ * matches on (`"CBE Birr"`, not `"CBEBirr"`), so its list stays here and only
+ * the admin's on/off switches apply to it. USD is forced through Chapa's
+ * hosted card checkout.
  */
 
 export type PaymentMethod = {
@@ -29,9 +36,57 @@ const LOGOS = {
   cbe: require('@/assets/images/payments/cbe.png'),
   mpesa: require('@/assets/images/payments/mpesa.png'),
   awash: require('@/assets/images/payments/awash.png'),
+  abyssinia: require('@/assets/images/payments/abyssinia.png'),
   visa: require('@/assets/images/payments/visa.png'),
   mastercard: require('@/assets/images/payments/mastercard.png'),
 } as const;
+
+/** Built-in methods ship their logo in the app: instant, and works offline. */
+const BUNDLED_LOGOS: Record<string, ImageSourcePropType> = {
+  telebirr: LOGOS.telebirr,
+  cbebirr: LOGOS.cbe,
+  cbe_ussd: LOGOS.cbe,
+  mpesa: LOGOS.mpesa,
+  awashbirr: LOGOS.awash,
+  boa_ussd: LOGOS.abyssinia,
+};
+
+/** Mobile money tied to one network — see `PaymentMethod.requiresPrefix`. */
+const REQUIRED_PREFIX: Record<string, '09' | '07'> = { telebirr: '09', mpesa: '07' };
+
+/**
+ * Fold any spelling of a method ("CBEBirr", "CBE Birr", "Awash Bank", "visa")
+ * onto a server key. Mirrors the backend's `canonicalMethodKey`.
+ */
+export function canonicalMethodKey(method: string): string | null {
+  const input = method.toLowerCase().trim();
+  if (!input) return null;
+  if (input === 'visa' || input === 'mastercard' || input === 'card') return 'card';
+  // Before the CBE Birr check: both contain "cbe".
+  if (input.includes('cbe') && input.includes('ussd')) return 'cbe_ussd';
+  if (input.includes('cbe') || input.includes('commercial bank')) return 'cbebirr';
+  if (input.includes('telebirr')) return 'telebirr';
+  if (input === 'mpesa' || input === 'm-pesa') return 'mpesa';
+  if (input.includes('awash')) return 'awashbirr';
+  if (input.includes('boa') || input.includes('abyssinia')) return 'boa_ussd';
+  return null;
+}
+
+function isAvailable(available: PaymentMethodOption[], id: string): boolean {
+  const key = canonicalMethodKey(id);
+  return available.some((m) => m.key === id.toLowerCase() || m.key === key);
+}
+
+/**
+ * A logo an admin uploaded (`/uploads/...`) wins, so a new or changed logo
+ * shows without an app release. Otherwise the bundled one. A method with
+ * neither gets an empty white plate — its name still shows under it.
+ */
+function logoFor(option: PaymentMethodOption): ImageSourcePropType {
+  const uploaded = option.image?.startsWith('/uploads/') ? resolveImageUrl(option.image) : null;
+  if (uploaded) return { uri: uploaded };
+  return BUNDLED_LOGOS[option.key] ?? {};
+}
 
 const SANTIM_METHODS: PaymentMethod[] = [
   { id: 'Telebirr', name: 'Telebirr', logo: LOGOS.telebirr, requiresPrefix: '09' },
@@ -40,21 +95,32 @@ const SANTIM_METHODS: PaymentMethod[] = [
   { id: 'Awash Bank', name: 'Awash', logo: LOGOS.awash },
 ];
 
-const CHAPA_METHODS: PaymentMethod[] = [
-  { id: 'telebirr', name: 'Telebirr', logo: LOGOS.telebirr, requiresPrefix: '09' },
-  { id: 'CBEBirr', name: 'CBE Birr', logo: LOGOS.cbe },
-  { id: 'mpesa', name: 'M-Pesa', logo: LOGOS.mpesa, requiresPrefix: '07' },
-  { id: 'AwashBirr', name: 'Awash', logo: LOGOS.awash },
-];
-
 const CARD_METHODS: PaymentMethod[] = [
   { id: 'visa', name: 'Visa', logo: LOGOS.visa },
   { id: 'mastercard', name: 'Mastercard', logo: LOGOS.mastercard },
 ];
 
-export function methodsFor(currency: Currency, provider: PaymentProvider): PaymentMethod[] {
-  if (currency === 'USD') return CARD_METHODS;
-  return provider === 'CHAPA' ? CHAPA_METHODS : SANTIM_METHODS;
+/**
+ * What to offer for this order. `available` is the server's list
+ * (`usePaymentMethods`); while it is still loading this returns an empty list
+ * and the payment step shows placeholders.
+ */
+export function methodsFor(
+  currency: Currency,
+  provider: PaymentProvider,
+  available: PaymentMethodOption[] | undefined,
+): PaymentMethod[] {
+  if (!available) return [];
+  if (currency === 'USD') return CARD_METHODS.filter((m) => isAvailable(available, m.id));
+  if (provider === 'SANTIM') return SANTIM_METHODS.filter((m) => isAvailable(available, m.id));
+  return available
+    .filter((m) => m.kind === 'mobile')
+    .map((m) => ({
+      id: m.key,
+      name: m.label,
+      logo: logoFor(m),
+      requiresPrefix: REQUIRED_PREFIX[m.key],
+    }));
 }
 
 /** Digits only, with any Ethiopian country code or trunk zero stripped. */
