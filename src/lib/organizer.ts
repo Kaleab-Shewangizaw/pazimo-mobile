@@ -14,10 +14,10 @@ export function organizerDisplayName(event: Pick<PazimoEvent, 'organizer'>): str
   return organizer.organizerProfile?.organization || organizer.fullName || joined || null;
 }
 
-/** Organization profile image, resolved to a usable URL. Falls back to initials when absent. */
+/** The organizer's profile picture, resolved to a usable URL. Callers fall back to initials when absent. */
 export function organizerImageUrl(event: Pick<PazimoEvent, 'organizer'>): string | null {
   const { organizer } = event;
   if (!organizer || typeof organizer === 'string') return null;
 
-  return resolveImageUrl(organizer.organizerProfile?.image);
+  return resolveImageUrl(organizer.profilePicture);
 }
