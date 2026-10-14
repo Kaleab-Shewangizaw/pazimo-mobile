@@ -14,7 +14,6 @@
         "applinks:pazimo.com"
       ],
       "bundleIdentifier": "com.example.pazimoNew",
-      "buildNumber": "6",
       "config": {
         "usesNonExemptEncryption": false
       }
