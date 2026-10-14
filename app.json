@@ -13,7 +13,10 @@
       "associatedDomains": [
         "applinks:pazimo.com"
       ],
-      "bundleIdentifier": "com.kal-x.pazimomobile"
+      "bundleIdentifier": "com.kal-x.pazimomobile",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "userInterfaceStyle": "dark",
