@@ -47,3 +47,7 @@ example
 
 # Firebase service account key (uploaded to EAS for FCM; never commit)
 *firebase-adminsdk*.json
+
+# App Store Connect API keys (never commit)
+*.p8
+/credentials
