@@ -29,6 +29,9 @@ import { displayName, useAuthStore } from '@/stores/use-auth-store';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
+/** Stands in for a figure while the card's eye toggle has amounts hidden. */
+const HIDDEN_AMOUNT = 'ETB ••••';
+
 /** Everywhere the wallet is accepted — each opens that part of the app. */
 const USES: { icon: IconName; label: string; href: Href }[] = [
   { icon: 'ticket-outline', label: 'Events', href: '/(tabs)/discover' },
@@ -58,6 +61,8 @@ export default function WalletScreen() {
   const [settingNewPin, setSettingNewPin] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  // Hidden by default: opening the wallet in public shouldn't flash the balance.
+  const [amountsHidden, setAmountsHidden] = useState(true);
 
   const topPadding = insets.top + HEADER_CONTENT_HEIGHT + Spacing.xl;
   // The ready wallet has its own Manage button; the menu is only for the
@@ -193,6 +198,8 @@ export default function WalletScreen() {
           holderName={displayName(user)}
           walletId={data.id}
           frozen={frozen}
+          hidden={amountsHidden}
+          onToggleHidden={() => setAmountsHidden((h) => !h)}
         />
 
         <View style={styles.actions}>
@@ -272,27 +279,31 @@ export default function WalletScreen() {
                 <Text variant="caption" color="textMuted">
                   Spent
                 </Text>
-                <Text variant="title">{formatMoney(spent, 'ETB')}</Text>
+                <Text variant="title">{amountsHidden ? HIDDEN_AMOUNT : formatMoney(spent, 'ETB')}</Text>
               </View>
               <View style={[styles.statDivider, { backgroundColor: theme.hairline }]} />
               <View style={styles.flex}>
                 <Text variant="caption" color="textMuted">
                   Added
                 </Text>
-                <Text variant="title">{formatMoney(data.today?.deposited ?? 0, 'ETB')}</Text>
+                <Text variant="title">
+                  {amountsHidden ? HIDDEN_AMOUNT : formatMoney(data.today?.deposited ?? 0, 'ETB')}
+                </Text>
               </View>
             </View>
             <View
               style={[styles.track, { backgroundColor: theme.surfaceMuted }]}
               accessible
               accessibilityRole="progressbar"
-              accessibilityValue={{ min: 0, max: 100, now: Math.round(spentShare * 100) }}
+              accessibilityValue={amountsHidden ? undefined : { min: 0, max: 100, now: Math.round(spentShare * 100) }}
               accessibilityLabel="Daily spending limit used">
-              <View style={[styles.fill, { width: `${spentShare * 100}%`, backgroundColor: theme.text }]} />
+              {amountsHidden ? null : (
+                <View style={[styles.fill, { width: `${spentShare * 100}%`, backgroundColor: theme.text }]} />
+              )}
             </View>
             <Text variant="caption" color="textMuted">
-              {formatMoney(Math.max(0, dailyLimit - spent), 'ETB')} left of your {formatMoney(dailyLimit, 'ETB')} daily
-              spending limit
+              {amountsHidden ? HIDDEN_AMOUNT : formatMoney(Math.max(0, dailyLimit - spent), 'ETB')} left of your{' '}
+              {formatMoney(dailyLimit, 'ETB')} daily spending limit
             </Text>
           </View>
         )}

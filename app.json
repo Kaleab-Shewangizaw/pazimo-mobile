@@ -23,8 +23,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "blockedPermissions": ["android.permission.WRITE_CONTACTS"],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
+      ],
       "package": "com.kal_x.pazimomobile",
+      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "autoVerify": true,
@@ -104,13 +107,22 @@
         {
           "photosPermission": "Allow Pazimo to save your recap cards to your photos.",
           "savePhotosPermission": "Allow Pazimo to save your recap cards to your photos.",
-          "granularPermissions": ["photo"]
+          "granularPermissions": [
+            "photo"
+          ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "591d4a3b-abe5-47fe-a315-a27572bddb81"
+      }
+    },
+    "owner": "kal_x"
   }
 }

@@ -69,6 +69,8 @@ export type PazimoEvent = {
   startTime?: string;
   endTime?: string;
   location?: EventLocation;
+  /** The organizer's map link for the venue — optional for events (see `lib/maps.ts` for the fallback). */
+  locationUrl?: string | null;
   organizer?: EventOrganizer | string;
   coverImages: string[];
   eventImages?: { url: string; caption?: string }[];
@@ -187,6 +189,7 @@ export type Ticket = {
     startTime?: string;
     endTime?: string;
     location?: EventLocation;
+    locationUrl?: string | null;
     coverImages?: string[];
     organizer?: EventOrganizer | string;
   };
@@ -616,6 +619,8 @@ export type Cinema = {
   description?: string;
   city?: string;
   address?: string;
+  /** A link to this place on a map (Google Maps etc.). See `lib/maps.ts`. */
+  locationUrl?: string | null;
   phoneNumber?: string;
   /** Server path or full URL; run it through `resolveImageUrl`. */
   image?: string | null;
@@ -634,6 +639,8 @@ export type EventVenue = {
   address?: string;
   city?: string;
   country?: string;
+  /** Coordinates, when an admin set them — used for directions. */
+  location?: { coordinates?: [number, number] } | null;
   /** Server path or full URL; run it through `resolveImageUrl`. */
   image?: string | null;
 };
@@ -894,7 +901,7 @@ export type CinemaTicket = {
   paymentStatus: 'pending' | 'completed' | 'failed';
   purchaseDate: string;
   movie: { _id: string; title: string; poster?: string | null };
-  cinema: { _id: string; name: string; address?: string; city?: string };
+  cinema: { _id: string; name: string; address?: string; city?: string; locationUrl?: string | null };
 };
 
 /**
@@ -1037,6 +1044,9 @@ export type RefillVenueSummary = {
   name: string;
   venueType?: string;
   city?: string;
+  address?: string | null;
+  /** A link to this place on a map (Google Maps etc.). See `lib/maps.ts`. */
+  locationUrl?: string | null;
   image?: string | null;
   beverageCount: number;
 };
@@ -1071,7 +1081,14 @@ export type RefillEventCatalog = {
 export type RefillVenueCatalog = {
   success: true;
   data: RefillBeverageItem[];
-  venue: { _id: string; name: string; venueType?: string; city?: string };
+  venue: {
+    _id: string;
+    name: string;
+    venueType?: string;
+    city?: string;
+    address?: string | null;
+    locationUrl?: string | null;
+  };
 };
 
 /** One basket line as `concessionBasketService` prices it — shared shape for both channels. */

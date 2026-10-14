@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -76,6 +77,15 @@ function VenueRowImpl({ venue, selected = false, onPress }: VenueRowProps) {
             </Text>
           </View>
         ) : null}
+        <DirectionsChip
+          place={{
+            name: venue.name,
+            address: venue.address,
+            city: venue.city,
+            country: venue.country,
+            coordinates: venue.location?.coordinates,
+          }}
+        />
       </View>
 
       {onPress ? (

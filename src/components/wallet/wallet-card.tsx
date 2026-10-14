@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Defs, Line, Rect, Stop, LinearGradient as SvgGradient, RadialGradient, Circle } from 'react-native-svg';
 
@@ -70,20 +70,24 @@ function Glow({ frozen }: { frozen: boolean }) {
 /**
  * The wallet as a bank card: Pazimo wordmark, chip, balance, and the
  * holder's name embossed along the bottom. The balance can be hidden with
- * a tap for when someone's looking over a shoulder.
+ * a tap for when someone's looking over a shoulder; the screen owns that
+ * state so its other figures hide along with it.
  */
 function WalletCardImpl({
   balance,
   holderName,
   walletId,
   frozen = false,
+  hidden,
+  onToggleHidden,
 }: {
   balance: number;
   holderName: string;
   walletId?: string;
   frozen?: boolean;
+  hidden: boolean;
+  onToggleHidden: () => void;
 }) {
-  const [hidden, setHidden] = useState(false);
   const lastFour = (walletId ?? '').slice(-4).toUpperCase().padStart(4, '0');
   const amount = formatMoney(balance, 'ETB');
 
@@ -130,7 +134,7 @@ function WalletCardImpl({
               accessibilityLabel={hidden ? 'Show balance' : 'Hide balance'}
               hitSlop={10}
               pressedScale={0.85}
-              onPress={() => setHidden((h) => !h)}>
+              onPress={onToggleHidden}>
               <Ionicons name={hidden ? 'eye-off-outline' : 'eye-outline'} size={15} color="rgba(255,255,255,0.6)" />
             </Touchable>
           </View>

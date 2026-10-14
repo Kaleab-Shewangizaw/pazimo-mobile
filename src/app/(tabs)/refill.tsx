@@ -7,6 +7,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthSheet } from '@/components/account/auth-sheet';
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { AmbientBackground } from '@/components/ui/ambient-background';
 import { GlassHeader, HEADER_CONTENT_HEIGHT } from '@/components/ui/glass-header';
 import { GlassIconButton } from '@/components/ui/glass-button';
@@ -211,12 +212,19 @@ function VenueRow({ venue, onPress }: { venue: RefillVenueSummary; onPress: (ven
         <Text variant="title" numberOfLines={1} style={styles.posterTitle}>
           {venue.name}
         </Text>
-        {venue.city ? (
+        {venue.address || venue.city ? (
           <Text variant="small" color="textSecondary" numberOfLines={1}>
-            {venue.city}
+            {[venue.address, venue.city].filter(Boolean).join(' · ')}
           </Text>
         ) : null}
-        <BeverageCountChip count={venue.beverageCount} />
+        {/* Drinks count and the way there, side by side — directions is
+            its own tap, so it never opens the menu by mistake. */}
+        <View style={styles.venueChips}>
+          <BeverageCountChip count={venue.beverageCount} />
+          <DirectionsChip
+            place={{ name: venue.name, address: venue.address, city: venue.city, locationUrl: venue.locationUrl }}
+          />
+        </View>
       </PosterCard>
     </Touchable>
   );
@@ -272,6 +280,7 @@ function RowSkeleton() {
 }
 
 const styles = StyleSheet.create({
+  venueChips: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   screen: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 

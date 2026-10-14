@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CinemaRow } from '@/components/cinema/cinema-picker';
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { ComingSoonSheet } from '@/components/cinema/coming-soon-sheet';
 import { DayRail } from '@/components/cinema/day-rail';
 import { PosterDeck } from '@/components/cinema/poster-deck';
@@ -284,6 +285,10 @@ export default function CinemaScreen() {
               {chosen.city ? `${chosen.name} · ${chosen.city}` : chosen.name}
             </Text>
           </View>
+          <DirectionsChip
+            place={{ name: chosen.name, address: chosen.address, city: chosen.city, locationUrl: chosen.locationUrl }}
+            iconOnly
+          />
           <GlassIconButton
             icon="swap-horizontal"
             accessibilityLabel="Choose a different cinema"

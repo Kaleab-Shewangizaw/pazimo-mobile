@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { memo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { DetailRow } from '@/components/ticket/detail-row';
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
 import { PLATE_COLOR, QrPlate, QrSlot } from '@/components/ticket/qr-plate';
@@ -163,7 +164,19 @@ function CinemaTicketViewImpl({
       }
       details={
         <View style={styles.details}>
-          <DetailRow icon="business" label="Cinema" value={lead.cinema.name} />
+          <View style={styles.placeRow}>
+            <View style={styles.placeDetail}>
+              <DetailRow icon="business" label="Cinema" value={lead.cinema.name} />
+            </View>
+            <DirectionsChip
+              place={{
+                name: lead.cinema.name,
+                address: lead.cinema.address,
+                city: lead.cinema.city,
+                locationUrl: lead.cinema.locationUrl,
+              }}
+            />
+          </View>
           <DetailRow
             icon="calendar-clear"
             label="Showtime"
@@ -275,6 +288,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  placeDetail: { flex: 1 },
   details: {
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,

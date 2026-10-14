@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "581951965881",
+    "project_id": "pazimo-4a32f",
+    "storage_bucket": "pazimo-4a32f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:581951965881:android:0c55412d66741829f3e968",
+        "android_client_info": {
+          "package_name": "com.kal_x.pazimomobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwVKeRtDayeq7bdlrqYAUgVaOUWEZkDF0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

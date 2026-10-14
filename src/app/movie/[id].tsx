@@ -7,6 +7,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, View, useWindowDimensions } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShowtimeSheet } from '@/components/cinema/showtime-sheet';
+import { LocationCard } from '@/components/location/location-card';
 import { TrailerPlayer } from '@/components/cinema/trailer-player';
 import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
 import { Button } from '@/components/ui/button';
@@ -92,7 +93,8 @@ export default function MovieScreen() {
   );
 
   const movie = detail.page?.movie ?? fallback[0]?.movie;
-  const cinemaName = detail.page?.cinema?.name;
+  const cinema = detail.page?.cinema;
+  const cinemaName = cinema?.name;
   const trailer = parseTrailer(detail.page?.movie.trailerUrl);
 
   const openSheet = useCallback(() => setSheetVisible(true), []);
@@ -263,6 +265,24 @@ export default function MovieScreen() {
           />
 
           <Showtimes days={days} fallbackTimes={fallback.map((s) => s.startsAt)} />
+
+          {/* Where it's showing — so getting there is one tap from deciding. */}
+          {cinema ? (
+            <View style={styles.where}>
+              <Text variant="label" color="textSecondary">
+                WHERE IT&apos;S SHOWING
+              </Text>
+              <LocationCard
+                label="CINEMA"
+                place={{
+                  name: cinema.name,
+                  address: cinema.address,
+                  city: cinema.city,
+                  locationUrl: cinema.locationUrl,
+                }}
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -407,6 +427,7 @@ function clock(iso: string): string {
 }
 
 const styles = StyleSheet.create({
+  where: { gap: Spacing.sm, marginTop: Spacing.lg },
   screen: { flex: 1, backgroundColor: '#08080A' },
   centre: { alignItems: 'center', justifyContent: 'center' },
   centreText: { textAlign: 'center' },

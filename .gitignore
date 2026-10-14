@@ -44,3 +44,6 @@ example
 .env
 # Locally built release artifacts (APKs)
 /release
+
+# Firebase service account key (uploaded to EAS for FCM; never commit)
+*firebase-adminsdk*.json

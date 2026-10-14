@@ -6,6 +6,8 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { ApiError } from '@/api/client';
 import { BasketFooter } from '@/components/refill/basket-footer';
 import { BeverageCard } from '@/components/refill/beverage-card';
+import { DirectionsChip } from '@/components/location/directions-chip';
+import { LocationStrip } from '@/components/location/location-strip';
 import { CatalogHero } from '@/components/refill/catalog-hero';
 import { RefillCheckoutSheet } from '@/components/refill/refill-checkout-sheet';
 import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
@@ -16,6 +18,7 @@ import { ErrorState } from '@/components/ui/state-views';
 import { Text } from '@/components/ui/text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useGoBack } from '@/hooks/use-go-back';
+import type { Place } from '@/lib/maps';
 import { useVenueBeverageCatalog } from '@/queries/beverages';
 import type { RefillBeverageItem } from '@/types/api';
 
@@ -64,6 +67,13 @@ export default function VenueRefillScreen() {
       .filter((line): line is NonNullable<typeof line> => line !== null);
   }, [items, quantities]);
 
+  const place: Place = {
+    name: venue?.name,
+    address: venue?.address,
+    city: venue?.city,
+    locationUrl: venue?.locationUrl,
+  };
+
   return (
     <View style={styles.screen}>
       <AmbientBackground />
@@ -74,15 +84,18 @@ export default function VenueRefillScreen() {
         subtitle={venue?.city}
         onBack={goBack}
         accessory={
-          <Touchable
-            accessibilityRole="button"
-            accessibilityLabel="Share this venue"
-            onPress={() => setShareVisible(true)}
-            pressedScale={0.9}
-            haptic
-            style={styles.shareButton}>
-            <Ionicons name="share-outline" size={19} color="#FFFFFF" />
-          </Touchable>
+          <View style={styles.heroActions}>
+            <DirectionsChip place={place} iconOnly />
+            <Touchable
+              accessibilityRole="button"
+              accessibilityLabel="Share this venue"
+              onPress={() => setShareVisible(true)}
+              pressedScale={0.9}
+              haptic
+              style={styles.shareButton}>
+              <Ionicons name="share-outline" size={19} color="#FFFFFF" />
+            </Touchable>
+          </View>
         }
       />
 
@@ -119,9 +132,15 @@ export default function VenueRefillScreen() {
             />
           )}
           ListHeaderComponent={
-            <Text variant="label" color="textMuted" style={styles.sectionLabel}>
-              MENU · {items.length} DRINK{items.length === 1 ? '' : 'S'}
-            </Text>
+            <>
+              {/* Where to go to collect — above the menu, one row tall. */}
+              <View style={styles.locationRow}>
+                <LocationStrip place={place} />
+              </View>
+              <Text variant="label" color="textMuted" style={styles.sectionLabel}>
+                MENU · {items.length} DRINK{items.length === 1 ? '' : 'S'}
+              </Text>
+            </>
           }
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -184,6 +203,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', gap: Spacing.sm },
   gridRow: { gap: Spacing.sm },
   sectionLabel: { marginBottom: Spacing.sm },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  locationRow: { marginBottom: Spacing.md },
   shareButton: {
     width: SHARE_BUTTON,
     height: SHARE_BUTTON,

@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { memo, useMemo, type RefObject } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { DetailRow } from '@/components/ticket/detail-row';
 import { PazimoQr } from '@/components/ticket/pazimo-qr';
 import { PLATE_COLOR, QrPlate, QrSlot } from '@/components/ticket/qr-plate';
@@ -150,7 +151,22 @@ function TicketViewImpl({
       }
       details={
         <View style={styles.details}>
-          <DetailRow icon="location" label="Venue" value={venue} />
+          {/* Directions on the same line — on the ticket is exactly when
+              people need to know how to get there. */}
+          <View style={styles.placeRow}>
+            <View style={styles.placeDetail}>
+              <DetailRow icon="location" label="Venue" value={venue} />
+            </View>
+            <DirectionsChip
+              place={{
+                address: ticket.event.location?.address,
+                city: ticket.event.location?.city,
+                country: ticket.event.location?.country,
+                locationUrl: ticket.event.locationUrl,
+                coordinates: ticket.event.location?.coordinates,
+              }}
+            />
+          </View>
           <DetailRow
             icon="calendar-clear"
             label="Date & Time"
@@ -216,6 +232,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(6,6,8,0.82)',
   },
 
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  placeDetail: { flex: 1 },
   details: {
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,

@@ -13,6 +13,7 @@ import { AuthSheet } from '@/components/account/auth-sheet';
 import { CheckoutSheet } from '@/components/checkout/checkout-sheet';
 import { AvatarInitials } from '@/components/shares/avatar-initials';
 import { InviteShareSheet } from '@/components/shares/invite-share-sheet';
+import { LocationCard } from '@/components/location/location-card';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { GlassButton, GlassIconButton } from '@/components/ui/glass-button';
@@ -26,6 +27,7 @@ import { useGoBack } from '@/hooks/use-go-back';
 import { useRefresh } from '@/hooks/use-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate } from '@/lib/date';
+import { directionsUrl, openDirections, type Place } from '@/lib/maps';
 import { eventCoverUrl, resolveImageUrl } from '@/lib/media';
 import { organizerDisplayName, organizerImageUrl } from '@/lib/organizer';
 import { isSoldOut } from '@/lib/pricing';
@@ -118,6 +120,16 @@ export default function EventDetailScreen() {
   const organizerImage = event ? organizerImageUrl(event) : null;
 
   const venue = [event?.location?.address, event?.location?.city].filter(Boolean).join(', ');
+  // Where the event is, for directions — the organizer's own map link when
+  // they added one (optional for events), else the coordinates or address.
+  const place: Place = {
+    address: event?.location?.address,
+    city: event?.location?.city,
+    country: event?.location?.country,
+    locationUrl: event?.locationUrl,
+    coordinates: event?.location?.coordinates,
+  };
+  const canDirect = Boolean(directionsUrl(place));
 
   // `eventImages` carries the same three URL shapes as the cover, and the
   // unresolvable seed default comes back as null.
@@ -274,12 +286,24 @@ export default function EventDetailScreen() {
                   </View>
                 ) : null}
                 {venue ? (
-                  <View style={styles.fact}>
+                  // Tappable when there's somewhere to send them — the
+                  // shortcut to the full Location card further down.
+                  <Touchable
+                    accessibilityRole={canDirect ? 'link' : undefined}
+                    accessibilityLabel={canDirect ? `${venue}, get directions` : venue}
+                    disabled={!canDirect}
+                    onPress={() => openDirections(place)}
+                    pressedScale={0.98}
+                    style={styles.fact}>
                     <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text variant="small" style={styles.factText} numberOfLines={1}>
+                    <Text
+                      variant="small"
+                      style={[styles.factText, canDirect && styles.factLink]}
+                      numberOfLines={1}>
                       {venue}
                     </Text>
-                  </View>
+                    {canDirect ? <Ionicons name="navigate" size={12} color="rgba(255,255,255,0.7)" /> : null}
+                  </Touchable>
                 ) : null}
               </View>
             </View>
@@ -322,6 +346,15 @@ export default function EventDetailScreen() {
                 {event.tags.map((tag) => (
                   <Chip key={tag} label={tag} variant="glass" />
                 ))}
+              </View>
+            ) : null}
+
+            {canDirect ? (
+              <View style={styles.section}>
+                <SectionHeader title="Location" />
+                <View style={styles.block}>
+                  <LocationCard place={place} label="VENUE" />
+                </View>
               </View>
             ) : null}
 
@@ -497,6 +530,7 @@ const styles = StyleSheet.create({
   facts: { gap: 6 },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { color: 'rgba(255,255,255,0.72)', flexShrink: 1 },
+  factLink: { textDecorationLine: 'underline', textDecorationColor: 'rgba(255,255,255,0.35)' },
 
   description: { lineHeight: 23, color: 'rgba(255,255,255,0.72)' },
   descriptionMeasure: {

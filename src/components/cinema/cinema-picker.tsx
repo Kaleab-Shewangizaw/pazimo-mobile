@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { DirectionsChip } from '@/components/location/directions-chip';
 import { Touchable } from '@/components/ui/pressable';
 import { Text } from '@/components/ui/text';
 import { GLASS_LABEL_INACTIVE, GLASS_TEXT_SHADOW } from '@/constants/appearance';
@@ -79,6 +80,10 @@ function CinemaRowImpl({ cinema, selected = false, onPress }: CinemaRowProps) {
             </Text>
           </View>
         ) : null}
+        {/* Its own tap target — directions, not "open this cinema". */}
+        <DirectionsChip
+          place={{ name: cinema.name, address: cinema.address, city: cinema.city, locationUrl: cinema.locationUrl }}
+        />
       </View>
 
       <View style={styles.corner}>
