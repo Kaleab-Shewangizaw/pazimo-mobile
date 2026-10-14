@@ -12,7 +12,12 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://pazimo.com",
+        "EXPO_PUBLIC_WEB_URL": "https://pazimo.com",
+        "EXPO_PUBLIC_APP_STORE_URL": "https://apps.apple.com/app/id6751501366"
+      }
     }
   },
   "submit": {
